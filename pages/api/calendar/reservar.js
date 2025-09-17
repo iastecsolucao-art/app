@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { getGoogleAuth } from "../../../utils/googleAuth";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
@@ -6,35 +7,32 @@ export default async function handler(req, res) {
   const { nome, telefone, start, servico } = req.body;
 
   try {
-    // autenticação no Google
-    const auth = new google.auth.GoogleAuth({
-  keyFile: "credentials/service.json", // caminho para o arquivo
-  scopes: ["https://www.googleapis.com/auth/calendar"],
-    });
-
+    const auth = getGoogleAuth();
     const calendar = google.calendar({ version: "v3", auth });
 
-    // Definir horário do evento (fixo 10h às 11h como exemplo)
+    // Definir horário do evento (10h às 11h)
     const startDate = new Date(start);
-    startDate.setHours(10, 0, 0); // começa às 10h
+    startDate.setHours(10, 0, 0);
     const endDate = new Date(startDate);
-    endDate.setHours(startDate.getHours() + 1); // +1h de duração
+    endDate.setHours(startDate.getHours() + 1);
 
-    // Criar evento no Calendar
     const event = {
       summary: `${servico} - ${nome}`,
-      description: `Agendamento solicitado.\nNome: ${nome}\nTelefone: ${telefone}\nServiço: ${servico}`,
+      description: `Agendamento solicitado.
+      Nome: ${nome}
+      Telefone: ${telefone}
+      Serviço: ${servico}`,
       start: { dateTime: startDate.toISOString(), timeZone: "America/Sao_Paulo" },
       end: { dateTime: endDate.toISOString(), timeZone: "America/Sao_Paulo" },
     };
 
     const created = await calendar.events.insert({
-      calendarId: process.env.GOOGLE_CALENDAR_ID,
+      calendarId: "24ab458dc01c948bd480a78034704a471c7110e35ad60a8d620d4c2a8628c11b@group.calendar.google.com",
       resource: event,
     });
 
-    // 🔹 Enviar para o webhook do n8n
-    await fetch(process.env.N8N_WEBHOOK_URL, {
+    // 🔹 Enviar webhook pro n8n
+    await fetch("https://n8n.iastec.servicos.ws/webhook/agendamento", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -47,8 +45,8 @@ export default async function handler(req, res) {
     });
 
     res.status(200).json({ message: "✅ Reserva confirmada!", id: created.data.id });
-  } catch (error) {
-    console.error("Erro ao reservar:", error);
-    res.status(500).json({ error: "Erro ao reservar horário" });
+  } catch (err) {
+    console.error("❌ Erro ao reservar:", err);
+    res.status(500).json({ error: "Erro ao reservar horário", details: err.message });
   }
 }
