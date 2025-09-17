@@ -1,0 +1,71 @@
+{
+  "name": "Relatórios Inventário",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "relatorios",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Webhook Relatorios",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "relatorios",
+      "notes": "Recebe requisições GET para gerar o relatório"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT loja, setor, COUNT(*) AS total_itens\nFROM contagem_temp\nGROUP BY loja, setor\nORDER BY loja, setor;"
+      },
+      "id": "2",
+      "name": "Postgres - Totais",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [480, 300],
+      "credentials": {
+        "postgres": "PostgresDB"
+      }
+    },
+    {
+      "parameters": {
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "3",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [710, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Relatorios": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Totais",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Totais": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "RelatoriosInventarioFlow",
+  "tags": []
+}

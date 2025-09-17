@@ -1,0 +1,58 @@
+### Teste Upload de Produtos
+POST https://n8n.iastec.servicos.ws/webhook-test/upload
+Content-Type: multipart/form-data
+
+tipo=produto
+file=@./examples/produtos.csv
+
+
+### Teste Upload de Usuários
+POST http://localhost:5678/webhook/upload
+Content-Type: multipart/form-data
+
+tipo=usuario
+file=@./examples/usuarios.csv
+
+
+### Teste Upload de Contagem
+POST https://n8n.iastec.servicos.ws/webhook/contagem
+Content-Type: multipart/form-data
+
+tipo=contagem
+file=@./examples/contagem.csv
+
+
+### Criar Produto (individual)
+POST https://n8n.iastec.servicos.ws/webhook/produto
+Content-Type: application/json
+
+{
+  "codigo_barra": "7899998887771",
+  "descricao": "Detergente Ype 500ml",
+  "empresa_id": 1
+}
+
+
+### Listar Produtos
+GET https://n8n.iastec.servicos.ws/webhook/produtos
+
+
+### Inserir Contagem (bipagem manual)
+POST http://localhost:5678/webhook/contagem
+Content-Type: application/json
+
+{
+  "area": "AREA01",
+  "codigo_barra": "7891234567890",
+  "quantidade": 10,
+  "usuario_id": 1
+}
+
+
+### Finalizar Contagem de Área
+POST http://localhost:5678/webhook/contagem/finalizar
+Content-Type: application/json
+
+{
+  "area": "AREA01"
+}

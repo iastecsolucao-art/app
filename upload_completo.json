@@ -1,0 +1,201 @@
+{
+  "name": "Upload Importação Completa",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "upload",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Webhook - Recebe Upload",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 250]
+    },
+    {
+      "parameters": {},
+      "id": "2",
+      "name": "Spreadsheet File - Parse",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 1,
+      "position": [500, 250]
+    },
+    {
+      "parameters": {
+        "functionCode": "const tipo = $json[\"tipo\"] || \"produto\";\n\n// Dados do CSV/XLSX\nconst linhas = items.map(item => item.json);\n\n// Campos obrigatórios para cada tipo\nconst camposEsperados = {\n  produto: [\"codigo_barra\", \"descricao\", \"empresa_id\"],\n  usuario: [\"nome\", \"email\", \"empresa_id\", \"admin\"],\n  contagem: [\"area\", \"codigo_barra\", \"quantidade\", \"usuario_id\"]\n};\n\nconst obrigatorios = camposEsperados[tipo];\nlet validos = [];\nlet erros = [];\n\nfor (let i=0; i<linhas.length; i++) {\n  let linha = linhas[i];\n  let faltando = obrigatorios.filter(c => !linha[c]);\n  if (faltando.length === 0) {\n    validos.push(linha);\n  } else {\n    erros.push({linha: i+2, erro: `Campos faltando: ${faltando.join(\", \")}`});\n  }\n}\n\nreturn [{json:{tipo, validos, erros, total_ok: validos.length, total_erros: erros.length}}];"
+      },
+      "id": "3",
+      "name": "Function - Valida Dados",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [750, 250]
+    },
+    {
+      "parameters": {
+        "batchSize": 1
+      },
+      "id": "4",
+      "name": "SplitInBatches - Registros",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [1000, 250]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO produto (codigo_barra, descricao, empresa_id)\nVALUES ({{$json[\"codigo_barra\"]}}, {{$json[\"descricao\"]}}, {{$json[\"empresa_id\"]}});"
+      },
+      "id": "5",
+      "name": "Postgres - Inserir Produto",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1250, 100],
+      "credentials": {
+        "postgres": "Postgres NeonDB"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO usuarios (nome, email, empresa_id, admin)\nVALUES ({{$json[\"nome\"]}}, {{$json[\"email\"]}}, {{$json[\"empresa_id\"]}}, {{$json[\"admin\"]}});"
+      },
+      "id": "6",
+      "name": "Postgres - Inserir Usuario",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1250, 250],
+      "credentials": {
+        "postgres": "Postgres NeonDB"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO contagem (area, produto_id, usuario_id, quantidade)\nSELECT '{{$json[\"area\"]}}', p.id, {{$json[\"usuario_id\"]}}, {{$json[\"quantidade\"]}}\nFROM produto p\nWHERE p.codigo_barra = '{{$json[\"codigo_barra\"]}}';"
+      },
+      "id": "7",
+      "name": "Postgres - Inserir Contagem",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1250, 400],
+      "credentials": {
+        "postgres": "Postgres NeonDB"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const tipo = $json.tipo;\nconst registros = $json.validos;\n\nreturn registros.map(r => ({json:r, pairedItem: {item:0}}));"
+      },
+      "id": "8",
+      "name": "Function - Processa Validos",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 100]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO import_log (usuario_id, tipo_importacao, arquivo_nome, total_ok, total_erros)\nVALUES (1, '{{$json.tipo}}', 'upload.csv', {{$json.total_ok}}, {{$json.total_erros}})\nRETURNING *;"
+      },
+      "id": "9",
+      "name": "Postgres - Cria Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1500, 600],
+      "credentials": {
+        "postgres": "Postgres NeonDB"
+      }
+    },
+    {
+      "parameters": {},
+      "id": "10",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [1750, 600]
+    }
+  ],
+  "connections": {
+    "Webhook - Recebe Upload": {
+      "main": [
+        [
+          {
+            "node": "Spreadsheet File - Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Spreadsheet File - Parse": {
+      "main": [
+        [
+          {
+            "node": "Function - Valida Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function - Valida Dados": {
+      "main": [
+        [
+          {
+            "node": "Function - Processa Validos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Postgres - Cria Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function - Processa Validos": {
+      "main": [
+        [
+          {
+            "node": "SplitInBatches - Registros",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SplitInBatches - Registros": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Inserir Produto",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Postgres - Inserir Usuario",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Postgres - Inserir Contagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Cria Log": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

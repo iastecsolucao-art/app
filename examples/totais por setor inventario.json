@@ -1,0 +1,76 @@
+{
+  "name": "Totais por Setor",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "totais_setores",
+        "method": "GET"
+      },
+      "id": "1",
+      "name": "Webhook Totais",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "webhookId": "totais_setores"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT setor,\n       data::date as data,\n       SUM(CASE WHEN status = 'parcial' THEN quantidade ELSE 0 END) as parcial,\n       SUM(CASE WHEN status = 'finalizado' THEN quantidade ELSE 0 END) as finalizado\nFROM contagem_setor\nGROUP BY setor, data::date\nORDER BY data DESC, setor;"
+      },
+      "id": "2",
+      "name": "Postgres Totais",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [500, 300],
+      "credentials": {
+        "postgres": "PostgresDB"
+      }
+    },
+    {
+      "parameters": {
+        "responseMode": "lastNode",
+        "options": {
+          "responseContentType": "application/json"
+        }
+      },
+      "id": "3",
+      "name": "Responder JSON",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [800, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Totais": {
+      "main": [
+        [
+          {
+            "node": "Postgres Totais",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Totais": {
+      "main": [
+        [
+          {
+            "node": "Responder JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "totaisSetorFlow",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "local",
+    "version": "0.238.0"
+  }
+}
