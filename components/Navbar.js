@@ -78,15 +78,18 @@ export default function Navbar() {
             </div>
           </div>
 
-          {/* Serviços (Agendamento) */}
+          {/* Serviços */}
           <div className="relative group">
             <button className="hover:underline">Serviços ▾</button>
-            <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-40">
+            <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-48">
               <Link href="/agendamento" className="block px-4 py-2 hover:bg-gray-100">📅 Agendamento</Link>
+              <Link href="/servicos" className="block px-4 py-2 hover:bg-gray-100">⚙️ Cadastro Serviços</Link>
+              <Link href="/profissionais" className="block px-4 py-2 hover:bg-gray-100">👩‍⚕️ Profissionais</Link>
+<Link href="/clientes" className="block px-4 py-2 hover:bg-gray-100">👤 Clientes</Link>
             </div>
           </div>
 
-          {/* Infos do usuário com badge */}
+          {/* Infos do usuário */}
           <div className="ml-4 flex items-center space-x-2">
             <span className="text-sm text-gray-200">
               Bem-vindo, <strong>{session.user?.name}</strong>
@@ -116,16 +119,6 @@ export default function Navbar() {
             Sair
           </button>
         </div>
-      )}
-
-      {/* Botão mobile ☰ */}
-      {session && !expirado && (
-        <button
-          className="md:hidden text-white focus:outline-none text-xl"
-          onClick={() => setMenuOpen(!menuOpen)}
-        >
-          ☰
-        </button>
       )}
 
       {/* Mobile menu */}
@@ -175,15 +168,18 @@ export default function Navbar() {
             </div>
           )}
 
-          {/* Serviços (Agendamento) */}
+          {/* Serviços */}
           <button onClick={() => toggleDropdown("servicos")} className="px-4 py-2 border-b text-left">Serviços ▾</button>
           {openDropdown === "servicos" && (
             <div className="bg-blue-800">
               <Link href="/agendamento" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">📅 Agendamento</Link>
+              <Link href="/servicos" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">⚙️ Cadastro Serviços</Link>
+              <Link href="/profissionais" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">👩‍⚕️ Profissionais</Link>
+         <Link href="/clientes" className="block px-4 py-2 hover:bg-gray-100">👤 Clientes</Link>
             </div>
           )}
 
-          {/* Badge do usuário no mobile */}
+          {/* Badge do usuário */}
           <div className="px-4 py-2 text-sm">
             👤 {session.user?.name}{" "}
             {diasRestantes !== null && (
@@ -204,8 +200,10 @@ export default function Navbar() {
           </div>
 
           {/* Sair */}
-          <button onClick={() => { setMenuOpen(false); signOut(); }}
-            className="mt-2 mx-4 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded">
+          <button
+            onClick={() => { setMenuOpen(false); signOut(); }}
+            className="mt-2 mx-4 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded"
+          >
             Sair
           </button>
         </div>

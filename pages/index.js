@@ -152,6 +152,8 @@ export default function Home() {
           <div className="bg-white shadow-md rounded px-8 pt-6 pb-8 max-w-xl">
             <h2 className="text-2xl font-bold mb-4">
               👋 Bem-vindo, {session.user?.name || session.user?.email}
+              <p>Empresa: {session?.user?.empresa}</p>
+   
             </h2>
 
             {/* Data de Expiração */}

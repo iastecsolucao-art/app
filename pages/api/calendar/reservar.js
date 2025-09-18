@@ -1,52 +1,89 @@
-import { google } from "googleapis";
-import { getGoogleAuth } from "../../../utils/googleAuth";
+import { Pool } from "pg";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "../auth/[...nextauth]";
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).end();
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Método não suportado" });
+  }
 
-  const { nome, telefone, start, servico } = req.body;
+  const session = await getServerSession(req, res, authOptions);
+  if (!session) {
+    return res.status(401).json({ error: "Não autenticado" });
+  }
 
+  const client = await pool.connect();
   try {
-    const auth = getGoogleAuth();
-    const calendar = google.calendar({ version: "v3", auth });
+    const { cliente, nome, telefone, start, servico, obs, profissional } = req.body;
 
-    // Definir horário do evento (10h às 11h)
+    if (!cliente || !nome || !telefone || !start || !servico || !profissional) {
+      return res.status(400).json({ error: "Campos obrigatórios não enviados" });
+    }
+
+    // pega usuário logado
+    const usuario = await client.query(
+      "SELECT id, empresa_id FROM usuarios WHERE email=$1",
+      [session.user.email]
+    );
+    if (usuario.rows.length === 0) {
+      return res.status(404).json({ error: "Usuário não encontrado" });
+    }
+    const { id: usuario_id, empresa_id } = usuario.rows[0];
+
+    // monta horários
     const startDate = new Date(start);
-    startDate.setHours(10, 0, 0);
-    const endDate = new Date(startDate);
-    endDate.setHours(startDate.getHours() + 1);
+    const endDate = new Date(startDate.getTime() + 60 * 60000);
 
-    const event = {
-      summary: `${servico} - ${nome}`,
-      description: `Agendamento solicitado.
-      Nome: ${nome}
-      Telefone: ${telefone}
-      Serviço: ${servico}`,
-      start: { dateTime: startDate.toISOString(), timeZone: "America/Sao_Paulo" },
-      end: { dateTime: endDate.toISOString(), timeZone: "America/Sao_Paulo" },
-    };
+    // título e descrição
+    const titulo = `${servico} - ${nome}`;
+    const descricao = `Nome: ${nome}\nTelefone: ${telefone}\nServiço: ${servico}\nProfissional: ${profissional}\nObs: ${obs || ""}`;
 
-    const created = await calendar.events.insert({
-      calendarId: "24ab458dc01c948bd480a78034704a471c7110e35ad60a8d620d4c2a8628c11b@group.calendar.google.com",
-      resource: event,
-    });
+    // INSERE agendamento com cliente_id
+    const result = await client.query(
+      `INSERT INTO agendamentos 
+        (empresa_id, usuario_id, cliente_id, titulo, descricao, data_inicio, data_fim, servico, profissional_id, telefone, nome, obs)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       RETURNING id`,
+      [
+        empresa_id,
+        usuario_id,
+        cliente,       // FK para clientes.id
+        titulo,
+        descricao,
+        startDate,
+        endDate,
+        servico,
+        profissional,
+        telefone,
+        nome,
+        obs
+      ]
+    );
 
-    // 🔹 Enviar webhook pro n8n
+    // 🔹 Webhook para n8n (mantendo compatibilidade)
     await fetch("https://n8n.iastec.servicos.ws/webhook/agendamento", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        cliente_id: cliente,
         nome,
         telefone,
         servico,
+        profissional,
         start: startDate.toISOString(),
         end: endDate.toISOString(),
+        obs
       }),
     });
 
-    res.status(200).json({ message: "✅ Reserva confirmada!", id: created.data.id });
+    return res.json({ message: "Agendamento criado com sucesso!", id: result.rows[0].id });
+
   } catch (err) {
-    console.error("❌ Erro ao reservar:", err);
-    res.status(500).json({ error: "Erro ao reservar horário", details: err.message });
+    console.error("Erro ao reservar:", err);
+    return res.status(500).json({ error: "Erro interno ao reservar", details: err.message });
+  } finally {
+    client.release();
   }
 }

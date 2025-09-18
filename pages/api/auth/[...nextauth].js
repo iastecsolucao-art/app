@@ -36,7 +36,7 @@ export const authOptions = {
           /**
            * Credenciais aceitas:
            * - role = trial && senha = "trial" => expira em 1 dia
-           * - user normal => senha armazenada em u.senha
+           * - usuário normal => verificar senha
            */
           if ((u.role === "trial" && credentials.senha === "trial") ||
               (u.senha && credentials.senha === u.senha)) {
@@ -45,7 +45,8 @@ export const authOptions = {
               name: u.nome,
               email: u.email,
               role: u.role,
-              expiracao: u.expiracao
+              expiracao: u.expiracao,
+              empresa: u.empresa // esse pode estar preenchido para trial
             };
           }
 
@@ -72,14 +73,14 @@ export const authOptions = {
           );
 
           if (res.rows.length === 0) {
-            // Novo usuário Google → cria com expiração +10 dias
+            // Novo usuário Google → cria com expiração +10 dias e empresa trial (id=1)
             await client.query(
-              `INSERT INTO usuarios (nome, email, google_id, role, expiracao)
-               VALUES ($1, $2, $3, 'user', NOW() + interval '10 days')`,
+              `INSERT INTO usuarios (nome, email, google_id, role, expiracao, empresa_id)
+               VALUES ($1, $2, $3, 'user', NOW() + interval '10 days', 1)`,
               [user.name, user.email, user.id]
             );
           } else {
-            // Já existe → atualiza google_id e renova expiração +10 dias
+            // Já existe → atualiza google_id e renova expiração
             await client.query(
               `UPDATE usuarios
                SET google_id = $1,
@@ -102,14 +103,19 @@ export const authOptions = {
     async session({ session }) {
       const client = await pool.connect();
       try {
+        // Busca role/expiração e resolve nome da empresa por JOIN
         const res = await client.query(
-          "SELECT role, expiracao FROM usuarios WHERE email = $1",
+          `SELECT u.role, u.expiracao, COALESCE(e.nome, u.empresa) as empresa
+           FROM usuarios u
+           LEFT JOIN empresa e ON e.id = u.id
+           WHERE u.email = $1`,
           [session.user.email]
         );
 
         if (res.rows.length > 0) {
           session.user.role = res.rows[0].role || "user";
           session.user.expiracao = res.rows[0].expiracao;
+          session.user.empresa = res.rows[0].empresa || "Trial";
         }
       } finally {
         client.release();
