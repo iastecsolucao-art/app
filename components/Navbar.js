@@ -110,6 +110,10 @@ export default function Navbar() {
                 <Link href="/servicos" className="block px-4 py-2 hover:bg-gray-100">⚙️ Serviços</Link>
                 <Link href="/profissionais" className="block px-4 py-2 hover:bg-gray-100">👩‍⚕️ Profissionais</Link>
                 <Link href="/clientes" className="block px-4 py-2 hover:bg-gray-100">👤 Clientes</Link>
+                <Link href="/faturas" className="block px-4 py-2 hover:bg-gray-100">� Faturas</Link>
+
+<Link href="/dashboard_servico" className="dropdown-item">📊 Dashboard</Link>
+
               </div>
             </div>
           )}
@@ -205,6 +209,10 @@ export default function Navbar() {
                   <Link href="/servicos" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">⚙️ Serviços</Link>
                   <Link href="/profissionais" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">👩‍⚕️ Profissionais</Link>
                   <Link href="/clientes" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">👤 Clientes</Link>
+                <Link href="/faturas" className="block px-4 py-2 hover:bg-gray-100">� Faturas</Link>
+
+<Link href="/dashboard_servico" className="dropdown-item">📊 Dashboard</Link>
+
                 </div>
               )}
             </>

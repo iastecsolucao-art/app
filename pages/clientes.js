@@ -1,71 +1,200 @@
 import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 
-export default function ClientesPage() {
+export default function Clientes() {
   const [clientes, setClientes] = useState([]);
-  const [nome, setNome] = useState("");
-  const [telefone, setTelefone] = useState("");
-  const [email, setEmail] = useState("");
-  const [observacao, setObservacao] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  async function carregar() {
-    const res = await fetch("/api/clientes");
-    setClientes(await res.json());
-  }
+  // form para novo cliente
+  const [novo, setNovo] = useState({
+    nome: "",
+    telefone: "",
+    email: "",
+    observacao: "",
+  });
 
-  useEffect(() => { carregar(); }, []);
+  // carregar clientes da API
+  const carregar = () => {
+    fetch("/api/clientes")
+      .then((res) => res.json())
+      .then(setClientes)
+      .catch(() => toast.error("Erro ao carregar clientes"))
+      .finally(() => setLoading(false));
+  };
 
-  async function salvarCliente() {
-    if (!nome || !telefone) {
-      alert("⚠️ Nome e telefone são obrigatórios!");
-      return;
-    }
+  useEffect(carregar, []);
 
+  // salvar novo cliente
+  const salvarNovo = async () => {
     const res = await fetch("/api/clientes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome, telefone, email, observacao }),
+      body: JSON.stringify(novo),
     });
-    await res.json();
-    setNome(""); setTelefone(""); setEmail(""); setObservacao("");
-    carregar();
-  }
 
-  async function excluir(id) {
-    await fetch(`/api/clientes/${id}`, { method: "DELETE" });
-    carregar();
-  }
+    if (res.ok) {
+      toast.success("Cliente cadastrado!");
+      carregar();
+      setNovo({ nome: "", telefone: "", email: "", observacao: "" });
+    } else {
+      const data = await res.json();
+      toast.error("Erro: " + data.error);
+    }
+  };
+
+  // atualizar cliente existente
+  const atualizar = async (c) => {
+    const res = await fetch("/api/clientes", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(c),
+    });
+
+    if (res.ok) {
+      toast.success("Cliente atualizado!");
+      carregar();
+    } else {
+      const data = await res.json();
+      toast.error("Erro: " + data.error);
+    }
+  };
+
+  // excluir cliente
+  const excluir = async (id) => {
+    if (!confirm("Deseja excluir este cliente?")) return;
+
+    const res = await fetch("/api/clientes", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+
+    if (res.ok) {
+      toast.success("Cliente excluído!");
+      setClientes(clientes.filter((c) => c.id !== id));
+    } else {
+      const data = await res.json();
+      toast.error("Erro: " + data.error);
+    }
+  };
+
+  if (loading) return <p className="p-6">Carregando...</p>;
 
   return (
     <div className="p-6">
-      <h1 className="text-xl font-bold mb-4">👤 Cadastro de Clientes</h1>
+      <h1 className="text-2xl font-bold mb-6">👥 Cadastro de Clientes</h1>
 
-      <div className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-2">
-        <input className="border p-2" placeholder="Nome" value={nome} onChange={(e) => setNome(e.target.value)} />
-        <input className="border p-2" placeholder="Telefone" value={telefone} onChange={(e) => setTelefone(e.target.value)} />
-        <input className="border p-2" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <input className="border p-2" placeholder="Observação" value={observacao} onChange={(e) => setObservacao(e.target.value)} />
-        <button onClick={salvarCliente} className="bg-blue-600 text-white px-4 py-2 rounded col-span-1 md:col-span-4 mt-2">Salvar</button>
+      {/* 🔹 Form Novo Cliente */}
+      <div className="mb-6 flex gap-2 flex-wrap">
+        <input
+          placeholder="Nome"
+          className="border p-2 flex-1"
+          value={novo.nome}
+          onChange={(e) => setNovo({ ...novo, nome: e.target.value })}
+        />
+        <input
+          placeholder="Telefone"
+          className="border p-2 flex-1"
+          value={novo.telefone}
+          onChange={(e) => setNovo({ ...novo, telefone: e.target.value })}
+        />
+        <input
+          placeholder="Email"
+          className="border p-2 flex-1"
+          value={novo.email}
+          onChange={(e) => setNovo({ ...novo, email: e.target.value })}
+        />
+        <input
+          placeholder="Observação"
+          className="border p-2 flex-1"
+          value={novo.observacao}
+          onChange={(e) => setNovo({ ...novo, observacao: e.target.value })}
+        />
+        <button
+          className="bg-blue-600 text-white px-4 py-2 rounded"
+          onClick={salvarNovo}
+        >
+          ➕ Salvar
+        </button>
       </div>
 
-      <table className="w-full border">
-        <thead>
-          <tr className="bg-gray-200">
-            <th className="p-2">Nome</th>
-            <th className="p-2">Telefone</th>
-            <th className="p-2">Email</th>
-            <th className="p-2">Observação</th>
-            <th className="p-2">Ações</th>
+      {/* 🔹 Tabela Clientes */}
+      <table className="min-w-full border border-gray-300">
+        <thead className="bg-gray-200">
+          <tr>
+            <th className="px-4 py-2 border">Nome</th>
+            <th className="px-4 py-2 border">Telefone</th>
+            <th className="px-4 py-2 border">Email</th>
+            <th className="px-4 py-2 border">Observação</th>
+            <th className="px-4 py-2 border">Ações</th>
           </tr>
         </thead>
         <tbody>
-          {clientes.map(c => (
-            <tr key={c.id} className="border-t">
-              <td className="p-2">{c.nome}</td>
-              <td className="p-2">{c.telefone}</td>
-              <td className="p-2">{c.email}</td>
-              <td className="p-2">{c.observacao}</td>
-              <td className="p-2">
-                <button onClick={() => excluir(c.id)} className="bg-red-600 text-white px-2 py-1 rounded">Excluir</button>
+          {clientes.map((c) => (
+            <tr key={c.id} className="text-center border-t">
+              <td className="px-4 py-2 border">
+                <input
+                  className="border p-1 w-full"
+                  value={c.nome}
+                  onChange={(e) =>
+                    setClientes((prev) =>
+                      prev.map((x) => (x.id === c.id ? { ...x, nome: e.target.value } : x))
+                    )
+                  }
+                />
+              </td>
+              <td className="px-4 py-2 border">
+                <input
+                  className="border p-1 w-full"
+                  value={c.telefone}
+                  onChange={(e) =>
+                    setClientes((prev) =>
+                      prev.map((x) =>
+                        x.id === c.id ? { ...x, telefone: e.target.value } : x
+                      )
+                    )
+                  }
+                />
+              </td>
+              <td className="px-4 py-2 border">
+                <input
+                  className="border p-1 w-full"
+                  value={c.email || ""}
+                  onChange={(e) =>
+                    setClientes((prev) =>
+                      prev.map((x) =>
+                        x.id === c.id ? { ...x, email: e.target.value } : x
+                      )
+                    )
+                  }
+                />
+              </td>
+              <td className="px-4 py-2 border">
+                <input
+                  className="border p-1 w-full"
+                  value={c.observacao || ""}
+                  onChange={(e) =>
+                    setClientes((prev) =>
+                      prev.map((x) =>
+                        x.id === c.id ? { ...x, observacao: e.target.value } : x
+                      )
+                    )
+                  }
+                />
+              </td>
+              <td className="px-4 py-2 border">
+                <button
+                  className="bg-green-500 text-white px-2 py-1 rounded mr-2"
+                  onClick={() => atualizar(c)}
+                >
+                  💾 Salvar
+                </button>
+                <button
+                  className="bg-red-500 text-white px-2 py-1 rounded"
+                  onClick={() => excluir(c.id)}
+                >
+                  🗑 Excluir
+                </button>
               </td>
             </tr>
           ))}
