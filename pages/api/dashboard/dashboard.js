@@ -1,8 +1,8 @@
 // pages/api/dashboard.js
 import { Pool } from "pg";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "./auth/[...nextauth]";
-
+//import { authOptions } from "./auth/[...nextauth]";
+import { authOptions } from "../auth/[...nextauth]";
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 export default async function handler(req, res) {
