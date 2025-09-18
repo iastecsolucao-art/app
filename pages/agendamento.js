@@ -12,7 +12,7 @@ export default function Agendamento() {
   const [telefone, setTelefone] = useState("");
   const [servico, setServico] = useState("");
   const [profissional, setProfissional] = useState("");
-  const [cliente, setCliente] = useState(""); // ID do cliente selecionado
+  const [cliente, setCliente] = useState("");
   const [obs, setObs] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [availableHours, setAvailableHours] = useState([]);
@@ -20,49 +20,23 @@ export default function Agendamento() {
   const [profissionais, setProfissionais] = useState([]);
   const [clientes, setClientes] = useState([]);
 
-  // 🔹 Carregar serviços
+  // 🔹 Carregar dados
   useEffect(() => {
-    fetch("/api/servicos")
-      .then(res => res.json())
-      .then(setServicos)
-      .catch(err => console.error("Erro ao carregar serviços", err));
+    fetch("/api/servicos").then(res => res.json()).then(setServicos).catch(console.error);
+    fetch("/api/profissionais").then(res => res.json()).then(setProfissionais).catch(console.error);
+    fetch("/api/clientes").then(res => res.json()).then(setClientes).catch(console.error);
+    fetch("/api/calendar/list").then(res => res.json()).then(setEvents).catch(console.error);
   }, []);
 
-  // 🔹 Carregar profissionais
-  useEffect(() => {
-    fetch("/api/profissionais")
-      .then(res => res.json())
-      .then(setProfissionais)
-      .catch(err => console.error("Erro ao carregar profissionais", err));
-  }, []);
-
-  // 🔹 Carregar clientes
-  useEffect(() => {
-    fetch("/api/clientes")
-      .then(res => res.json())
-      .then(setClientes)
-      .catch(err => console.error("Erro ao carregar clientes", err));
-  }, []);
-
-  // 🔹 Carregar eventos
-  useEffect(() => {
-    fetch("/api/calendar/list")
-      .then(res => res.json())
-      .then(setEvents)
-      .catch(err => console.error("Erro ao carregar eventos", err));
-  }, []);
-
-  // 🔹 Selecionar cliente
   const handleClienteChange = (id) => {
     setCliente(id);
     const c = clientes.find(c => c.id == id);
     if (c) {
       setNome(c.nome);
-      setTelefone(c.telefone.toString()); // força pra string
+      setTelefone(c.telefone.toString());
     }
   };
 
-  // 🔹 Ao clicar numa data
   const handleDateClick = (info) => {
     const dateStr = info.dateStr;
     setSelectedDate(dateStr);
@@ -81,7 +55,6 @@ export default function Agendamento() {
     setIsOpen(true);
   };
 
-  // 🔹 Confirmar reserva
   async function reservarHorario() {
     if (!cliente || !nome || !telefone || !servico || !profissional || !selectedHour) {
       alert("⚠️ Preencha todos os campos!");
@@ -90,22 +63,13 @@ export default function Agendamento() {
 
     let fone = telefone.replace(/\D/g, "");
     if (!fone.startsWith("55")) fone = "55" + fone;
-
     const start = `${selectedDate}T${selectedHour}:00`;
 
     try {
       const res = await fetch("/api/calendar/reservar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          cliente, // id do cliente
-          nome, 
-          telefone: fone, 
-          start, 
-          servico, 
-          obs, 
-          profissional
-        }),
+        body: JSON.stringify({ cliente, nome, telefone: fone, start, servico, obs, profissional }),
       });
 
       const data = await res.json();
@@ -114,13 +78,8 @@ export default function Agendamento() {
         const novaLista = await fetch("/api/calendar/list");
         setEvents(await novaLista.json());
         setIsOpen(false);
-        setCliente("");
-        setNome("");
-        setTelefone("");
-        setServico("");
-        setProfissional("");
-        setObs("");
-        setSelectedHour("");
+        setCliente(""); setNome(""); setTelefone("");
+        setServico(""); setProfissional(""); setObs(""); setSelectedHour("");
       } else {
         alert("Erro: " + (data.error || "Não foi possível reservar"));
       }
@@ -133,15 +92,43 @@ export default function Agendamento() {
   return (
     <div className="p-6">
       <h1 className="text-xl font-bold mb-4">📅 Agendamento de Serviço</h1>
+      
+      {/* Calendário */}
       <FullCalendar
         plugins={[dayGridPlugin, interactionPlugin]}
         initialView="dayGridMonth"
         events={events}
         dateClick={handleDateClick}
         timeZone="local"
+        height="auto"
       />
 
-      {/* Modal */}
+      {/* Lista mobile abaixo do calendário */}
+      <div className="mt-6">
+        <h2 className="font-semibold text-lg mb-2">📋 Agendamentos Efetuados</h2>
+        {events.length > 0 ? (
+          <div className="space-y-3">
+            {events.map((ev, idx) => {
+              const d = new Date(ev.start);
+              return (
+                <div key={idx} className="bg-white shadow p-3 rounded border border-gray-200">
+                  <p className="text-sm text-gray-600">
+                    📅 <strong>{d.toLocaleDateString()}</strong> às{" "}
+                    <strong>{d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong>
+                  </p>
+                  <p className="text-gray-800">👤 {ev.nome || ev.title || "Cliente"}</p>
+                  {ev.servico && <p className="text-gray-500">💇 Serviço: {ev.servico}</p>}
+                  {ev.profissional && <p className="text-gray-500">👨‍🔧 Profissional: {ev.profissional}</p>}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-gray-500">Nenhum agendamento encontrado</p>
+        )}
+      </div>
+
+      {/* Modal de novo agendamento */}
       <Dialog open={isOpen} onClose={() => setIsOpen(false)} className="relative z-50">
         <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
         <div className="fixed inset-0 flex items-center justify-center p-4">
@@ -152,99 +139,46 @@ export default function Agendamento() {
               Data selecionada: <b>{selectedDate && selectedDate.split("-").reverse().join("/")}</b>
             </p>
 
-            {/* Seleção do cliente */}
-            <select
-              value={cliente}
-              onChange={(e) => handleClienteChange(e.target.value)}
-              className="w-full px-3 py-2 border rounded mb-3"
-              required
-            >
+            {/* Cliente */}
+            <select value={cliente} onChange={(e) => handleClienteChange(e.target.value)} className="w-full px-3 py-2 border rounded mb-3">
               <option value="">Selecione o cliente</option>
               {clientes.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.nome} - {c.telefone}
-                </option>
+                <option key={c.id} value={c.id}>{c.nome} - {c.telefone}</option>
               ))}
             </select>
 
-            {/* Nome e telefone aparecem preenchidos */}
-            <input
-              type="text"
-              placeholder="Nome do Cliente"
-              value={nome}
-              readOnly
-              className="w-full px-3 py-2 border rounded mb-3 bg-gray-100"
-            />
-
-            <input
-              type="tel"
-              placeholder="Telefone"
-              value={telefone}
-              readOnly
-              className="w-full px-3 py-2 border rounded mb-3 bg-gray-100"
-            />
+            <input type="text" placeholder="Nome" value={nome} readOnly className="w-full px-3 py-2 border rounded mb-3 bg-gray-100"/>
+            <input type="tel" placeholder="Telefone" value={telefone} readOnly className="w-full px-3 py-2 border rounded mb-3 bg-gray-100"/>
 
             {/* Profissional */}
-            <select
-              value={profissional}
-              onChange={(e) => setProfissional(e.target.value)}
-              className="w-full px-3 py-2 border rounded mb-3"
-              required
-            >
+            <select value={profissional} onChange={(e) => setProfissional(e.target.value)} className="w-full px-3 py-2 border rounded mb-3">
               <option value="">Selecione o profissional</option>
               {profissionais.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.nome} {p.especialidade && `- ${p.especialidade}`}
-                </option>
+                <option key={p.id} value={p.id}>{p.nome} {p.especialidade && `- ${p.especialidade}`}</option>
               ))}
             </select>
 
             {/* Serviço */}
-            <select
-              value={servico}
-              onChange={(e) => setServico(e.target.value)}
-              className="w-full px-3 py-2 border rounded mb-3"
-              required
-            >
+            <select value={servico} onChange={(e) => setServico(e.target.value)} className="w-full px-3 py-2 border rounded mb-3">
               <option value="">Selecione o serviço</option>
-              {servicos.map(s => (
+              {Array.isArray(servicos) && servicos.map(s => (
                 <option key={s.id} value={s.nome}>{s.nome}</option>
               ))}
             </select>
 
             {/* Horário */}
-            <select
-              value={selectedHour}
-              onChange={(e) => setSelectedHour(e.target.value)}
-              className="w-full px-3 py-2 border rounded mb-3"
-              required
-            >
+            <select value={selectedHour} onChange={(e) => setSelectedHour(e.target.value)} className="w-full px-3 py-2 border rounded mb-3">
               <option value="">Selecione o horário</option>
               {availableHours.map(h => (
                 <option key={h} value={h}>{h}</option>
               ))}
             </select>
 
-            <textarea
-              placeholder="Observações"
-              value={obs}
-              onChange={(e) => setObs(e.target.value)}
-              className="w-full px-3 py-2 border rounded mb-3"
-            />
+            <textarea placeholder="Observações" value={obs} onChange={(e) => setObs(e.target.value)} className="w-full px-3 py-2 border rounded mb-3"/>
 
             <div className="flex justify-end space-x-2 mt-4">
-              <button
-                onClick={() => setIsOpen(false)}
-                className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={reservarHorario}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Confirmar
-              </button>
+              <button onClick={() => setIsOpen(false)} className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Cancelar</button>
+              <button onClick={reservarHorario} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Confirmar</button>
             </div>
           </Dialog.Panel>
         </div>
