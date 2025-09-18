@@ -31,45 +31,45 @@ export default async function handler(req, res) {
       );
       return res.json(faturasRes.rows);
     }
+if (req.method === "POST") {
+  const { cliente_id, agendamento_id, itens } = req.body;
 
-    if (req.method === "POST") {
-      // criar fatura
-      const { cliente_id, agendamento_id, itens } = req.body;
-      if (!cliente_id || !itens || itens.length === 0) {
-        return res.status(400).json({ error: "Dados insuficientes" });
-      }
+  // calcula total no backend em JS
+  const total = itens.reduce(
+    (acc, item) => acc + (item.valor * item.quantidade),
+    0
+  );
 
-      await client.query("BEGIN");
+  // cria fatura
+  const faturaRes = await client.query(
+    `INSERT INTO faturas (empresa_id, cliente_id, agendamento_id, total, status, data)
+     VALUES ($1, $2, $3, $4, 'Aberto', CURRENT_DATE)
+     RETURNING id`,
+    [empresa_id, cliente_id, agendamento_id, total]
+  );
 
-      const faturaRes = await client.query(
-        `INSERT INTO faturas (empresa_id, cliente_id, agendamento_id, total, status) 
-         VALUES ($1,$2,$3,0,'Aberto') RETURNING id`,
-        [empresa_id, cliente_id, agendamento_id || null]
-      );
-      const fatura_id = faturaRes.rows[0].id;
+  const fatura_id = faturaRes.rows[0].id;
 
-      let total = 0;
-      for (let item of itens) {
-        const { servico_id, quantidade, valor } = item;
-        const subtotal = quantidade * valor;
-        total += subtotal;
-        await client.query(
-          `INSERT INTO fatura_itens (fatura_id, servico_id, quantidade, valor) 
-           VALUES ($1,$2,$3,$4)`,
-          [fatura_id, servico_id, quantidade, valor]
-        );
-      }
+  // grava os itens
+  for (const item of itens) {
+    await client.query(
+      `INSERT INTO fatura_itens (fatura_id, servico_id, quantidade, valor)
+       VALUES ($1, $2, $3, $4)`,
+      [fatura_id, item.servico_id, item.quantidade, item.valor]
+    );
+  }
 
-      await client.query(
-        "UPDATE faturas SET total=$1 WHERE id=$2",
-        [total, fatura_id]
-      );
+  // ✅ Atualiza status do agendamento
+  if (agendamento_id) {
+    await client.query(
+      `UPDATE agendamentos SET status='faturado' WHERE id=$1 AND empresa_id=$2`,
+      [agendamento_id, empresa_id]
+    );
+  }
 
-      await client.query("COMMIT");
+  return res.json({ message: "Fatura criada com sucesso", id: fatura_id });
 
-      return res.json({ message: "Fatura criada", id: fatura_id });
-    }
-
+  }
     if (req.method === "PUT") {
       // registrar pagamento
       const { id, forma_pagamento } = req.body;

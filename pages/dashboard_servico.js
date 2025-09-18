@@ -8,7 +8,7 @@ export default function DashboardServico() {
   const [resumo, setResumo] = useState(null);
 
   useEffect(() => {
-    fetch("/api/dashboard")
+   fetch("/api/dashboard_servico")
       .then(r => r.json())
       .then(setResumo);
   }, []);

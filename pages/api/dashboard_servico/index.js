@@ -1,3 +1,4 @@
+// pages/api/dashboard_servico/index.js
 import { Pool } from "pg";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]";
@@ -12,7 +13,7 @@ export default async function handler(req, res) {
 
   const client = await pool.connect();
   try {
-    // Descobre empresa do usuário logado
+    // Pega empresa do usuário logado
     const userRes = await client.query(
       "SELECT empresa_id FROM usuarios WHERE email=$1",
       [session.user.email]
@@ -21,6 +22,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Usuário não encontrado" });
     }
     const { empresa_id } = userRes.rows[0];
+    console.log("empresa_id ativo:", empresa_id);
 
     // Resumo de faturas
     const faturasResumo = await client.query(
@@ -83,8 +85,8 @@ export default async function handler(req, res) {
       diario: faturamentoDiario.rows,
     });
   } catch (err) {
-    console.error("Erro no dashboard:", err);
-    return res.status(500).json({ error: "Erro interno" });
+    console.error("Erro no dashboard_servico:", err);
+    return res.status(500).json({ error: "Erro interno", details: err.message });
   } finally {
     client.release();
   }
