@@ -7,6 +7,14 @@ export default function CompletarAgendamentos() {
   const [servicos, setServicos] = useState([]);
 
   useEffect(() => {
+    carregarAgendamentos();
+
+    fetch("/api/clientes").then(res => res.json()).then(setClientes);
+    fetch("/api/profissionais").then(res => res.json()).then(setProfissionais);
+    fetch("/api/servicos").then(res => res.json()).then(setServicos);
+  }, []);
+
+  const carregarAgendamentos = () => {
     fetch("/api/calendar/list")
       .then(res => res.json())
       .then(data => {
@@ -16,45 +24,45 @@ export default function CompletarAgendamentos() {
         );
         setAgendamentos(pendentes);
       });
+  };
 
-    fetch("/api/clientes").then(res => res.json()).then(setClientes);
-    fetch("/api/profissionais").then(res => res.json()).then(setProfissionais);
-    fetch("/api/servicos").then(res => res.json()).then(setServicos);
-  }, []);
-async function salvar(a) {
-  try {
-    const payload = {
-      id: a.id ? Number(a.id) : null,
-      cliente_id: a.cliente_id ? Number(a.cliente_id) : null,
-      profissional_id: a.profissional_id ? Number(a.profissional_id) : null,
-      servico: a.servico || null,
-      valor: a.valor ? Number(a.valor) : null,
-      obs: a.obs || null,
-    };
+  async function salvar(a) {
+    try {
+      const payload = {
+        id: a.id ? Number(a.id) : null,
+        cliente_id: a.cliente_id ? Number(a.cliente_id) : null,
+        profissional_id: a.profissional_id ? Number(a.profissional_id) : null,
+        servico: a.servico || null,
+        valor: a.valor ? Number(a.valor) : null,
+        obs: a.obs || null,
+      };
 
-    if (!payload.id) {
-      alert("⚠️ Este agendamento não tem ID válido");
-      console.warn("Agendamento sem id:", a);
-      return;
+      if (!payload.id) {
+        alert("⚠️ Este agendamento não tem ID válido");
+        console.warn("Agendamento sem id:", a);
+        return;
+      }
+
+      const res = await fetch("/api/calendar/completar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || "✅ Agendamento atualizado!");
+        // 🔹 Recarrega a lista do servidor
+        carregarAgendamentos();
+      } else {
+        alert("Erro: " + data.error);
+      }
+    } catch (err) {
+      console.error("❌ Erro ao salvar:", err);
+      alert("Erro inesperado ao salvar agendamento");
     }
-
-    const res = await fetch("/api/calendar/completar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json();
-    if (res.ok) {
-      alert(data.message || "✅ Agendamento atualizado!");
-    } else {
-      alert("Erro: " + data.error);
-    }
-  } catch (err) {
-    console.error("❌ Erro ao salvar:", err);
-    alert("Erro inesperado ao salvar agendamento");
   }
-}
+
   return (
     <div className="p-6">
       <h1 className="text-xl font-bold mb-4">📝 Completar Agendamentos Importados</h1>
