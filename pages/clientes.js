@@ -13,12 +13,25 @@ export default function Clientes() {
     observacao: "",
   });
 
-  // carregar clientes da API
+  // carregar clientes da API com proteção para garantir array
   const carregar = () => {
+    setLoading(true);
     fetch("/api/clientes")
       .then((res) => res.json())
-      .then(setClientes)
-      .catch(() => toast.error("Erro ao carregar clientes"))
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setClientes(data);
+        } else {
+          console.error("API clientes retornou dado inesperado:", data);
+          setClientes([]);
+          toast.error("Erro ao carregar clientes: formato inválido");
+        }
+      })
+      .catch((err) => {
+        console.error("Erro ao carregar clientes:", err);
+        toast.error("Erro ao carregar clientes");
+        setClientes([]);
+      })
       .finally(() => setLoading(false));
   };
 
@@ -26,36 +39,56 @@ export default function Clientes() {
 
   // salvar novo cliente
   const salvarNovo = async () => {
-    const res = await fetch("/api/clientes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(novo),
-    });
+    if (!novo.nome || !novo.telefone) {
+      toast.error("Nome e telefone são obrigatórios");
+      return;
+    }
 
-    if (res.ok) {
-      toast.success("Cliente cadastrado!");
-      carregar();
-      setNovo({ nome: "", telefone: "", email: "", observacao: "" });
-    } else {
-      const data = await res.json();
-      toast.error("Erro: " + data.error);
+    try {
+      const res = await fetch("/api/clientes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(novo),
+      });
+
+      if (res.ok) {
+        toast.success("Cliente cadastrado!");
+        carregar();
+        setNovo({ nome: "", telefone: "", email: "", observacao: "" });
+      } else {
+        const data = await res.json();
+        toast.error("Erro: " + data.error);
+      }
+    } catch (err) {
+      console.error("Erro ao salvar cliente:", err);
+      toast.error("Erro ao salvar cliente");
     }
   };
 
   // atualizar cliente existente
   const atualizar = async (c) => {
-    const res = await fetch("/api/clientes", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(c),
-    });
+    if (!c.nome || !c.telefone) {
+      toast.error("Nome e telefone são obrigatórios");
+      return;
+    }
 
-    if (res.ok) {
-      toast.success("Cliente atualizado!");
-      carregar();
-    } else {
-      const data = await res.json();
-      toast.error("Erro: " + data.error);
+    try {
+      const res = await fetch("/api/clientes", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(c),
+      });
+
+      if (res.ok) {
+        toast.success("Cliente atualizado!");
+        carregar();
+      } else {
+        const data = await res.json();
+        toast.error("Erro: " + data.error);
+      }
+    } catch (err) {
+      console.error("Erro ao atualizar cliente:", err);
+      toast.error("Erro ao atualizar cliente");
     }
   };
 
@@ -63,18 +96,23 @@ export default function Clientes() {
   const excluir = async (id) => {
     if (!confirm("Deseja excluir este cliente?")) return;
 
-    const res = await fetch("/api/clientes", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
+    try {
+      const res = await fetch("/api/clientes", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
 
-    if (res.ok) {
-      toast.success("Cliente excluído!");
-      setClientes(clientes.filter((c) => c.id !== id));
-    } else {
-      const data = await res.json();
-      toast.error("Erro: " + data.error);
+      if (res.ok) {
+        toast.success("Cliente excluído!");
+        setClientes((prev) => prev.filter((c) => c.id !== id));
+      } else {
+        const data = await res.json();
+        toast.error("Erro: " + data.error);
+      }
+    } catch (err) {
+      console.error("Erro ao excluir cliente:", err);
+      toast.error("Erro ao excluir cliente");
     }
   };
 
@@ -84,7 +122,7 @@ export default function Clientes() {
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">👥 Cadastro de Clientes</h1>
 
-      {/* 🔹 Form Novo Cliente */}
+      {/* Form Novo Cliente */}
       <div className="mb-6 flex gap-2 flex-wrap">
         <input
           placeholder="Nome"
@@ -118,7 +156,7 @@ export default function Clientes() {
         </button>
       </div>
 
-      {/* 🔹 Tabela Clientes */}
+      {/* Tabela Clientes */}
       <table className="min-w-full border border-gray-300">
         <thead className="bg-gray-200">
           <tr>
@@ -130,7 +168,7 @@ export default function Clientes() {
           </tr>
         </thead>
         <tbody>
-          {clientes.map((c) => (
+          {Array.isArray(clientes) && clientes.map((c) => (
             <tr key={c.id} className="text-center border-t">
               <td className="px-4 py-2 border">
                 <input

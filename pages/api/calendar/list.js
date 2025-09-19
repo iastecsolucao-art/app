@@ -1,4 +1,3 @@
-// pages/api/calendar/list.js
 import { google } from "googleapis";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]";
@@ -100,7 +99,7 @@ export default async function handler(req, res) {
             gcal_event_id: event.id,
             title: event.summary || "(Sem título)",
             start: event.start.dateTime || event.start.date,
-            end: event.end.dateTime || event.start.date,
+            end: event.end.dateTime || event.end.date,  // corrigido aqui
             source: "google",
             importado: false,
             descricao: event.description || "",
