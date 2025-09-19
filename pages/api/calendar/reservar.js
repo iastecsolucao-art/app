@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     const titulo = `${servico} - ${nome}`;
     const descricao = `Nome: ${nome}\nTelefone: ${telefone}\nServiço: ${servico}\nProfissional: ${profissional}\nObs: ${obs || ""}`;
 
-    // INSERE agendamento no banco
+    // INSERE agendamento no banco (sem google_event_id ainda)
     const result = await client.query(
       `INSERT INTO agendamentos 
         (empresa_id, usuario_id, cliente_id, titulo, descricao, data_inicio, data_fim, servico, profissional_id, telefone, nome, obs)
@@ -52,7 +52,7 @@ export default async function handler(req, res) {
       [
         empresa_id,
         usuario_id,
-        cliente,       // FK para clientes.id
+        cliente,
         titulo,
         descricao,
         startDate,
@@ -61,11 +61,13 @@ export default async function handler(req, res) {
         profissional,
         telefone,
         nome,
-        obs
+        obs,
       ]
     );
 
     const agendamentoId = result.rows[0].id;
+
+    let googleEventId = null;
 
     // 🔹 Envia também para o Google Calendar SE estiver configurado
     if (google_calendar_id) {
@@ -80,7 +82,7 @@ export default async function handler(req, res) {
 
         const calendar = google.calendar({ version: "v3", auth });
 
-        await calendar.events.insert({
+        const insertResult = await calendar.events.insert({
           calendarId: google_calendar_id,
           requestBody: {
             summary: titulo,
@@ -89,6 +91,16 @@ export default async function handler(req, res) {
             end: { dateTime: endDate.toISOString(), timeZone: "America/Sao_Paulo" },
           },
         });
+
+        googleEventId = insertResult.data.id;
+
+        // Atualiza o agendamento no banco com o google_event_id
+        if (googleEventId) {
+          await client.query(
+            "UPDATE agendamentos SET google_event_id = $1 WHERE id = $2",
+            [googleEventId, agendamentoId]
+          );
+        }
       } catch (err) {
         console.error("Erro ao salvar no Google Calendar:", err.message);
       }
@@ -107,12 +119,12 @@ export default async function handler(req, res) {
         profissional,
         start: startDate.toISOString(),
         end: endDate.toISOString(),
-        obs
+        obs,
+        google_event_id: googleEventId, // opcional para n8n
       }),
     });
 
-    return res.json({ message: "Agendamento criado com sucesso!", id: agendamentoId });
-
+    return res.json({ message: "Agendamento criado com sucesso!", id: agendamentoId, google_event_id: googleEventId });
   } catch (err) {
     console.error("Erro ao reservar:", err);
     return res.status(500).json({ error: "Erro interno ao reservar", details: err.message });

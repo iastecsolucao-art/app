@@ -25,7 +25,6 @@ export default function Agendamento() {
   const [profissionais, setProfissionais] = useState([]);
   const [clientes, setClientes] = useState([]);
 
-  // Carregar dados e eventos somente quando autenticado
   useEffect(() => {
     if (status !== "authenticated") return;
 
@@ -51,15 +50,31 @@ export default function Agendamento() {
           setEvents([]);
           return;
         }
+
+        // IDs google_event_id dos eventos do banco que já existem
+        const googleIdsInDb = new Set(
+          data.filter(ev => ev.source === "db" && ev.gcal_event_id).map(ev => ev.gcal_event_id)
+        );
+
+        // Filtra eventos do Google que já estão no banco
+        const filteredEvents = data.filter(ev => {
+          if (ev.source === "google" && googleIdsInDb.has(ev.gcal_event_id)) {
+            return false; // já importado, não mostrar
+          }
+          return true;
+        });
+
+        // Remove duplicados por chave composta
         const uniqueEvents = [];
-        const seenIds = new Set();
-        data.forEach((ev) => {
+        const seenKeys = new Set();
+        filteredEvents.forEach(ev => {
           const key = ev.gcal_event_id || `db_${ev.id}`;
-          if (!seenIds.has(key)) {
+          if (!seenKeys.has(key)) {
             uniqueEvents.push(ev);
-            seenIds.add(key);
+            seenKeys.add(key);
           }
         });
+
         setEvents(uniqueEvents);
       })
       .catch(() => setEvents([]));
@@ -115,7 +130,6 @@ export default function Agendamento() {
       const data = await res.json();
       if (res.ok) {
         alert(data.message || "✅ Reserva feita!");
-        // Atualiza lista de eventos após reserva
         const novaLista = await fetch("/api/calendar/list");
         const dataEvents = await novaLista.json();
 
@@ -124,15 +138,27 @@ export default function Agendamento() {
           return;
         }
 
+        const googleIdsInDb = new Set(
+          dataEvents.filter(ev => ev.source === "db" && ev.gcal_event_id).map(ev => ev.gcal_event_id)
+        );
+
+        const filteredEvents = dataEvents.filter(ev => {
+          if (ev.source === "google" && googleIdsInDb.has(ev.gcal_event_id)) {
+            return false;
+          }
+          return true;
+        });
+
         const uniqueEvents = [];
-        const seenIds = new Set();
-        dataEvents.forEach((ev) => {
+        const seenKeys = new Set();
+        filteredEvents.forEach(ev => {
           const key = ev.gcal_event_id || `db_${ev.id}`;
-          if (!seenIds.has(key)) {
+          if (!seenKeys.has(key)) {
             uniqueEvents.push(ev);
-            seenIds.add(key);
+            seenKeys.add(key);
           }
         });
+
         setEvents(uniqueEvents);
 
         setIsOpen(false);
@@ -181,6 +207,7 @@ export default function Agendamento() {
               const d = new Date(ev.start);
               return (
                 <div key={idx} className="bg-white shadow p-3 rounded border border-gray-200">
+                  <p className="text-xs text-gray-400 mb-1">ID: {ev.id || ev.calendar_id}</p>
                   <p className="text-sm text-gray-600">
                     📅 <strong>{d.toLocaleDateString()}</strong> às{" "}
                     <strong>{d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong>
