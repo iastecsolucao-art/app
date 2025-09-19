@@ -48,7 +48,8 @@ export default async function handler(req, res) {
     );
 
     const dbEvents = agRes.rows.map((a) => ({
-      id: `db-${a.id}`,
+      id: a.id, // <<--- numérico do banco (importante para completar)
+      calendar_id: `db-${a.id}`, // <<--- usado no FullCalendar
       title: a.titulo || `${a.servico || "Serviço"} - ${a.cliente_nome || a.cliente_nome_ref || ""}`,
       start: a.data_inicio,
       end: a.data_fim,
@@ -88,10 +89,10 @@ export default async function handler(req, res) {
         });
 
         googleEvents = (result.data.items || [])
-          // 🔹 só adiciona os ainda não importados
           .filter(event => !dbGoogleIds.includes(event.id))
           .map((event) => ({
-            id: `gcal-${event.id}`,
+            id: null, // não tem ID no banco ainda
+            calendar_id: `gcal-${event.id}`, // usado no calendário
             gcal_event_id: event.id,
             title: event.summary || "(Sem título)",
             start: event.start.dateTime || event.start.date,
@@ -106,7 +107,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3) 🔹 Combinar banco + google (já filtrado)
+    // 3) 🔹 Combinar banco + google
     return res.json([...dbEvents, ...googleEvents]);
   } catch (err) {
     console.error("Erro ao listar eventos:", err);

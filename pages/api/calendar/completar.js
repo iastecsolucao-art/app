@@ -17,13 +17,23 @@ export default async function handler(req, res) {
   try {
     const { id, cliente_id, servico, profissional_id, valor, obs } = req.body;
 
-    if (!id) return res.status(400).json({ error: "ID do agendamento é obrigatório" });
+    const numericId = parseInt(id, 10);
+    if (isNaN(numericId)) {
+      return res.status(400).json({ error: "ID inválido do agendamento" });
+    }
 
     await client.query(
       `UPDATE agendamentos
        SET cliente_id=$1, servico=$2, profissional_id=$3, valor=$4, obs=$5
        WHERE id=$6`,
-      [cliente_id || null, servico || null, profissional_id || null, valor || null, obs || null, id]
+      [
+        cliente_id ? Number(cliente_id) : null,
+        servico || null,
+        profissional_id ? Number(profissional_id) : null,
+        valor ? Number(valor) : null,
+        obs || null,
+        numericId,
+      ]
     );
 
     return res.status(200).json({ message: "✅ Informações atualizadas com sucesso!" });

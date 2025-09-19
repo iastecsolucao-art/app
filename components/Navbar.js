@@ -32,7 +32,6 @@ export default function Navbar() {
     setOpenDropdown(openDropdown === menu ? null : menu);
   };
 
-  // se não tem sessão ou acessos carregados ainda
   if (!session) return null;
 
   return (
@@ -51,7 +50,7 @@ export default function Navbar() {
       {/* --- DESKTOP --- */}
       {!expirado && acessos && (
         <div className="hidden md:flex space-x-6 text-white items-center relative">
-
+          
           {acessos.dashboard && (
             <Link href="/dashboard" className="hover:underline text-yellow-300 font-semibold">
               Dashboard
@@ -61,7 +60,7 @@ export default function Navbar() {
           {acessos.inventario && (
             <div className="relative group">
               <button className="hover:underline">Inventário ▾</button>
-              <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-52">
+              <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-52 z-50">
                 <Link href="/contagem" className="block px-4 py-2 hover:bg-gray-100">Contagem</Link>
                 <Link href="/upload" className="block px-4 py-2 hover:bg-gray-100">Upload</Link>
                 <Link href="/download" className="block px-4 py-2 hover:bg-gray-100">Download</Link>
@@ -73,7 +72,7 @@ export default function Navbar() {
           {acessos.produtos && (
             <div className="relative group">
               <button className="hover:underline">Produtos ▾</button>
-              <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-44">
+              <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-44 z-50">
                 <Link href="/produtos" className="block px-4 py-2 hover:bg-gray-100">Cadastro Produto</Link>
                 <Link href="/listar_produtos" className="block px-4 py-2 hover:bg-gray-100">Lista de Produtos</Link>
               </div>
@@ -83,7 +82,7 @@ export default function Navbar() {
           {acessos.compras && (
             <div className="relative group">
               <button className="hover:underline">Compras ▾</button>
-              <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-44">
+              <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-44 z-50">
                 <Link href="/compras" className="block px-4 py-2 hover:bg-gray-100">Nova Compra</Link>
                 <Link href="/listar_compras" className="block px-4 py-2 hover:bg-gray-100">Lista de Compras</Link>
                 <Link href="/entradas" className="block px-4 py-2 hover:bg-gray-100">Entradas</Link>
@@ -95,7 +94,7 @@ export default function Navbar() {
           {acessos.comercial && (
             <div className="relative group">
               <button className="hover:underline">Comercial ▾</button>
-              <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-44">
+              <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-44 z-50">
                 <Link href="/orcamento" className="block px-4 py-2 hover:bg-gray-100">Orçamentos</Link>
                 <Link href="/vendas" className="block px-4 py-2 hover:bg-gray-100">Vendas</Link>
               </div>
@@ -105,15 +104,14 @@ export default function Navbar() {
           {acessos.servicos && (
             <div className="relative group">
               <button className="hover:underline">Serviços ▾</button>
-              <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-48">
+              <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-56 z-50">
                 <Link href="/agendamento" className="block px-4 py-2 hover:bg-gray-100">📅 Agendamento</Link>
                 <Link href="/servicos" className="block px-4 py-2 hover:bg-gray-100">⚙️ Serviços</Link>
                 <Link href="/profissionais" className="block px-4 py-2 hover:bg-gray-100">👩‍⚕️ Profissionais</Link>
                 <Link href="/clientes" className="block px-4 py-2 hover:bg-gray-100">👤 Clientes</Link>
-                <Link href="/faturas" className="block px-4 py-2 hover:bg-gray-100">� Faturas</Link>
-
-<Link href="/dashboard_servico" className="dropdown-item">📊 Dashboard</Link>
-
+                <Link href="/faturas" className="block px-4 py-2 hover:bg-gray-100">💳 Faturas</Link>
+                <Link href="/dashboard_servico" className="block px-4 py-2 hover:bg-gray-100">📊 Dashboard</Link>
+                <Link href="/agendamentos/completar" className="block px-4 py-2 hover:bg-gray-100">📝 Completar Agendamentos</Link>
               </div>
             </div>
           )}
@@ -209,10 +207,9 @@ export default function Navbar() {
                   <Link href="/servicos" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">⚙️ Serviços</Link>
                   <Link href="/profissionais" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">👩‍⚕️ Profissionais</Link>
                   <Link href="/clientes" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">👤 Clientes</Link>
-                <Link href="/faturas" className="block px-4 py-2 hover:bg-gray-100">� Faturas</Link>
-
-<Link href="/dashboard_servico" className="dropdown-item">📊 Dashboard</Link>
-
+                  <Link href="/faturas" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">💳 Faturas</Link>
+                  <Link href="/dashboard_servico" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">📊 Dashboard</Link>
+                  <Link href="/agendamentos/completar" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">📝 Completar Agendamentos</Link>
                 </div>
               )}
             </>

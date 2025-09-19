@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
-import interactionPlugin from "@fullcalendar/interaction"; 
+import interactionPlugin from "@fullcalendar/interaction";
 import { Dialog } from "@headlessui/react";
+import { useRouter } from "next/router";
 
 export default function Agendamento() {
   const [events, setEvents] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
-  const [selectedHour, setSelectedHour] = useState(""); 
+  const [selectedHour, setSelectedHour] = useState("");
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
   const [servico, setServico] = useState("");
@@ -19,6 +20,8 @@ export default function Agendamento() {
   const [servicos, setServicos] = useState([]);
   const [profissionais, setProfissionais] = useState([]);
   const [clientes, setClientes] = useState([]);
+
+  const router = useRouter();
 
   // 🔹 Carregar dados
   useEffect(() => {
@@ -92,7 +95,7 @@ export default function Agendamento() {
   return (
     <div className="p-6">
       <h1 className="text-xl font-bold mb-4">📅 Agendamento de Serviço</h1>
-      
+
       {/* Calendário */}
       <FullCalendar
         plugins={[dayGridPlugin, interactionPlugin]}
@@ -148,8 +151,8 @@ export default function Agendamento() {
                           const data = await resp.json();
                           if (resp.ok) {
                             alert("✅ Evento importado para o sistema!");
-                            const nova = await fetch("/api/calendar/list");
-                            setEvents(await nova.json());
+                            // 🔹 redireciona para tela de completar
+                            router.push("/agendamentos/completar");
                           } else {
                             alert("Erro ao importar: " + data.error);
                           }
