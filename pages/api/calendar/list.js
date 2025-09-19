@@ -12,7 +12,7 @@ export default async function handler(req, res) {
 
   const client = await pool.connect();
   try {
-    // 📌 Usuário logado
+    // Usuário logado
     const usuarioRes = await client.query(
       "SELECT id, empresa_id, google_calendar_id FROM usuarios WHERE email=$1",
       [session.user.email]
@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     }
     const { empresa_id, google_calendar_id } = usuarioRes.rows[0];
 
-    // 1) 🔹 Buscar eventos do banco
+    // Buscar eventos do banco com info se já foi faturado
     const agRes = await client.query(
       `SELECT 
           a.id,
@@ -37,10 +37,12 @@ export default async function handler(req, res) {
           a.telefone AS cliente_telefone,
           a.google_event_id,
           p.nome AS profissional_nome,
-          c.nome AS cliente_nome_ref
+          c.nome AS cliente_nome_ref,
+          CASE WHEN f.id IS NOT NULL THEN true ELSE false END AS ja_faturado
        FROM agendamentos a
        LEFT JOIN profissionais p ON a.profissional_id = p.id
        LEFT JOIN clientes c ON a.cliente_id = c.id
+       LEFT JOIN faturas f ON f.agendamento_id = a.id
        WHERE a.empresa_id=$1 AND a.data_inicio >= NOW()
        ORDER BY a.data_inicio ASC
        LIMIT 100`,
@@ -48,8 +50,8 @@ export default async function handler(req, res) {
     );
 
     const dbEvents = agRes.rows.map((a) => ({
-      id: a.id, // <<--- numérico do banco (importante para completar)
-      calendar_id: `db-${a.id}`, // <<--- usado no FullCalendar
+      id: a.id, // id numérico do banco
+      calendar_id: `db-${a.id}`, // usado no FullCalendar
       title: a.titulo || `${a.servico || "Serviço"} - ${a.cliente_nome || a.cliente_nome_ref || ""}`,
       start: a.data_inicio,
       end: a.data_fim,
@@ -61,12 +63,14 @@ export default async function handler(req, res) {
       telefone: a.cliente_telefone,
       obs: a.obs,
       gcal_event_id: a.google_event_id,
+      // Converte 't'/'f' ou true/false para boolean JS
+      ja_faturado: a.ja_faturado === true || a.ja_faturado === 't',
     }));
 
-    // 🔹 Coletar todos os google_event_id já importados
+    // Coletar google_event_id já importados
     const dbGoogleIds = dbEvents.map(ev => ev.gcal_event_id).filter(Boolean);
 
-    // 2) 🔹 Buscar eventos do Google Calendar
+    // Buscar eventos do Google Calendar
     let googleEvents = [];
     if (google_calendar_id) {
       try {
@@ -91,8 +95,8 @@ export default async function handler(req, res) {
         googleEvents = (result.data.items || [])
           .filter(event => !dbGoogleIds.includes(event.id))
           .map((event) => ({
-            id: null, // não tem ID no banco ainda
-            calendar_id: `gcal-${event.id}`, // usado no calendário
+            id: null,
+            calendar_id: `gcal-${event.id}`,
             gcal_event_id: event.id,
             title: event.summary || "(Sem título)",
             start: event.start.dateTime || event.start.date,
@@ -101,13 +105,14 @@ export default async function handler(req, res) {
             importado: false,
             descricao: event.description || "",
             organizador: event.organizer?.displayName || event.organizer?.email || "",
+            ja_faturado: false, // eventos do Google não têm fatura no banco
           }));
       } catch (err) {
-        console.error("⚠️ Erro ao buscar no Google Calendar:", err.message);
+        console.error("Erro ao buscar no Google Calendar:", err.message);
       }
     }
 
-    // 3) 🔹 Combinar banco + google
+    // Combinar banco + google
     return res.json([...dbEvents, ...googleEvents]);
   } catch (err) {
     console.error("Erro ao listar eventos:", err);

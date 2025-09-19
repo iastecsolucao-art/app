@@ -19,9 +19,9 @@ export default function CompletarAgendamentos() {
       .then(res => res.json())
       .then(data => {
         // só pendentes
-        const pendentes = data.filter(
-          ev => ev.source === "db" && (!ev.cliente_id || !ev.servico)
-        );
+       const pendentes = data.filter(
+  ev => ev.source === "db" && (!ev.cliente_id || !ev.servico) && !ev.ja_faturado
+);
         setAgendamentos(pendentes);
       });
   };
