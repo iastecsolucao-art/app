@@ -12,37 +12,60 @@ export default async function handler(req, res) {
 
   const client = await pool.connect();
   try {
-    // consulta calendar_id do usuário + empresa
+    // 📌 Usuário logado
     const usuarioRes = await client.query(
       "SELECT id, empresa_id, google_calendar_id FROM usuarios WHERE email=$1",
       [session.user.email]
     );
-
     if (usuarioRes.rows.length === 0) {
       return res.status(404).json({ error: "Usuário não encontrado" });
     }
-
     const { empresa_id, google_calendar_id } = usuarioRes.rows[0];
 
-    // 1) 🔹 Buscar eventos do banco (agendamentos)
+    // 1) 🔹 Buscar eventos do banco
     const agRes = await client.query(
-      `SELECT id, titulo, data_inicio, data_fim 
-       FROM agendamentos 
-       WHERE empresa_id=$1 AND data_inicio >= NOW()
-       ORDER BY data_inicio ASC
+      `SELECT 
+          a.id,
+          a.titulo,
+          a.data_inicio,
+          a.data_fim,
+          a.servico,
+          a.profissional_id,
+          a.cliente_id,
+          a.obs,
+          a.nome AS cliente_nome,
+          a.telefone AS cliente_telefone,
+          a.google_event_id,
+          p.nome AS profissional_nome,
+          c.nome AS cliente_nome_ref
+       FROM agendamentos a
+       LEFT JOIN profissionais p ON a.profissional_id = p.id
+       LEFT JOIN clientes c ON a.cliente_id = c.id
+       WHERE a.empresa_id=$1 AND a.data_inicio >= NOW()
+       ORDER BY a.data_inicio ASC
        LIMIT 100`,
       [empresa_id]
     );
 
     const dbEvents = agRes.rows.map((a) => ({
       id: `db-${a.id}`,
-      title: a.titulo,
+      title: a.titulo || `${a.servico || "Serviço"} - ${a.cliente_nome || a.cliente_nome_ref || ""}`,
       start: a.data_inicio,
       end: a.data_fim,
       source: "db",
+      importado: true,
+      servico: a.servico,
+      profissional: a.profissional_nome || a.profissional_id || null,
+      nome: a.cliente_nome || a.cliente_nome_ref || null,
+      telefone: a.cliente_telefone,
+      obs: a.obs,
+      gcal_event_id: a.google_event_id,
     }));
 
-    // 2) 🔹 Buscar eventos do Google Calendar (se houver ID configurado)
+    // 🔹 Coletar todos os google_event_id já importados
+    const dbGoogleIds = dbEvents.map(ev => ev.gcal_event_id).filter(Boolean);
+
+    // 2) 🔹 Buscar eventos do Google Calendar
     let googleEvents = [];
     if (google_calendar_id) {
       try {
@@ -64,22 +87,27 @@ export default async function handler(req, res) {
           orderBy: "startTime",
         });
 
-        googleEvents = result.data.items.map((event) => ({
-          id: `gcal-${event.id}`,
-          title: event.summary || "(Sem título)",
-          start: event.start.dateTime || event.start.date,
-          end: event.end.dateTime || event.start.date, // fallback: allDay
-          source: "google",
-        }));
+        googleEvents = (result.data.items || [])
+          // 🔹 só adiciona os ainda não importados
+          .filter(event => !dbGoogleIds.includes(event.id))
+          .map((event) => ({
+            id: `gcal-${event.id}`,
+            gcal_event_id: event.id,
+            title: event.summary || "(Sem título)",
+            start: event.start.dateTime || event.start.date,
+            end: event.end.dateTime || event.start.date,
+            source: "google",
+            importado: false,
+            descricao: event.description || "",
+            organizador: event.organizer?.displayName || event.organizer?.email || "",
+          }));
       } catch (err) {
         console.error("⚠️ Erro ao buscar no Google Calendar:", err.message);
       }
     }
 
-    // 3) 🔹 Combinar banco + google
-    const allEvents = [...dbEvents, ...googleEvents];
-
-    return res.json(allEvents);
+    // 3) 🔹 Combinar banco + google (já filtrado)
+    return res.json([...dbEvents, ...googleEvents]);
   } catch (err) {
     console.error("Erro ao listar eventos:", err);
     return res.status(500).json({ error: "Erro interno ao buscar eventos" });

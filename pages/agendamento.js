@@ -119,6 +119,47 @@ export default function Agendamento() {
                   <p className="text-gray-800">👤 {ev.nome || ev.title || "Cliente"}</p>
                   {ev.servico && <p className="text-gray-500">💇 Serviço: {ev.servico}</p>}
                   {ev.profissional && <p className="text-gray-500">👨‍🔧 Profissional: {ev.profissional}</p>}
+
+                  {/* 🔹 Status visual */}
+                  {ev.importado ? (
+                    <span className="inline-block mt-2 px-2 py-1 text-xs bg-green-100 text-green-700 rounded">
+                      ✔ Importado
+                    </span>
+                  ) : (
+                    ev.source === "google" && (
+                      <button
+                        onClick={async () => {
+                          const resp = await fetch("/api/calendar/importar", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              gcal_event_id: ev.gcal_event_id,
+                              title: ev.title,
+                              start: ev.start,
+                              end: ev.end,
+                              nome: ev.nome || null,
+                              telefone: ev.telefone || null,
+                              servico: ev.servico || null,
+                              profissional_id: null,
+                              cliente_id: null,
+                              obs: ev.descricao || ""
+                            })
+                          });
+                          const data = await resp.json();
+                          if (resp.ok) {
+                            alert("✅ Evento importado para o sistema!");
+                            const nova = await fetch("/api/calendar/list");
+                            setEvents(await nova.json());
+                          } else {
+                            alert("Erro ao importar: " + data.error);
+                          }
+                        }}
+                        className="mt-2 px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                      >
+                        Importar para o sistema
+                      </button>
+                    )
+                  )}
                 </div>
               );
             })}
