@@ -1,12 +1,17 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
+import { useRouter } from "next/router";
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [acessos, setAcessos] = useState(null);
   const { data: session } = useSession();
+  const router = useRouter();
+
+  // Detecta se está em rota Buckman para estilo condicional (opcional)
+  const isBuckmanRoute = router.pathname.startsWith("/buckman");
 
   // carregar acessos do usuário
   useEffect(() => {
@@ -107,17 +112,41 @@ export default function Navbar() {
               <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-56 z-50">
                 <Link href="/agendamento" className="block px-4 py-2 hover:bg-gray-100">📅 Agendamento</Link>
                 <Link href="/servicos" className="block px-4 py-2 hover:bg-gray-100">⚙️ Serviços</Link>
-                <Link href="/produtos" className="block px-4 py-2 hover:bg-gray-100">⚙️ Produtos </Link>
-              
+                <Link href="/produtos" className="block px-4 py-2 hover:bg-gray-100">⚙️ Produtos</Link>
                 <Link href="/profissionais" className="block px-4 py-2 hover:bg-gray-100">👩‍⚕️ Profissionais</Link>
                 <Link href="/clientes" className="block px-4 py-2 hover:bg-gray-100">👤 Clientes</Link>
                 <Link href="/faturas" className="block px-4 py-2 hover:bg-gray-100">💳 Faturas</Link>
                 <Link href="/dashboard_servico" className="block px-4 py-2 hover:bg-gray-100">📊 Dashboard</Link>
                 <Link href="/agendamentos/completar" className="block px-4 py-2 hover:bg-gray-100">📝 Completar Agendamentos</Link>
-              
               </div>
             </div>
           )}
+
+          {/* --- NOVO MENU BUCKMAN --- */}
+          <div className="relative group">
+            <button
+              className={`hover:underline px-2 py-1 rounded ${
+                isBuckmanRoute ? "bg-yellow-400 text-black font-bold" : ""
+              }`}
+              onClick={() => toggleDropdown("buckman")}
+            >
+              Buckman ▾
+            </button>
+            <div
+              className={`absolute bg-white text-black mt-2 rounded shadow-lg w-48 z-50 ${
+                openDropdown === "buckman" ? "block" : "hidden"
+              } ${isBuckmanRoute ? "border-2 border-yellow-400" : ""}`}
+            >
+              <Link
+                href="/buckman/vendedores"
+                className="block px-4 py-2 hover:bg-gray-100"
+                onClick={() => setMenuOpen(false)}
+              >
+                Vendedores
+              </Link>
+              {/* Outros links Buckman aqui */}
+            </div>
+          </div>
 
           {/* Infos do usuário */}
           <div className="ml-4 flex items-center space-x-2">
@@ -209,7 +238,6 @@ export default function Navbar() {
                   <Link href="/agendamento" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">📅 Agendamento</Link>
                   <Link href="/servicos" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">⚙️ Serviços</Link>
                   <Link href="/produtos" className="block px-4 py-2 hover:bg-gray-100">⚙️ Produtos</Link>
-              
                   <Link href="/profissionais" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">👩‍⚕️ Profissionais</Link>
                   <Link href="/clientes" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">👤 Clientes</Link>
                   <Link href="/faturas" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">💳 Faturas</Link>
