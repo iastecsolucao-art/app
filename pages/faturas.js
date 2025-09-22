@@ -4,14 +4,15 @@ export default function Faturas() {
   const [faturas, setFaturas] = useState([]);
   const [agendamentos, setAgendamentos] = useState([]);
   const [servicos, setServicos] = useState([]);
-  const [novo, setNovo] = useState(null); 
-  const [itens, setItens] = useState([{ servico_id: "", quantidade: 1, valor: 0 }]);
+  const [produtos, setProdutos] = useState([]);
+  const [novo, setNovo] = useState(null);
+  const [itens, setItens] = useState([{ item_id: "", tipo: "", quantidade: 1, valor: 0 }]);
 
   useEffect(() => {
     carregar();
     fetch("/api/servicos").then(r => r.json()).then(setServicos);
+    fetch("/api/produtos").then(r => r.json()).then(setProdutos);
     fetch("/api/agendamentos/pendentes").then(r => r.json()).then(data => {
-      // ✅ garantir que id seja number
       const arrumados = data.map(a => ({ ...a, id: Number(a.id) }));
       setAgendamentos(arrumados);
     });
@@ -29,7 +30,6 @@ export default function Faturas() {
       return;
     }
 
-    // calcula total
     const total = itens.reduce((sum, it) => sum + (it.quantidade * it.valor), 0);
 
     const res = await fetch("/api/faturas", {
@@ -47,7 +47,7 @@ export default function Faturas() {
     if (res.ok) {
       alert("✅ Fatura criada!");
       setNovo(null);
-      setItens([{ servico_id: "", quantidade: 1, valor: 0 }]);
+      setItens([{ item_id: "", tipo: "", quantidade: 1, valor: 0 }]);
       carregar();
     } else {
       alert("Erro: " + data.error);
@@ -71,6 +71,20 @@ export default function Faturas() {
     } else {
       alert("Erro: " + data.error);
     }
+  };
+
+  const opcoesItens = [
+    ...servicos.map(s => ({ ...s, tipo: "servico" })),
+    ...produtos.map(p => ({ ...p, tipo: "produto" })),
+  ];
+
+  const handleItemChange = (idx, item_id) => {
+    const itemSelecionado = opcoesItens.find(i => i.id === Number(item_id));
+    const novos = [...itens];
+    novos[idx].item_id = Number(item_id);
+    novos[idx].tipo = itemSelecionado?.tipo || "";
+    novos[idx].valor = itemSelecionado?.valor ?? itemSelecionado?.preco ?? 0;
+    setItens(novos);
   };
 
   return (
@@ -123,20 +137,15 @@ export default function Faturas() {
           {itens.map((item, idx) => (
             <div key={idx} className="flex gap-2 mb-2">
               <select
-                value={item.servico_id}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  const serv = servicos.find(s => s.id == val);
-                  const novos = [...itens];
-                  novos[idx].servico_id = Number(val);
-                  novos[idx].valor = serv?.valor || 0;
-                  setItens(novos);
-                }}
+                value={item.item_id}
+                onChange={(e) => handleItemChange(idx, e.target.value)}
                 className="border p-2 flex-1"
               >
-                <option value="">Selecione Serviço/Produto</option>
-                {servicos.map(s => (
-                  <option key={s.id} value={s.id}>{s.nome} (R$ {s.valor})</option>
+                <option value="">Selecione Serviço ou Produto</option>
+                {opcoesItens.map(i => (
+                  <option key={i.id} value={i.id}>
+                    {i.tipo === "produto" ? i.descricao : i.nome} ({i.tipo === "servico" ? "Serviço" : "Produto"}) - R$ {i.valor ?? i.preco}
+                  </option>
                 ))}
               </select>
               <input
@@ -164,7 +173,7 @@ export default function Faturas() {
           ))}
 
           <button
-            onClick={() => setItens([...itens, { servico_id: "", quantidade: 1, valor: 0 }])}
+            onClick={() => setItens([...itens, { item_id: "", tipo: "", quantidade: 1, valor: 0 }])}
             className="bg-gray-300 px-3 py-1 rounded mr-2"
           >
             + Item

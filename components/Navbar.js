@@ -107,11 +107,14 @@ export default function Navbar() {
               <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-56 z-50">
                 <Link href="/agendamento" className="block px-4 py-2 hover:bg-gray-100">📅 Agendamento</Link>
                 <Link href="/servicos" className="block px-4 py-2 hover:bg-gray-100">⚙️ Serviços</Link>
+                <Link href="/produtos" className="block px-4 py-2 hover:bg-gray-100">⚙️ Produtos </Link>
+              
                 <Link href="/profissionais" className="block px-4 py-2 hover:bg-gray-100">👩‍⚕️ Profissionais</Link>
                 <Link href="/clientes" className="block px-4 py-2 hover:bg-gray-100">👤 Clientes</Link>
                 <Link href="/faturas" className="block px-4 py-2 hover:bg-gray-100">💳 Faturas</Link>
                 <Link href="/dashboard_servico" className="block px-4 py-2 hover:bg-gray-100">📊 Dashboard</Link>
                 <Link href="/agendamentos/completar" className="block px-4 py-2 hover:bg-gray-100">📝 Completar Agendamentos</Link>
+              
               </div>
             </div>
           )}
@@ -120,7 +123,7 @@ export default function Navbar() {
           <div className="ml-4 flex items-center space-x-2">
             <span className="text-sm text-gray-200">
               Bem-vindo, <strong>{session.user?.name}</strong><br />
-              Empresa: <strong>{session.user?.empresa}</strong>
+              Empresa: <strong>{session.user?.empresa_nome}</strong>
             </span>
           </div>
           <button onClick={() => signOut()} className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded ml-3">Sair</button>
@@ -205,6 +208,8 @@ export default function Navbar() {
                 <div className="bg-blue-800">
                   <Link href="/agendamento" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">📅 Agendamento</Link>
                   <Link href="/servicos" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">⚙️ Serviços</Link>
+                  <Link href="/produtos" className="block px-4 py-2 hover:bg-gray-100">⚙️ Produtos</Link>
+              
                   <Link href="/profissionais" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">👩‍⚕️ Profissionais</Link>
                   <Link href="/clientes" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">👤 Clientes</Link>
                   <Link href="/faturas" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">💳 Faturas</Link>
@@ -218,7 +223,7 @@ export default function Navbar() {
           {/* Infos usuário */}
           <div className="px-4 py-2 text-sm">
             👤 {session.user?.name} <br />
-            🏢 {session.user?.empresa}
+            🏢 {session.user?.empresa_nome}
           </div>
 
           <button onClick={() => { setMenuOpen(false); signOut(); }}

@@ -1,8 +1,12 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export default function ContagemSetor() {
-  const [nomeInventario, setNomeInventario] = useState(""); // ➕ CAMPO NOVO
-  const [setor, setSetor] = useState("mesa");
+  const [setores, setSetores] = useState([]);
+  const [operadores, setOperadores] = useState([]);
+  const [lojas, setLojas] = useState([]);
+
+  const [nomeContagem, setNomeContagem] = useState("");
+  const [setor, setSetor] = useState("");
   const [operador, setOperador] = useState("");
   const [loja, setLoja] = useState("");
   const [dataContagem, setDataContagem] = useState(new Date().toISOString().slice(0, 10));
@@ -12,58 +16,81 @@ export default function ContagemSetor() {
   const [senha, setSenha] = useState("");
   const [totalSalvo, setTotalSalvo] = useState(0);
   const [totalPendente, setTotalPendente] = useState(0);
-  const [ultimoId, setUltimoId] = useState(null); // 🆔 id_contagem
+  const [ultimoId, setUltimoId] = useState(null);
   const inputRefs = useRef([]);
 
-  const addProduto = () => {
-    const newProdutos = [...produtos, { codigo_barra: "", descricao: "", quantidade: 1 }];
-    setProdutos(newProdutos);
+  useEffect(() => {
+    fetch("/api/contagem_apoio/list")
+      .then((res) => res.json())
+      .then(({ setores, operadores, lojas }) => {
+        setSetores(setores);
+        setOperadores(operadores);
+        setLojas(lojas);
+      })
+      .catch(console.error);
+  }, []);
+
+  const validarProduto = async (index) => {
+    const codigo = produtos[index].codigo_barra.trim();
+    if (!codigo) {
+      alert("Digite um código de barras.");
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/produtos_contagem?codigo_barra=${encodeURIComponent(codigo)}`);
+      if (!res.ok) {
+        alert("Produto não encontrado.");
+        setProdutos((prev) => {
+          const newProdutos = [...prev];
+          newProdutos[index].descricao = "❌ Produto não cadastrado";
+          return newProdutos;
+        });
+        atualizarTotalPendente();
+        return;
+      }
+      const data = await res.json();
+      setProdutos((prev) => {
+        const newProdutos = [...prev];
+        newProdutos[index].descricao = data.descricao;
+        newProdutos[index].quantidade = 1;
+        return newProdutos;
+      });
+
+      if (index === produtos.length - 1) {
+        addProduto();
+      }
+
+      atualizarTotalPendente();
+    } catch (err) {
+      console.error("Erro ao validar produto:", err);
+      alert("Erro ao validar produto.");
+    }
+  };
+
+  const atualizarTotalPendente = () => {
     setTimeout(() => {
-      inputRefs.current[newProdutos.length - 1]?.focus();
+      setTotalPendente(
+        produtos.filter(
+          (p) => p.codigo_barra && p.descricao && !p.descricao.includes("❌")
+        ).length
+      );
+    }, 100);
+  };
+
+  const addProduto = () => {
+    setProdutos((prev) => [...prev, { codigo_barra: "", descricao: "", quantidade: 1 }]);
+    setTimeout(() => {
+      inputRefs.current[inputRefs.current.length - 1]?.focus();
     }, 100);
   };
 
   const removeProduto = (index) => {
-    const newProdutos = produtos.filter((_, i) => i !== index);
-    setProdutos(newProdutos);
+    setProdutos((prev) => prev.filter((_, i) => i !== index));
+    setTimeout(() => {
+      atualizarTotalPendente();
+    }, 100);
   };
-
-  const validarProduto = async (index) => {
-    const codigo = produtos[index].codigo_barra;
-    if (!codigo) return;
-
-    try {
-      const res = await fetch(
-        `https://n8n.iastec.servicos.ws/webhook/buscar_produto?codigo_barra=${codigo}`
-      );
-      const data = await res.json();
-      const newProdutos = [...produtos];
-
-      if (data && data.descricao) {
-        newProdutos[index].descricao = data.descricao;
-      } else if (Array.isArray(data) && data.length > 0) {
-        newProdutos[index].descricao = data[0].descricao;
-      } else {
-        newProdutos[index].descricao = "❌ Produto não cadastrado";
-      }
-
-      newProdutos[index].quantidade = 1;
-      setProdutos(newProdutos);
-
-      if (!newProdutos[index].descricao.includes("❌")) {
-        const novosPendentes = newProdutos.filter(
-          (p) => p.codigo_barra && p.descricao && !p.descricao.includes("❌")
-        ).length;
-        setTotalPendente(novosPendentes);
-
-        addProduto();
-      }
-    } catch (err) {
-      console.error("Erro:", err);
-    }
-  };
-
-  const salvarItem = (idx) => validarProduto(idx);
 
   const liberarQuantidade = () => {
     if (senha === "iastec") {
@@ -74,274 +101,287 @@ export default function ContagemSetor() {
     setSenha("");
   };
 
-  // 🚀 Salvar Setor
   const salvarSetor = async () => {
-    if (!nomeInventario.trim()) {
-      alert("⚠️ Informe o nome do inventário.");
+    if (!nomeContagem.trim()) {
+      alert("⚠️ Informe o nome da contagem.");
       return;
     }
-    if (!operador.trim()) {
-      alert("⚠️ Informe o operador.");
+    if (!setor || !operador || !loja) {
+      alert("Preencha setor, operador e loja.");
       return;
     }
-    if (!loja.trim()) {
-      alert("⚠️ Informe a loja.");
-      return;
-    }
-
     try {
       const respostas = await Promise.all(
         produtos
           .filter((p) => p.codigo_barra && !p.descricao.includes("❌"))
           .map((p) =>
-            fetch("https://n8n.iastec.servicos.ws/webhook/salvar_setor", {
+            fetch("/api/contagem_temp", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                nome_inventario: nomeInventario,
-                usuario: operador,
-                loja,
+                nome_contagem: nomeContagem,
                 setor,
-                data: dataContagem,
-                codigo_barra: p.codigo_barra,
+                operador,
+                loja,
+                codigo: p.codigo_barra,
                 descricao: p.descricao,
                 quantidade: p.quantidade || 1,
-                atualizado_em: new Date().toISOString(),
-                status: "parcial",
-                id_contagem: ultimoId ?? 0,
+                data: dataContagem,
+                id_contagem: ultimoId ?? null,
               }),
             }).then((res) => res.json())
           )
       );
 
-      const limiteExcedido = respostas.find((r) => r.quantidade_maxima === "acima do limite");
-      if (limiteExcedido) {
-        alert("🚫 Quantidade acima do limite! Entre em contato pelo Chat para liberação (Digite: Licença + nome da loja).");
-        return;
-      }
-
-      const erro = respostas.find((r) => r.status === "erro");
-      if (erro) {
-        alert("❌ Erro: " + erro.mensagem);
-        return;
-      }
-
-      // Atualiza id_contagem retornado
       const id = respostas.find((r) => r.id_contagem)?.id_contagem;
       if (id) setUltimoId(id);
 
-      alert("✅ Setor salvo com sucesso!");
-      setTotalSalvo(totalSalvo + totalPendente);
+      alert("Setor salvo com sucesso!");
+      setTotalSalvo((prev) => prev + totalPendente);
       setTotalPendente(0);
-
     } catch (err) {
       console.error(err);
-      alert("❌ Erro ao salvar setor");
+      alert("Erro ao salvar setor");
     }
   };
-// 🚀 Finalizar Setor (ajustado para enviar todos os itens completos)
-const finalizarSetor = async () => {
-  if (!nomeInventario.trim()) {
-    alert("⚠️ Informe o nome do inventário.");
-    return;
-  }
-  if (!operador.trim()) {
-    alert("⚠️ Informe o operador.");
-    return;
-  }
-  if (!loja.trim()) {
-    alert("⚠️ Informe a loja.");
-    return;
-  }
 
-  try {
-    // cria array de produtos válidos com dados fixos em cada item
-    const itensValidos = produtos
-      .filter((p) => p.codigo_barra && !p.descricao.includes("❌"))
-      .map((p) => ({
-        codigo_barra: p.codigo_barra,
-        descricao: p.descricao,
-        quantidade: p.quantidade || 1,
-        nome_inventario: nomeInventario,
-        usuario: operador,
-        loja,
-        setor,
-        data: dataContagem,
-        status: "finalizado",
-        id_contagem: ultimoId,
-      }));
-
-    if (itensValidos.length === 0) {
-      alert("⚠️ Nenhum item válido para finalizar.");
+  const finalizarSetor = async () => {
+    if (!nomeContagem.trim()) {
+      alert("⚠️ Informe o nome da contagem.");
       return;
     }
+    if (!setor || !operador || !loja) {
+      alert("Preencha setor, operador e loja.");
+      return;
+    }
+    try {
+      const itensValidos = produtos
+        .filter((p) => p.codigo_barra && !p.descricao.includes("❌"))
+        .map((p) => ({
+          usuario_email: operador,
+          nome_contagem: nomeContagem,
+          setor,
+          codigo: p.codigo_barra,
+          descricao: p.descricao,
+          quantidade: p.quantidade || 1,
+          loja,
+          nome: "",
+        }));
 
-    // faz somente 1 POST enviando todo o array
-    const resposta = await fetch(
-      "https://n8n.iastec.servicos.ws/webhook/finalizar_setor",
-      {
+      if (itensValidos.length === 0) {
+        alert("Nenhum item válido para finalizar.");
+        return;
+      }
+
+      const resposta = await fetch("/api/contagem_finalizada", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ produtos: itensValidos }),
+      }).then((res) => res.json());
+
+      if (resposta?.error) {
+        alert("Erro: " + resposta.error);
+        return;
       }
-    ).then((res) => res.json());
 
-    if (resposta?.quantidade_maxima === "acima do limite") {
-      alert("🚫 Quantidade acima do limite! Não é permitido finalizar.");
-      return;
+      alert("Inventário finalizado!");
+
+      setNomeContagem("");
+      setSetor("");
+      setOperador("");
+      setLoja("");
+      setDataContagem(new Date().toISOString().slice(0, 10));
+      setProdutos([{ codigo_barra: "", descricao: "", quantidade: 1 }]);
+      setUltimoId(null);
+      setTotalSalvo(0);
+      setTotalPendente(0);
+      setQuantidadeLiberada(false);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao finalizar setor");
     }
+  };
 
-    if (resposta?.status === "erro") {
-      alert("❌ " + resposta.mensagem);
-      return;
-    }
-
-    alert("✅ Inventário finalizado!");
-
-    // 🔄 Resetar formulário
-    setNomeInventario("");
-    setSetor("mesa");
-    setOperador("");
-    setLoja("");
-    setDataContagem(new Date().toISOString().slice(0, 10));
-    setProdutos([{ codigo_barra: "", descricao: "", quantidade: 1 }]);
-    setUltimoId(null);
-    setTotalSalvo(0);
-    setTotalPendente(0);
-
-  } catch (err) {
-    console.error(err);
-    alert("❌ Erro ao finalizar setor");
-  }
-};
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center py-8 px-2">
-      <h1 className="text-2xl font-bold mb-4">📦 Inventário por Setor</h1>
+    <div className="min-h-screen bg-gray-100 flex flex-col items-center py-6 px-4">
+      <h1 className="text-2xl font-bold mb-6 text-center">📦 Inventário por Setor</h1>
 
-      <div className="bg-white shadow-md rounded p-4 w-full max-w-5xl">
-        {/* Inputs */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-          <label>
-            <span className="block text-gray-700 font-medium">📛 Nome Inventário</span>
-            <input
-              className="border rounded w-full p-2 mt-1"
-              value={nomeInventario}
-              onChange={(e) => setNomeInventario(e.target.value)}
-            />
-          </label>
-          <label>
-            <span className="block text-gray-700 font-medium">📋 Setor</span>
-            <input
-              className="border rounded w-full p-2 mt-1"
+      <div className="bg-white shadow-md rounded-lg p-4 w-full max-w-xl">
+        <label className="flex flex-col mb-4">
+          <span className="mb-1 font-semibold text-gray-700">Nome da Contagem</span>
+          <input
+            type="text"
+            value={nomeContagem}
+            onChange={(e) => setNomeContagem(e.target.value)}
+            className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Digite o nome da contagem"
+          />
+        </label>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <label className="flex flex-col">
+            <span className="mb-1 font-semibold text-gray-700">Setor</span>
+            <select
               value={setor}
               onChange={(e) => setSetor(e.target.value)}
-            />
+              className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Selecione o setor</option>
+              {setores.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
           </label>
-          <label>
-            <span className="block text-gray-700 font-medium">👨 Operador</span>
-            <input
-              className="border rounded w-full p-2 mt-1"
+          <label className="flex flex-col">
+            <span className="mb-1 font-semibold text-gray-700">Operador</span>
+            <select
               value={operador}
               onChange={(e) => setOperador(e.target.value)}
-            />
+              className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Selecione o operador</option>
+              {operadores.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
           </label>
-          <label>
-            <span className="block text-gray-700 font-medium">🏬 Loja</span>
-            <input
-              className="border rounded w-full p-2 mt-1"
+          <label className="flex flex-col">
+            <span className="mb-1 font-semibold text-gray-700">Loja</span>
+            <select
               value={loja}
               onChange={(e) => setLoja(e.target.value)}
-            />
+              className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Selecione a loja</option>
+              {lojas.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
 
-        {/* Totais */}
-        <div className="mb-4 flex flex-col md:flex-row gap-4 text-lg font-semibold">
-          <span className="text-green-700">✅ Total Salvo: {totalSalvo}</span>
+        <div className="flex flex-col sm:flex-row justify-between mb-6 text-lg font-semibold text-gray-800">
+          <span className="text-green-700 mb-2 sm:mb-0">✅ Total Salvo: {totalSalvo}</span>
           <span className="text-yellow-600">⏳ Pendente: {totalPendente}</span>
         </div>
 
-        {/* Tabela de produtos */}
-        <table className="w-full mb-4 border text-sm">
-          <thead className="bg-blue-500 text-white">
-            <tr>
-              <th className="px-2 py-1">Código de Barras</th>
-              <th className="px-2 py-1">Descrição</th>
-              {quantidadeLiberada && <th className="px-2 py-1">Quantidade</th>}
-              <th className="px-2 py-1 text-center">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {produtos.map((p, idx) => (
-              <tr key={idx} className="border-b">
-                <td>
-                  <input
-                    ref={(el) => (inputRefs.current[idx] = el)}
-                    value={p.codigo_barra}
-                    onChange={(e) => {
-                      const newProdutos = [...produtos];
-                      newProdutos[idx].codigo_barra = e.target.value;
-                      setProdutos(newProdutos);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        validarProduto(idx);
-                      }
-                    }}
-                    className="border rounded p-2 w-full"
-                  />
-                </td>
-                <td>
-                  <input
-                    value={p.descricao}
-                    readOnly
-                    className="border rounded p-2 w-full bg-gray-100 text-gray-700"
-                  />
-                </td>
-                {quantidadeLiberada && (
+        <div className="overflow-x-auto mb-6">
+          <table className="w-full border border-gray-300 text-sm rounded-lg">
+            <thead className="bg-blue-600 text-white">
+              <tr>
+                <th className="px-3 py-2 text-left">Código de Barras</th>
+                <th className="px-3 py-2 text-left">Descrição</th>
+                {quantidadeLiberada && <th className="px-3 py-2 text-left w-24">Quantidade</th>}
+                <th className="px-3 py-2 text-center w-24">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {produtos.map((p, idx) => (
+                <tr key={idx} className="border-b border-gray-300">
                   <td>
                     <input
-                      type="number"
-                      value={p.quantidade}
+                      ref={(el) => (inputRefs.current[idx] = el)}
+                      value={p.codigo_barra}
                       onChange={(e) => {
                         const newProdutos = [...produtos];
-                        newProdutos[idx].quantidade = e.target.value;
+                        newProdutos[idx].codigo_barra = e.target.value;
                         setProdutos(newProdutos);
                       }}
-                      className="border rounded p-2 w-24"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          validarProduto(idx);
+                        }
+                      }}
+                      className="border border-gray-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Código de barras"
+                      inputMode="numeric"
                     />
                   </td>
-                )}
-                <td className="text-center flex gap-2 justify-center">
-                  <button onClick={() => salvarItem(idx)} className="bg-yellow-400 px-3 py-1 rounded">💾</button>
-                  <button onClick={() => removeProduto(idx)} className="bg-red-500 text-white px-3 py-1 rounded">🗑️</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <td>
+                    <input
+                      value={p.descricao}
+                      readOnly
+                      className="border border-gray-300 rounded px-2 py-1 w-full bg-gray-100 text-gray-700"
+                      placeholder="Descrição"
+                    />
+                  </td>
+                  {quantidadeLiberada && (
+                    <td>
+                      <input
+                        type="number"
+                        min="1"
+                        value={p.quantidade}
+                        onChange={(e) => {
+                          const newProdutos = [...produtos];
+                          newProdutos[idx].quantidade = e.target.value;
+                          setProdutos(newProdutos);
+                        }}
+                        className="border border-gray-300 rounded px-2 py-1 w-20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </td>
+                  )}
+                  <td className="text-center flex justify-center gap-2 px-2 py-1">
+                    <button
+                      onClick={() => validarProduto(idx)}
+                      className="bg-yellow-400 hover:bg-yellow-500 rounded px-3 py-1"
+                      aria-label="Salvar item"
+                      title="Salvar item"
+                    >
+                      💾
+                    </button>
+                    <button
+                      onClick={() => removeProduto(idx)}
+                      className="bg-red-500 hover:bg-red-600 text-white rounded px-3 py-1"
+                      aria-label="Remover item"
+                      title="Remover item"
+                    >
+                      🗑️
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-        {/* Senha p/ liberar quantidade */}
         {!quantidadeLiberada && (
-          <div className="flex items-center gap-2 my-4">
+          <div className="flex flex-col sm:flex-row items-center gap-2 mb-6">
             <input
               type="password"
-              placeholder="Senha p/ liberar quantidade"
+              placeholder="Senha para liberar quantidade"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
-              className="border rounded p-2"
+              className="border border-gray-300 rounded px-3 py-2 w-full sm:w-auto focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <button onClick={liberarQuantidade} className="bg-gray-700 text-white px-4 py-2 rounded">
+            <button
+              onClick={liberarQuantidade}
+              className="bg-gray-700 text-white rounded px-6 py-2 hover:bg-gray-800"
+            >
               🔓 Liberar Quantidade
             </button>
           </div>
         )}
 
-        {/* Botões */}
-        <div className="flex flex-col md:flex-row justify-end gap-4 mt-6">
-          <button onClick={salvarSetor} className="bg-yellow-400 px-6 py-2 rounded font-bold">💾 Salvar Setor</button>
-          <button onClick={finalizarSetor} className="bg-green-600 text-white px-6 py-2 rounded font-bold">✅ Finalizar Setor</button>
+        <div className="flex flex-col sm:flex-row justify-end gap-4">
+          <button
+            onClick={salvarSetor}
+            className="bg-yellow-400 hover:bg-yellow-500 rounded px-6 py-3 font-bold"
+          >
+            💾 Salvar Setor
+          </button>
+          <button
+            onClick={finalizarSetor}
+            className="bg-green-600 hover:bg-green-700 text-white rounded px-6 py-3 font-bold"
+          >
+            ✅ Finalizar Setor
+          </button>
         </div>
       </div>
     </div>

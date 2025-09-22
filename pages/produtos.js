@@ -5,143 +5,251 @@ export default function CadastroProduto() {
     id: "",
     codigo_barra: "",
     descricao: "",
-    empresa_id: ""
+    custo: "",
+    preco: "",
+    categoria: "",
+    empresa_id: "", // preenchido pelo backend
   });
   const [status, setStatus] = useState(null);
   const [produtos, setProdutos] = useState([]);
   const [indexAtual, setIndexAtual] = useState(0);
   const [pesquisa, setPesquisa] = useState("");
 
-  // 📥 Buscar produtos existentes
+  // Buscar produtos da empresa do usuário logado ao montar componente
   useEffect(() => {
     async function fetchProdutos() {
       try {
-        const res = await fetch("https://n8n.iastec.servicos.ws/webhook/listar_produtos");
+        const res = await fetch(`/api/produtos`, {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error("Erro ao carregar produtos");
         const data = await res.json();
-        const lista = Array.isArray(data)
-          ? data.map(item => item.json ? item.json : item)
-          : [data];
-        setProdutos(lista);
-        if (lista.length > 0) setForm(lista[0]);
+        setProdutos(data);
+        if (data.length > 0) {
+          setForm({
+            id: data[0].id ?? "",
+            codigo_barra: data[0].codigo_barra ?? "",
+            descricao: data[0].descricao ?? "",
+            custo: data[0].custo ?? "",
+            preco: data[0].preco ?? "",
+            categoria: data[0].categoria ?? "",
+            empresa_id: data[0].empresa_id ?? "",
+          });
+          setIndexAtual(0);
+        } else {
+          setForm({
+            id: "",
+            codigo_barra: "",
+            descricao: "",
+            custo: "",
+            preco: "",
+            categoria: "",
+            empresa_id: "",
+          });
+        }
       } catch (err) {
         console.error("Erro ao carregar produtos:", err);
+        setStatus("❌ Erro ao carregar produtos");
       }
     }
     fetchProdutos();
   }, []);
 
   // Controle de formulário
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) =>
+    setForm({ ...form, [e.target.name]: e.target.value ?? "" });
 
-  // Salvar ou atualizar
+  // Atualiza lista de produtos
+  const fetchProdutosAtualizados = async () => {
+    try {
+      const res = await fetch(`/api/produtos`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Erro ao atualizar produtos");
+      const data = await res.json();
+      setProdutos(data);
+      return data;
+    } catch (err) {
+      console.error("Erro ao atualizar produtos:", err);
+      setStatus("❌ Erro ao atualizar produtos");
+      return produtos;
+    }
+  };
+
+  // Salvar ou atualizar produto
   const handleSalvar = async (e) => {
     e.preventDefault();
     setStatus("salvando...");
 
-    const url = form.id
-      ? "https://n8n.iastec.servicos.ws/webhook/update_produto"
-      : "https://n8n.iastec.servicos.ws/webhook/cadastro_produto";
+    const url = "/api/produtos";  // sempre a mesma URL
+    const method = form.id ? "PUT" : "POST";
 
     try {
       const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
         body: JSON.stringify(form),
       });
 
       if (!res.ok) throw new Error("Erro ao salvar produto");
 
       setStatus("✅ Produto salvo com sucesso!");
+      await fetchProdutosAtualizados();
     } catch (err) {
       console.error(err);
       setStatus("❌ Erro ao salvar o produto");
     }
   };
 
-  // Excluir
+  // Excluir produto
   const handleExcluir = async () => {
     if (!form.id) return setStatus("⚠️ Nenhum produto selecionado para excluir");
 
     try {
-      const res = await fetch("https://n8n.iastec.servicos.ws/webhook/delete_produto", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: form.id }),
+      const res = await fetch(`/api/produtos/${form.id}`, {
+        method: "DELETE",
+        credentials: "include",
       });
 
       if (!res.ok) throw new Error("Erro ao excluir");
 
       setStatus("🗑️ Produto excluído!");
-      const novaLista = produtos.filter(p => p.id !== form.id);
+      const novaLista = produtos.filter((p) => p.id !== form.id);
       setProdutos(novaLista);
-      setForm({ id: "", codigo_barra: "", descricao: "", empresa_id: "" });
+      setForm({
+        id: "",
+        codigo_barra: "",
+        descricao: "",
+        custo: "",
+        preco: "",
+        categoria: "",
+        empresa_id: "",
+      });
     } catch (err) {
       console.error(err);
       setStatus("❌ Erro ao excluir o produto");
     }
   };
 
-  // Navegar
+  // Navegar entre produtos
   const navegar = (d) => {
     if (produtos.length === 0) return;
     let novo = indexAtual + d;
     if (novo < 0) novo = produtos.length - 1;
     if (novo >= produtos.length) novo = 0;
     setIndexAtual(novo);
-    setForm(produtos[novo]);
+    const p = produtos[novo];
+    setForm({
+      id: p.id ?? "",
+      codigo_barra: p.codigo_barra ?? "",
+      descricao: p.descricao ?? "",
+      custo: p.custo ?? "",
+      preco: p.preco ?? "",
+      categoria: p.categoria ?? "",
+      empresa_id: p.empresa_id ?? "",
+    });
   };
 
-  // Pesquisar por ID ou Código de Barras
-  const handlePesquisar = () => {
-    if (!pesquisa) return;
-    const encontrado = produtos.find(
-      (p) => String(p.id) === pesquisa || String(p.codigo_barra) === pesquisa
-    );
-    if (encontrado) {
-      setForm(encontrado);
-      setStatus("🔎 Produto encontrado!");
-    } else {
-      setStatus("⚠️ Produto não localizado!");
+  // Pesquisar produto via API
+  const handlePesquisar = async () => {
+    if (!pesquisa) {
+      setStatus("⚠️ Informe um valor para pesquisar");
+      return;
+    }
+    setStatus("Pesquisando...");
+    try {
+      const res = await fetch(`/api/produtos?q=${encodeURIComponent(pesquisa)}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Erro na pesquisa");
+      const data = await res.json();
+      if (data.length > 0) {
+        const p = data[0];
+        setForm({
+          id: p.id ?? "",
+          codigo_barra: p.codigo_barra ?? "",
+          descricao: p.descricao ?? "",
+          custo: p.custo ?? "",
+          preco: p.preco ?? "",
+          categoria: p.categoria ?? "",
+          empresa_id: p.empresa_id ?? "",
+        });
+        setStatus(`🔎 Produto encontrado: ${p.descricao}`);
+        setProdutos(data);
+        setIndexAtual(0);
+      } else {
+        setStatus("⚠️ Produto não localizado!");
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus("❌ Erro ao pesquisar produto");
     }
   };
 
   // Novo registro
   const handleNovo = () => {
-    setForm({ id: "", codigo_barra: "", descricao: "", empresa_id: "" });
+    setForm({
+      id: "",
+      codigo_barra: "",
+      descricao: "",
+      custo: "",
+      preco: "",
+      categoria: "",
+      empresa_id: "",
+    });
     setStatus("🆕 Novo produto (preencha e clique Salvar)");
+  };
+
+  // Limpar formulário mantendo empresa_id
+  const handleLimpar = () => {
+    setForm({
+      id: "",
+      codigo_barra: "",
+      descricao: "",
+      custo: "",
+      preco: "",
+      categoria: "",
+      empresa_id: form.empresa_id,
+    });
+    setStatus(null);
+    setPesquisa("");
   };
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center py-12">
       <h1 className="text-2xl font-bold mb-6">📦 Cadastro de Produto</h1>
 
-{/* 🔎 Pesquisar */}
-<div className="mb-4 flex gap-2 items-center">
-  <input
-    className="border p-2 rounded"
-    placeholder="Pesquisar por ID ou Código"
-    value={pesquisa}
-    onChange={(e) => setPesquisa(e.target.value)}
-  />
-  <button
-    onClick={handlePesquisar}
-    className="bg-gray-600 text-white px-3 py-1 rounded"
-  >
-    Pesquisar
-  </button>
-  <button
-    onClick={handleNovo}
-    className="bg-green-600 text-white px-3 py-1 rounded"
-  >
-    Novo
-  </button>
-  <button
-    onClick={() => setForm({ id: "", codigo_barra: "", descricao: "", empresa_id: "" })}
-    className="bg-gray-400 text-white px-3 py-1 rounded"
-  >
-    Limpar
-  </button>
-</div>
+      {/* Pesquisa */}
+      <div className="mb-4 flex gap-2 items-center">
+        <input
+          className="border p-2 rounded"
+          placeholder="Pesquisar por ID ou Código"
+          value={pesquisa}
+          onChange={(e) => setPesquisa(e.target.value)}
+        />
+        <button
+          onClick={handlePesquisar}
+          className="bg-gray-600 text-white px-3 py-1 rounded"
+        >
+          Pesquisar
+        </button>
+        <button
+          onClick={handleNovo}
+          className="bg-green-600 text-white px-3 py-1 rounded"
+        >
+          Novo
+        </button>
+        <button
+          onClick={handleLimpar}
+          className="bg-gray-400 text-white px-3 py-1 rounded"
+        >
+          Limpar
+        </button>
+      </div>
+
       <form
         onSubmit={handleSalvar}
         className="bg-white shadow-md rounded px-8 pt-6 pb-8 w-full max-w-md"
@@ -162,7 +270,7 @@ export default function CadastroProduto() {
           <label className="block text-sm font-bold mb-2">Código de Barras</label>
           <input
             name="codigo_barra"
-            value={form.codigo_barra}
+            value={form.codigo_barra || ""}
             onChange={handleChange}
             className="border rounded w-full p-2"
             required
@@ -173,10 +281,45 @@ export default function CadastroProduto() {
           <label className="block text-sm font-bold mb-2">Descrição</label>
           <input
             name="descricao"
-            value={form.descricao}
+            value={form.descricao || ""}
             onChange={handleChange}
             className="border rounded w-full p-2"
             required
+          />
+        </div>
+
+        {/* Novos campos custo, preco e categoria */}
+        <div className="mb-4">
+          <label className="block text-sm font-bold mb-2">Custo</label>
+          <input
+            name="custo"
+            type="number"
+            step="0.01"
+            value={form.custo || ""}
+            onChange={handleChange}
+            className="border rounded w-full p-2"
+          />
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-bold mb-2">Preço</label>
+          <input
+            name="preco"
+            type="number"
+            step="0.01"
+            value={form.preco || ""}
+            onChange={handleChange}
+            className="border rounded w-full p-2"
+          />
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-bold mb-2">Categoria</label>
+          <input
+            name="categoria"
+            value={form.categoria || ""}
+            onChange={handleChange}
+            className="border rounded w-full p-2"
           />
         </div>
 
@@ -184,25 +327,43 @@ export default function CadastroProduto() {
           <label className="block text-sm font-bold mb-2">Empresa ID</label>
           <input
             name="empresa_id"
-            value={form.empresa_id}
-            onChange={handleChange}
-            className="border rounded w-full p-2"
-            required
+            value={form.empresa_id || ""}
+            readOnly
+            className="border rounded w-full p-2 bg-gray-100 cursor-not-allowed"
           />
         </div>
 
         <div className="flex gap-2">
-          <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">
+          <button
+            type="submit"
+            className="bg-blue-600 text-white px-4 py-2 rounded"
+          >
             {form.id ? "Atualizar" : "Salvar"}
           </button>
-          <button type="button" onClick={handleExcluir} className="bg-red-600 text-white px-4 py-2 rounded">
+          <button
+            type="button"
+            onClick={handleExcluir}
+            className="bg-red-600 text-white px-4 py-2 rounded"
+          >
             Excluir
           </button>
         </div>
 
         <div className="flex justify-between mt-4">
-          <button type="button" onClick={() => navegar(-1)} className="px-3 py-1 bg-gray-300 rounded">⏮️ Anterior</button>
-          <button type="button" onClick={() => navegar(1)} className="px-3 py-1 bg-gray-300 rounded">Próximo ⏭️</button>
+          <button
+            type="button"
+            onClick={() => navegar(-1)}
+            className="px-3 py-1 bg-gray-300 rounded"
+          >
+            ⏮️ Anterior
+          </button>
+          <button
+            type="button"
+            onClick={() => navegar(1)}
+            className="px-3 py-1 bg-gray-300 rounded"
+          >
+            Próximo ⏭️
+          </button>
         </div>
 
         {status && <p className="mt-4 text-center">{status}</p>}

@@ -17,7 +17,7 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
       script.onload = () => {
         if (window.chatwootSDK) {
           window.chatwootSDK.run({
-            websiteToken: "RTEom3jZD76y53TW21o51a86",
+            websiteToken: "HNsWAiRv8ps6t615ukxbpNHb",
             baseUrl: "https://chat.iastec.servicos.ws",
           });
         }
