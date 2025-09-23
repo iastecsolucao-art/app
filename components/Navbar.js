@@ -10,10 +10,6 @@ export default function Navbar() {
   const { data: session } = useSession();
   const router = useRouter();
 
-  // Detecta se está em rota Buckman para estilo condicional (opcional)
-  const isBuckmanRoute = router.pathname.startsWith("/buckman");
-
-  // carregar acessos do usuário
   useEffect(() => {
     if (session) {
       fetch("/api/usuarios/acessos")
@@ -23,7 +19,6 @@ export default function Navbar() {
     }
   }, [session]);
 
-  // 🔹 Calcular dias de expiração
   let diasRestantes = null;
   if (session?.user?.expiracao) {
     const expDate = new Date(session.user.expiracao);
@@ -55,138 +50,228 @@ export default function Navbar() {
       {/* --- DESKTOP --- */}
       {!expirado && acessos && (
         <div className="hidden md:flex space-x-6 text-white items-center relative">
-          
+          {/* Dashboard */}
           {acessos.dashboard && (
-            <Link href="/dashboard" className="hover:underline text-yellow-300 font-semibold">
+            <Link href="/dashboard" className="hover:underline">
               Dashboard
             </Link>
           )}
 
+          {/* Inventário */}
           {acessos.inventario && (
-            <div className="relative group">
-              <button className="hover:underline">Inventário ▾</button>
-              <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-52 z-50">
-                <Link href="/contagem" className="block px-4 py-2 hover:bg-gray-100">Contagem</Link>
-                <Link href="/upload" className="block px-4 py-2 hover:bg-gray-100">Upload</Link>
-                <Link href="/download" className="block px-4 py-2 hover:bg-gray-100">Download</Link>
-                <Link href="/relatorios" className="block px-4 py-2 hover:bg-gray-100">Relatórios</Link>
-              </div>
-            </div>
-          )}
-
-          {acessos.produtos && (
-            <div className="relative group">
-              <button className="hover:underline">Produtos ▾</button>
-              <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-44 z-50">
-                <Link href="/produtos" className="block px-4 py-2 hover:bg-gray-100">Cadastro Produto</Link>
-                <Link href="/listar_produtos" className="block px-4 py-2 hover:bg-gray-100">Lista de Produtos</Link>
-              </div>
-            </div>
-          )}
-
-          {acessos.compras && (
-            <div className="relative group">
-              <button className="hover:underline">Compras ▾</button>
-              <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-44 z-50">
-                <Link href="/compras" className="block px-4 py-2 hover:bg-gray-100">Nova Compra</Link>
-                <Link href="/listar_compras" className="block px-4 py-2 hover:bg-gray-100">Lista de Compras</Link>
-                <Link href="/entradas" className="block px-4 py-2 hover:bg-gray-100">Entradas</Link>
-                <Link href="/estoque" className="block px-4 py-2 hover:bg-gray-100">Estoque</Link>
-              </div>
-            </div>
-          )}
-
-          {acessos.comercial && (
-            <div className="relative group">
-              <button className="hover:underline">Comercial ▾</button>
-              <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-44 z-50">
-                <Link href="/orcamento" className="block px-4 py-2 hover:bg-gray-100">Orçamentos</Link>
-                <Link href="/vendas" className="block px-4 py-2 hover:bg-gray-100">Vendas</Link>
-              </div>
-            </div>
-          )}
-
-          {acessos.servicos && (
-            <div className="relative group">
-              <button className="hover:underline">Serviços ▾</button>
-              <div className="absolute hidden group-hover:block bg-white text-black mt-2 rounded shadow-lg w-56 z-50">
-                <Link href="/agendamento" className="block px-4 py-2 hover:bg-gray-100">📅 Agendamento</Link>
-                <Link href="/servicos" className="block px-4 py-2 hover:bg-gray-100">⚙️ Serviços</Link>
-                <Link href="/produtos" className="block px-4 py-2 hover:bg-gray-100">⚙️ Produtos</Link>
-                <Link href="/profissionais" className="block px-4 py-2 hover:bg-gray-100">👩‍⚕️ Profissionais</Link>
-                <Link href="/clientes" className="block px-4 py-2 hover:bg-gray-100">👤 Clientes</Link>
-                <Link href="/faturas" className="block px-4 py-2 hover:bg-gray-100">💳 Faturas</Link>
-                <Link href="/dashboard_servico" className="block px-4 py-2 hover:bg-gray-100">📊 Dashboard</Link>
-                <Link href="/agendamentos/completar" className="block px-4 py-2 hover:bg-gray-100">📝 Completar Agendamentos</Link>
-              </div>
-            </div>
-          )}
-
-          {/* --- NOVO MENU BUCKMAN --- */}
-          <div className="relative group">
-            <button
-              className={`hover:underline px-2 py-1 rounded ${
-                isBuckmanRoute ? "bg-yellow-400 text-black font-bold" : ""
-              }`}
-              onClick={() => toggleDropdown("buckman")}
-            >
-              Buckman ▾
-            </button>
-            <div
-              className={`absolute bg-white text-black mt-2 rounded shadow-lg w-48 z-50 ${
-                openDropdown === "buckman" ? "block" : "hidden"
-              } ${isBuckmanRoute ? "border-2 border-yellow-400" : ""}`}
-            >
-              <Link
-                href="/buckman/vendedores"
-                className="block px-4 py-2 hover:bg-gray-100"
-                onClick={() => setMenuOpen(false)}
+            <div className="relative">
+              <button
+                onClick={() => toggleDropdown("inventario")}
+                className="hover:underline focus:outline-none"
               >
-                Vendedores
-              </Link>
-              {/* Outros links Buckman aqui */}
+                Inventário ▾
+              </button>
+              {openDropdown === "inventario" && (
+                <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[150px] z-50">
+                  <Link href="/contagem" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    Contagem
+                  </Link>
+                  <Link href="/upload" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    Upload
+                  </Link>
+                  <Link href="/download" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    Download
+                  </Link>
+                  <Link href="/relatorios" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    Relatórios
+                  </Link>
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
-          {/* Infos do usuário */}
-          <div className="ml-4 flex items-center space-x-2">
-            <span className="text-sm text-gray-200">
-              Bem-vindo, <strong>{session.user?.name}</strong><br />
-              Empresa: <strong>{session.user?.empresa_nome}</strong>
-            </span>
-          </div>
-          <button onClick={() => signOut()} className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded ml-3">Sair</button>
+          {/* Produtos */}
+          {acessos.produtos && (
+            <div className="relative">
+              <button
+                onClick={() => toggleDropdown("produtos")}
+                className="hover:underline focus:outline-none"
+              >
+                Produtos ▾
+              </button>
+              {openDropdown === "produtos" && (
+                <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[150px] z-50">
+                  <Link href="/produtos" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    Cadastro Produto
+                  </Link>
+                  <Link href="/listar_produtos" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    Lista de Produtos
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Compras */}
+          {acessos.compras && (
+            <div className="relative">
+              <button
+                onClick={() => toggleDropdown("compras")}
+                className="hover:underline focus:outline-none"
+              >
+                Compras ▾
+              </button>
+              {openDropdown === "compras" && (
+                <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[150px] z-50">
+                  <Link href="/compras" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    Nova Compra
+                  </Link>
+                  <Link href="/listar_compras" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    Lista de Compras
+                  </Link>
+                  <Link href="/entradas" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    Entradas
+                  </Link>
+                  <Link href="/estoque" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    Estoque
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Comercial */}
+          {acessos.comercial && (
+            <div className="relative">
+              <button
+                onClick={() => toggleDropdown("comercial")}
+                className="hover:underline focus:outline-none"
+              >
+                Comercial ▾
+              </button>
+              {openDropdown === "comercial" && (
+                <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[150px] z-50">
+                  <Link href="/orcamento" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    Orçamentos
+                  </Link>
+                  <Link href="/vendas" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    Vendas
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Serviços */}
+          {acessos.servicos && (
+            <div className="relative">
+              <button
+                onClick={() => toggleDropdown("servicos")}
+                className="hover:underline focus:outline-none"
+              >
+                Serviços ▾
+              </button>
+              {openDropdown === "servicos" && (
+                <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[150px] z-50">
+                  <Link href="/agendamento" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    📅 Agendamento
+                  </Link>
+                  <Link href="/servicos" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    ⚙️ Serviços
+                  </Link>
+                  <Link href="/produtos" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    ⚙️ Produtos
+                  </Link>
+                  <Link href="/profissionais" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    👩‍⚕️ Profissionais
+                  </Link>
+                  <Link href="/clientes" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    👤 Clientes
+                  </Link>
+                  <Link href="/faturas" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    💳 Faturas
+                  </Link>
+                  <Link href="/dashboard_servico" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    📊 Dashboard
+                  </Link>
+                  <Link href="/agendamentos/completar" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                    📝 Completar Agendamentos
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Buckman - só se tiver acesso */}
+          {acessos.buckman && (
+            <div className="relative">
+              <button
+                onClick={() => toggleDropdown("buckman")}
+                className="hover:underline focus:outline-none whitespace-nowrap"
+              >
+                Buckman ▾
+              </button>
+              {openDropdown === "buckman" && (
+                <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[220px] z-50">
+                  <Link href="/buckman/vendedores" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap">
+                    Vendedores
+                  </Link>
+                  <Link href="/buckman/metas_loja" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap">
+                    Metas Loja
+                  </Link>
+                  <Link href="/buckman/calendario" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap">
+                    Calendário
+                  </Link>
+                  <Link href="/buckman/relatorio_semanal" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap">
+                    Relatório Semanal
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {/* --- BOTÃO MOBILE ☰ --- */}
       {session && !expirado && acessos && (
         <button
-          className="md:hidden text-white focus:outline-none text-xl"
+          className="md:hidden text-white focus:outline-none text-3xl"
           onClick={() => setMenuOpen(!menuOpen)}
+          aria-label={menuOpen ? "Fechar menu" : "Abrir menu"}
         >
-          ☰
+          {menuOpen ? "✕" : "☰"}
         </button>
       )}
 
       {/* --- MOBILE MENU --- */}
       {menuOpen && session && !expirado && acessos && (
-        <div className="absolute top-full left-0 w-full bg-blue-700 flex flex-col text-white md:hidden z-50 shadow-lg pb-4">
+        <div className="fixed inset-0 bg-blue-700 text-white z-50 overflow-y-auto flex flex-col pt-20 pb-6">
+          {/* Container com padding top para não ficar atrás da navbar fixa */}
+
           {acessos.dashboard && (
-            <Link href="/dashboard" onClick={() => setMenuOpen(false)} className="px-4 py-2 border-b font-semibold text-yellow-300">
+            <Link href="/dashboard" onClick={() => setMenuOpen(false)} className="px-6 py-3 border-b font-semibold text-yellow-300">
               Dashboard
             </Link>
           )}
 
           {acessos.inventario && (
             <>
-              <button onClick={() => toggleDropdown("inventario")} className="px-4 py-2 border-b text-left">Inventário ▾</button>
+              <button
+                onClick={() => toggleDropdown("inventario")}
+                className="w-full text-left px-6 py-3 border-b flex justify-between items-center"
+              >
+                Inventário ▾
+                <span>{openDropdown === "inventario" ? "▲" : "▼"}</span>
+              </button>
               {openDropdown === "inventario" && (
                 <div className="bg-blue-800">
-                  <Link href="/contagem" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">Contagem</Link>
-                  <Link href="/upload" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">Upload</Link>
-                  <Link href="/download" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">Download</Link>
-                  <Link href="/relatorios" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">Relatórios</Link>
+                  <Link href="/contagem" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    Contagem
+                  </Link>
+                  <Link href="/upload" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    Upload
+                  </Link>
+                  <Link href="/download" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    Download
+                  </Link>
+                  <Link href="/relatorios" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    Relatórios
+                  </Link>
                 </div>
               )}
             </>
@@ -194,11 +279,21 @@ export default function Navbar() {
 
           {acessos.produtos && (
             <>
-              <button onClick={() => toggleDropdown("produtos")} className="px-4 py-2 border-b text-left">Produtos ▾</button>
+              <button
+                onClick={() => toggleDropdown("produtos")}
+                className="w-full text-left px-6 py-3 border-b flex justify-between items-center"
+              >
+                Produtos ▾
+                <span>{openDropdown === "produtos" ? "▲" : "▼"}</span>
+              </button>
               {openDropdown === "produtos" && (
                 <div className="bg-blue-800">
-                  <Link href="/produtos" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">Cadastro Produto</Link>
-                  <Link href="/listar_produtos" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">Lista de Produtos</Link>
+                  <Link href="/produtos" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    Cadastro Produto
+                  </Link>
+                  <Link href="/listar_produtos" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    Lista de Produtos
+                  </Link>
                 </div>
               )}
             </>
@@ -206,13 +301,27 @@ export default function Navbar() {
 
           {acessos.compras && (
             <>
-              <button onClick={() => toggleDropdown("compras")} className="px-4 py-2 border-b text-left">Compras ▾</button>
+              <button
+                onClick={() => toggleDropdown("compras")}
+                className="w-full text-left px-6 py-3 border-b flex justify-between items-center"
+              >
+                Compras ▾
+                <span>{openDropdown === "compras" ? "▲" : "▼"}</span>
+              </button>
               {openDropdown === "compras" && (
                 <div className="bg-blue-800">
-                  <Link href="/compras" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">Nova Compra</Link>
-                  <Link href="/listar_compras" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">Lista de Compras</Link>
-                  <Link href="/entradas" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">Entradas</Link>
-                  <Link href="/estoque" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">Estoque</Link>
+                  <Link href="/compras" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    Nova Compra
+                  </Link>
+                  <Link href="/listar_compras" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    Lista de Compras
+                  </Link>
+                  <Link href="/entradas" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    Entradas
+                  </Link>
+                  <Link href="/estoque" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    Estoque
+                  </Link>
                 </div>
               )}
             </>
@@ -220,11 +329,21 @@ export default function Navbar() {
 
           {acessos.comercial && (
             <>
-              <button onClick={() => toggleDropdown("comercial")} className="px-4 py-2 border-b text-left">Comercial ▾</button>
+              <button
+                onClick={() => toggleDropdown("comercial")}
+                className="w-full text-left px-6 py-3 border-b flex justify-between items-center"
+              >
+                Comercial ▾
+                <span>{openDropdown === "comercial" ? "▲" : "▼"}</span>
+              </button>
               {openDropdown === "comercial" && (
                 <div className="bg-blue-800">
-                  <Link href="/orcamento" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">Orçamentos</Link>
-                  <Link href="/vendas" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">Vendas</Link>
+                  <Link href="/orcamento" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    Orçamentos
+                  </Link>
+                  <Link href="/vendas" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    Vendas
+                  </Link>
                 </div>
               )}
             </>
@@ -232,30 +351,83 @@ export default function Navbar() {
 
           {acessos.servicos && (
             <>
-              <button onClick={() => toggleDropdown("servicos")} className="px-4 py-2 border-b text-left">Serviços ▾</button>
+              <button
+                onClick={() => toggleDropdown("servicos")}
+                className="w-full text-left px-6 py-3 border-b flex justify-between items-center"
+              >
+                Serviços ▾
+                <span>{openDropdown === "servicos" ? "▲" : "▼"}</span>
+              </button>
               {openDropdown === "servicos" && (
                 <div className="bg-blue-800">
-                  <Link href="/agendamento" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">📅 Agendamento</Link>
-                  <Link href="/servicos" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">⚙️ Serviços</Link>
-                  <Link href="/produtos" className="block px-4 py-2 hover:bg-gray-100">⚙️ Produtos</Link>
-                  <Link href="/profissionais" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">👩‍⚕️ Profissionais</Link>
-                  <Link href="/clientes" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">👤 Clientes</Link>
-                  <Link href="/faturas" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">💳 Faturas</Link>
-                  <Link href="/dashboard_servico" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">📊 Dashboard</Link>
-                  <Link href="/agendamentos/completar" onClick={() => setMenuOpen(false)} className="block px-6 py-2 border-b">📝 Completar Agendamentos</Link>
+                  <Link href="/agendamento" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    📅 Agendamento
+                  </Link>
+                  <Link href="/servicos" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    ⚙️ Serviços
+                  </Link>
+                  <Link href="/produtos" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    ⚙️ Produtos
+                  </Link>
+                  <Link href="/profissionais" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    👩‍⚕️ Profissionais
+                  </Link>
+                  <Link href="/clientes" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    👤 Clientes
+                  </Link>
+                  <Link href="/faturas" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    💳 Faturas
+                  </Link>
+                  <Link href="/dashboard_servico" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    📊 Dashboard
+                  </Link>
+                  <Link href="/agendamentos/completar" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                    📝 Completar Agendamentos
+                  </Link>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Buckman Mobile */}
+          {acessos.buckman && (
+            <>
+              <button
+                onClick={() => toggleDropdown("buckman")}
+                className="w-full text-left px-6 py-3 border-b flex justify-between items-center"
+              >
+                Buckman ▾
+                <span>{openDropdown === "buckman" ? "▲" : "▼"}</span>
+              </button>
+              {openDropdown === "buckman" && (
+                <div className="bg-blue-800">
+                  <Link href="/buckman/vendedores" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap">
+                    Vendedores
+                  </Link>
+                  <Link href="/buckman/metas_loja" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap">
+                    Metas Loja
+                  </Link>
+                  <Link href="/buckman/calendario" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap">
+                    Calendário
+                  </Link>
+                  <Link href="/buckman/relatorio_semanal" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap">
+                    Relatório Semanal
+                  </Link>
                 </div>
               )}
             </>
           )}
 
           {/* Infos usuário */}
-          <div className="px-4 py-2 text-sm">
+          <div className="px-6 py-4 text-sm border-t border-blue-600">
             👤 {session.user?.name} <br />
             🏢 {session.user?.empresa_nome}
           </div>
 
-          <button onClick={() => { setMenuOpen(false); signOut(); }}
-            className="mt-2 mx-4 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded">
+          <button
+            onClick={() => { setMenuOpen(false); signOut(); }}
+            className="mx-6 mt-4 mb-6 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded"
+          >
             Sair
           </button>
         </div>
