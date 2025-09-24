@@ -6,8 +6,6 @@ export default function Metas() {
     id: null,
     codigo: "",
     loja: "",
-    mes: new Date().getMonth() + 1,
-    ano: new Date().getFullYear(),
     semana1: "",
     semana2: "",
     semana3: "",
@@ -71,8 +69,6 @@ export default function Metas() {
       id: form.id,
       codigo: parseInt(form.codigo, 10),
       loja: form.loja,
-      mes: parseInt(form.mes, 10),
-      ano: parseInt(form.ano, 10),
       semana1: parseFloat(form.semana1) || 0,
       semana2: parseFloat(form.semana2) || 0,
       semana3: parseFloat(form.semana3) || 0,
@@ -101,8 +97,6 @@ export default function Metas() {
           id: null,
           codigo: "",
           loja: "",
-          mes: new Date().getMonth() + 1,
-          ano: new Date().getFullYear(),
           semana1: "",
           semana2: "",
           semana3: "",
@@ -132,8 +126,6 @@ export default function Metas() {
       id: meta.id,
       codigo: meta.codigo.toString(),
       loja: meta.loja,
-      mes: meta.mes || new Date().getMonth() + 1,
-      ano: meta.ano || new Date().getFullYear(),
       semana1: meta.semana1?.toString() || "",
       semana2: meta.semana2?.toString() || "",
       semana3: meta.semana3?.toString() || "",
@@ -170,8 +162,6 @@ export default function Metas() {
       id: null,
       codigo: "",
       loja: "",
-      mes: new Date().getMonth() + 1,
-      ano: new Date().getFullYear(),
       semana1: "",
       semana2: "",
       semana3: "",
@@ -242,28 +232,6 @@ export default function Metas() {
           onChange={handleChange}
           required
           style={{ minWidth: 150 }}
-        />
-        <input
-          name="mes"
-          type="number"
-          min="1"
-          max="12"
-          placeholder="Mês"
-          value={form.mes}
-          onChange={handleChange}
-          required
-          style={{ minWidth: 80 }}
-        />
-        <input
-          name="ano"
-          type="number"
-          min="2000"
-          max="2100"
-          placeholder="Ano"
-          value={form.ano}
-          onChange={handleChange}
-          required
-          style={{ minWidth: 100 }}
         />
         {[1, 2, 3, 4, 5, 6].map((sem) => (
           <input
@@ -367,8 +335,6 @@ export default function Metas() {
                 <th>ID</th>
                 <th>Código</th>
                 <th>Loja</th>
-                <th>Mês</th>
-                <th>Ano</th>
                 {[1, 2, 3, 4, 5, 6].map((sem) => (
                   <th key={`header_semana_${sem}`}>Semana {sem}</th>
                 ))}
@@ -389,8 +355,6 @@ export default function Metas() {
                   <td>{meta.id}</td>
                   <td>{meta.codigo}</td>
                   <td>{meta.loja}</td>
-                  <td>{meta.mes}</td>
-                  <td>{meta.ano}</td>
                   {[1, 2, 3, 4, 5, 6].map((sem) => (
                     <td key={`semana_valor_${sem}_${meta.id}`}>{meta[`semana${sem}`]}</td>
                   ))}
