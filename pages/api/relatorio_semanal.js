@@ -4,7 +4,7 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL_VENDEDORES,
 });
 
-// Query para agrupamento por loja
+// Query para agrupamento por loja com 6 semanas e cálculo de cota e comissão
 const QUERY_LOJA = `
 WITH vendas_semana AS (
   SELECT
@@ -41,11 +41,15 @@ vendas_com_metas AS (
     m.semana2,
     m.semana3,
     m.semana4,
+    m.semana5,
+    m.semana6,
     CASE v.semana_do_mes
       WHEN 1 THEN m.semana1
       WHEN 2 THEN m.semana2
       WHEN 3 THEN m.semana3
       WHEN 4 THEN m.semana4
+      WHEN 5 THEN m.semana5
+      WHEN 6 THEN m.semana6
       ELSE 0
     END AS meta_semana,
     0.05 AS taxa_comissao
@@ -70,7 +74,7 @@ resumo AS (
 SELECT
   loja,
   COALESCE(MAX(CASE WHEN semana_do_mes = 1 THEN real END), 0) AS real_semana1,
-  COALESCE(MAX(CASE WHEN semana_do_mes = 1 THEN meta END), 0) AS meta_semana1,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 1 THEN meta END), 0) AS semana1,
   CASE WHEN COALESCE(MAX(CASE WHEN semana_do_mes = 1 THEN meta END), 0) > 0
        THEN COALESCE(MAX(CASE WHEN semana_do_mes = 1 THEN real END), 0) / MAX(CASE WHEN semana_do_mes = 1 THEN meta END)
        ELSE 0
@@ -78,7 +82,7 @@ SELECT
   COALESCE(MAX(CASE WHEN semana_do_mes = 1 THEN real END), 0) * COALESCE(MAX(taxa_comissao), 0) AS comissao_semana1,
 
   COALESCE(MAX(CASE WHEN semana_do_mes = 2 THEN real END), 0) AS real_semana2,
-  COALESCE(MAX(CASE WHEN semana_do_mes = 2 THEN meta END), 0) AS meta_semana2,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 2 THEN meta END), 0) AS semana2,
   CASE WHEN COALESCE(MAX(CASE WHEN semana_do_mes = 2 THEN meta END), 0) > 0
        THEN COALESCE(MAX(CASE WHEN semana_do_mes = 2 THEN real END), 0) / MAX(CASE WHEN semana_do_mes = 2 THEN meta END)
        ELSE 0
@@ -86,7 +90,7 @@ SELECT
   COALESCE(MAX(CASE WHEN semana_do_mes = 2 THEN real END), 0) * COALESCE(MAX(taxa_comissao), 0) AS comissao_semana2,
 
   COALESCE(MAX(CASE WHEN semana_do_mes = 3 THEN real END), 0) AS real_semana3,
-  COALESCE(MAX(CASE WHEN semana_do_mes = 3 THEN meta END), 0) AS meta_semana3,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 3 THEN meta END), 0) AS semana3,
   CASE WHEN COALESCE(MAX(CASE WHEN semana_do_mes = 3 THEN meta END), 0) > 0
        THEN COALESCE(MAX(CASE WHEN semana_do_mes = 3 THEN real END), 0) / MAX(CASE WHEN semana_do_mes = 3 THEN meta END)
        ELSE 0
@@ -94,12 +98,28 @@ SELECT
   COALESCE(MAX(CASE WHEN semana_do_mes = 3 THEN real END), 0) * COALESCE(MAX(taxa_comissao), 0) AS comissao_semana3,
 
   COALESCE(MAX(CASE WHEN semana_do_mes = 4 THEN real END), 0) AS real_semana4,
-  COALESCE(MAX(CASE WHEN semana_do_mes = 4 THEN meta END), 0) AS meta_semana4,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 4 THEN meta END), 0) AS semana4,
   CASE WHEN COALESCE(MAX(CASE WHEN semana_do_mes = 4 THEN meta END), 0) > 0
        THEN COALESCE(MAX(CASE WHEN semana_do_mes = 4 THEN real END), 0) / MAX(CASE WHEN semana_do_mes = 4 THEN meta END)
        ELSE 0
   END AS pct_cota_semana4,
-  COALESCE(MAX(CASE WHEN semana_do_mes = 4 THEN real END), 0) * COALESCE(MAX(taxa_comissao), 0) AS comissao_semana4
+  COALESCE(MAX(CASE WHEN semana_do_mes = 4 THEN real END), 0) * COALESCE(MAX(taxa_comissao), 0) AS comissao_semana4,
+
+  COALESCE(MAX(CASE WHEN semana_do_mes = 5 THEN real END), 0) AS real_semana5,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 5 THEN meta END), 0) AS semana5,
+  CASE WHEN COALESCE(MAX(CASE WHEN semana_do_mes = 5 THEN meta END), 0) > 0
+       THEN COALESCE(MAX(CASE WHEN semana_do_mes = 5 THEN real END), 0) / MAX(CASE WHEN semana_do_mes = 5 THEN meta END)
+       ELSE 0
+  END AS pct_cota_semana5,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 5 THEN real END), 0) * COALESCE(MAX(taxa_comissao), 0) AS comissao_semana5,
+
+  COALESCE(MAX(CASE WHEN semana_do_mes = 6 THEN real END), 0) AS real_semana6,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 6 THEN meta END), 0) AS semana6,
+  CASE WHEN COALESCE(MAX(CASE WHEN semana_do_mes = 6 THEN meta END), 0) > 0
+       THEN COALESCE(MAX(CASE WHEN semana_do_mes = 6 THEN real END), 0) / MAX(CASE WHEN semana_do_mes = 6 THEN meta END)
+       ELSE 0
+  END AS pct_cota_semana6,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 6 THEN real END), 0) * COALESCE(MAX(taxa_comissao), 0) AS comissao_semana6
 FROM
   resumo
 GROUP BY
@@ -108,7 +128,7 @@ ORDER BY
   loja;
 `;
 
-// Query para agrupamento por loja e vendedor
+// Query para agrupamento por loja e vendedor com 6 semanas
 const QUERY_LOJA_VENDEDOR = `
 WITH vendas_semana AS (
   SELECT
@@ -149,11 +169,15 @@ vendas_com_metas AS (
     m.semana2,
     m.semana3,
     m.semana4,
+    m.semana5,
+    m.semana6,
     CASE v.semana_do_mes
       WHEN 1 THEN m.semana1
       WHEN 2 THEN m.semana2
       WHEN 3 THEN m.semana3
       WHEN 4 THEN m.semana4
+      WHEN 5 THEN m.semana5
+      WHEN 6 THEN m.semana6
       ELSE 0
     END AS meta_semana,
     0.05 AS taxa_comissao
@@ -181,7 +205,7 @@ SELECT
   loja,
   seller_name,
   COALESCE(MAX(CASE WHEN semana_do_mes = 1 THEN real END), 0) AS real_semana1,
-  COALESCE(MAX(CASE WHEN semana_do_mes = 1 THEN meta END), 0) AS meta_semana1,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 1 THEN meta END), 0) AS semana1,
   CASE WHEN COALESCE(MAX(CASE WHEN semana_do_mes = 1 THEN meta END), 0) > 0
        THEN COALESCE(MAX(CASE WHEN semana_do_mes = 1 THEN real END), 0) / MAX(CASE WHEN semana_do_mes = 1 THEN meta END)
        ELSE 0
@@ -189,7 +213,7 @@ SELECT
   COALESCE(MAX(CASE WHEN semana_do_mes = 1 THEN real END), 0) * COALESCE(MAX(taxa_comissao), 0) AS comissao_semana1,
 
   COALESCE(MAX(CASE WHEN semana_do_mes = 2 THEN real END), 0) AS real_semana2,
-  COALESCE(MAX(CASE WHEN semana_do_mes = 2 THEN meta END), 0) AS meta_semana2,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 2 THEN meta END), 0) AS semana2,
   CASE WHEN COALESCE(MAX(CASE WHEN semana_do_mes = 2 THEN meta END), 0) > 0
        THEN COALESCE(MAX(CASE WHEN semana_do_mes = 2 THEN real END), 0) / MAX(CASE WHEN semana_do_mes = 2 THEN meta END)
        ELSE 0
@@ -197,7 +221,7 @@ SELECT
   COALESCE(MAX(CASE WHEN semana_do_mes = 2 THEN real END), 0) * COALESCE(MAX(taxa_comissao), 0) AS comissao_semana2,
 
   COALESCE(MAX(CASE WHEN semana_do_mes = 3 THEN real END), 0) AS real_semana3,
-  COALESCE(MAX(CASE WHEN semana_do_mes = 3 THEN meta END), 0) AS meta_semana3,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 3 THEN meta END), 0) AS semana3,
   CASE WHEN COALESCE(MAX(CASE WHEN semana_do_mes = 3 THEN meta END), 0) > 0
        THEN COALESCE(MAX(CASE WHEN semana_do_mes = 3 THEN real END), 0) / MAX(CASE WHEN semana_do_mes = 3 THEN meta END)
        ELSE 0
@@ -205,12 +229,28 @@ SELECT
   COALESCE(MAX(CASE WHEN semana_do_mes = 3 THEN real END), 0) * COALESCE(MAX(taxa_comissao), 0) AS comissao_semana3,
 
   COALESCE(MAX(CASE WHEN semana_do_mes = 4 THEN real END), 0) AS real_semana4,
-  COALESCE(MAX(CASE WHEN semana_do_mes = 4 THEN meta END), 0) AS meta_semana4,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 4 THEN meta END), 0) AS semana4,
   CASE WHEN COALESCE(MAX(CASE WHEN semana_do_mes = 4 THEN meta END), 0) > 0
        THEN COALESCE(MAX(CASE WHEN semana_do_mes = 4 THEN real END), 0) / MAX(CASE WHEN semana_do_mes = 4 THEN meta END)
        ELSE 0
   END AS pct_cota_semana4,
-  COALESCE(MAX(CASE WHEN semana_do_mes = 4 THEN real END), 0) * COALESCE(MAX(taxa_comissao), 0) AS comissao_semana4
+  COALESCE(MAX(CASE WHEN semana_do_mes = 4 THEN real END), 0) * COALESCE(MAX(taxa_comissao), 0) AS comissao_semana4,
+
+  COALESCE(MAX(CASE WHEN semana_do_mes = 5 THEN real END), 0) AS real_semana5,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 5 THEN meta END), 0) AS semana5,
+  CASE WHEN COALESCE(MAX(CASE WHEN semana_do_mes = 5 THEN meta END), 0) > 0
+       THEN COALESCE(MAX(CASE WHEN semana_do_mes = 5 THEN real END), 0) / MAX(CASE WHEN semana_do_mes = 5 THEN meta END)
+       ELSE 0
+  END AS pct_cota_semana5,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 5 THEN real END), 0) * COALESCE(MAX(taxa_comissao), 0) AS comissao_semana5,
+
+  COALESCE(MAX(CASE WHEN semana_do_mes = 6 THEN real END), 0) AS real_semana6,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 6 THEN meta END), 0) AS semana6,
+  CASE WHEN COALESCE(MAX(CASE WHEN semana_do_mes = 6 THEN meta END), 0) > 0
+       THEN COALESCE(MAX(CASE WHEN semana_do_mes = 6 THEN real END), 0) / MAX(CASE WHEN semana_do_mes = 6 THEN meta END)
+       ELSE 0
+  END AS pct_cota_semana6,
+  COALESCE(MAX(CASE WHEN semana_do_mes = 6 THEN real END), 0) * COALESCE(MAX(taxa_comissao), 0) AS comissao_semana6
 FROM
   resumo
 GROUP BY

@@ -12,7 +12,8 @@ export default async function handler(req, res) {
       const offset = (pageNum - 1) * limitNum;
 
       const queryText = `
-        SELECT id, codigo, loja, semana1, semana2, semana3, semana4
+        SELECT id, codigo, loja, semana1, semana2, semana3, semana4, semana5, semana6,
+               cota_vendedor, super_cota, cota_ouro, comissao_loja, qtd_vendedor
         FROM metas_lojas
         WHERE loja ILIKE $1
         ORDER BY loja
@@ -37,11 +38,29 @@ export default async function handler(req, res) {
         currentPage: pageNum,
       });
     } else if (req.method === "POST") {
-      const { codigo, loja, semana1, semana2, semana3, semana4 } = req.body;
+      const {
+        codigo,
+        loja,
+        semana1,
+        semana2,
+        semana3,
+        semana4,
+        semana5,
+        semana6,
+        cota_vendedor,
+        super_cota,
+        cota_ouro,
+        comissao_loja,
+        qtd_vendedor,
+      } = req.body;
+
       const insertQuery = `
-        INSERT INTO metas_lojas (codigo, loja, semana1, semana2, semana3, semana4)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, codigo, loja, semana1, semana2, semana3, semana4
+        INSERT INTO metas_lojas (
+          codigo, loja, semana1, semana2, semana3, semana4, semana5, semana6,
+          cota_vendedor, super_cota, cota_ouro, comissao_loja, qtd_vendedor
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        RETURNING *
       `;
       const insertValues = [
         codigo,
@@ -50,16 +69,52 @@ export default async function handler(req, res) {
         semana2 || 0,
         semana3 || 0,
         semana4 || 0,
+        semana5 || 0,
+        semana6 || 0,
+        cota_vendedor || 0,
+        super_cota || 0,
+        cota_ouro || 0,
+        comissao_loja || 0,
+        qtd_vendedor || 0,
       ];
+
       const insertResult = await pool.query(insertQuery, insertValues);
       res.status(201).json(insertResult.rows[0]);
     } else if (req.method === "PUT") {
-      const { id, codigo, loja, semana1, semana2, semana3, semana4 } = req.body;
+      const {
+        id,
+        codigo,
+        loja,
+        semana1,
+        semana2,
+        semana3,
+        semana4,
+        semana5,
+        semana6,
+        cota_vendedor,
+        super_cota,
+        cota_ouro,
+        comissao_loja,
+        qtd_vendedor,
+      } = req.body;
+
       const updateQuery = `
-        UPDATE metas_lojas
-        SET codigo = $1, loja = $2, semana1 = $3, semana2 = $4, semana3 = $5, semana4 = $6
-        WHERE id = $7
-        RETURNING id, codigo, loja, semana1, semana2, semana3, semana4
+        UPDATE metas_lojas SET
+          codigo = $1,
+          loja = $2,
+          semana1 = $3,
+          semana2 = $4,
+          semana3 = $5,
+          semana4 = $6,
+          semana5 = $7,
+          semana6 = $8,
+          cota_vendedor = $9,
+          super_cota = $10,
+          cota_ouro = $11,
+          comissao_loja = $12,
+          qtd_vendedor = $13
+        WHERE id = $14
+        RETURNING *
       `;
       const updateValues = [
         codigo,
@@ -68,6 +123,13 @@ export default async function handler(req, res) {
         semana2 || 0,
         semana3 || 0,
         semana4 || 0,
+        semana5 || 0,
+        semana6 || 0,
+        cota_vendedor || 0,
+        super_cota || 0,
+        cota_ouro || 0,
+        comissao_loja || 0,
+        qtd_vendedor || 0,
         id,
       ];
       const updateResult = await pool.query(updateQuery, updateValues);

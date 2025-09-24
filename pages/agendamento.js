@@ -25,6 +25,7 @@ export default function Agendamento() {
   const [profissionais, setProfissionais] = useState([]);
   const [clientes, setClientes] = useState([]);
 
+  // Carregar dados iniciais e eventos
   useEffect(() => {
     if (status !== "authenticated") return;
 
@@ -51,20 +52,17 @@ export default function Agendamento() {
           return;
         }
 
-        // IDs google_event_id dos eventos do banco que já existem
         const googleIdsInDb = new Set(
           data.filter(ev => ev.source === "db" && ev.gcal_event_id).map(ev => ev.gcal_event_id)
         );
 
-        // Filtra eventos do Google que já estão no banco
         const filteredEvents = data.filter(ev => {
           if (ev.source === "google" && googleIdsInDb.has(ev.gcal_event_id)) {
-            return false; // já importado, não mostrar
+            return false;
           }
           return true;
         });
 
-        // Remove duplicados por chave composta
         const uniqueEvents = [];
         const seenKeys = new Set();
         filteredEvents.forEach(ev => {
@@ -79,6 +77,34 @@ export default function Agendamento() {
       })
       .catch(() => setEvents([]));
   }, [status]);
+
+  // Buscar horários disponíveis via API customizada
+  useEffect(() => {
+    if (!profissional || !servico || !selectedDate) {
+      setAvailableHours([]);
+      return;
+    }
+
+    async function fetchHorariosDisponiveis() {
+      try {
+        const res = await fetch(
+          `/api/agendamentos_horarios?profissional_id=${profissional}&servico_nome=${encodeURIComponent(servico)}&data=${selectedDate}`
+        );
+        if (!res.ok) {
+          console.error("Erro ao buscar horários:", await res.text());
+          setAvailableHours([]);
+          return;
+        }
+        const data = await res.json();
+        setAvailableHours(data.horarios || []);
+      } catch (err) {
+        console.error("Erro ao buscar horários disponíveis:", err);
+        setAvailableHours([]);
+      }
+    }
+
+    fetchHorariosDisponiveis();
+  }, [profissional, servico, selectedDate]);
 
   const handleClienteChange = (id) => {
     setCliente(id);
@@ -95,18 +121,7 @@ export default function Agendamento() {
   const handleDateClick = (info) => {
     const dateStr = info.dateStr;
     setSelectedDate(dateStr);
-
-    const hours = [];
-    for (let h = 8; h <= 18; h++) hours.push(`${h.toString().padStart(2, "0")}:00`);
-
-    const dayEvents = events.filter((ev) => ev.start.startsWith(dateStr));
-    const occupied = dayEvents.map((ev) => {
-      const d = new Date(ev.start);
-      return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
-    });
-
-    const freeHours = hours.filter((h) => !occupied.includes(h));
-    setAvailableHours(freeHours);
+    setSelectedHour("");
     setIsOpen(true);
   };
 
@@ -336,11 +351,15 @@ export default function Agendamento() {
               className="w-full px-3 py-2 border rounded mb-3"
             >
               <option value="">Selecione o horário</option>
-              {availableHours.map((h) => (
-                <option key={h} value={h}>
-                  {h}
-                </option>
-              ))}
+              {availableHours.length > 0 ? (
+                availableHours.map((h) => (
+                  <option key={h} value={h}>
+                    {h}
+                  </option>
+                ))
+              ) : (
+                <option disabled>Nenhum horário disponível</option>
+              )}
             </select>
 
             <textarea

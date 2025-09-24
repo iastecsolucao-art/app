@@ -58,7 +58,18 @@ export default function RelatorioSemanal() {
     });
   }, [dataLojaVendedor, filterLoja, filterVendedor]);
 
-  // Função para calcular subtotais por loja
+  // Calcula % de cota atingida por semana para cada loja (baseado no realizado e meta)
+  const calcularCotasAtingidas = (loja) => {
+    const cotas = {};
+    for (let i = 1; i <= 6; i++) {
+      const meta = Number(loja[`semana${i}`]) || 0;
+      const realizado = Number(loja[`real_semana${i}`]) || 0;
+      cotas[`cota_atingida_semana${i}`] = meta > 0 ? (realizado / meta) * 100 : 0;
+    }
+    return cotas;
+  };
+
+  // Subtotais por loja (somando realizado e comissão)
   const calcularSubtotaisPorLoja = (dados) => {
     const map = {};
     dados.forEach((row) => {
@@ -68,27 +79,27 @@ export default function RelatorioSemanal() {
           real_semana2: 0,
           real_semana3: 0,
           real_semana4: 0,
+          real_semana5: 0,
+          real_semana6: 0,
           comissao_semana1: 0,
           comissao_semana2: 0,
           comissao_semana3: 0,
           comissao_semana4: 0,
+          comissao_semana5: 0,
+          comissao_semana6: 0,
         };
       }
-      map[row.loja].real_semana1 += Number(row.real_semana1) || 0;
-      map[row.loja].real_semana2 += Number(row.real_semana2) || 0;
-      map[row.loja].real_semana3 += Number(row.real_semana3) || 0;
-      map[row.loja].real_semana4 += Number(row.real_semana4) || 0;
-      map[row.loja].comissao_semana1 += Number(row.comissao_semana1) || 0;
-      map[row.loja].comissao_semana2 += Number(row.comissao_semana2) || 0;
-      map[row.loja].comissao_semana3 += Number(row.comissao_semana3) || 0;
-      map[row.loja].comissao_semana4 += Number(row.comissao_semana4) || 0;
+      for (let i = 1; i <= 6; i++) {
+        map[row.loja][`real_semana${i}`] += Number(row[`real_semana${i}`]) || 0;
+        map[row.loja][`comissao_semana${i}`] += Number(row[`comissao_semana${i}`]) || 0;
+      }
     });
     return map;
   };
 
   const subtotaisPorLoja = useMemo(() => calcularSubtotaisPorLoja(filteredLojaVendedor), [filteredLojaVendedor]);
 
-  // Monta linhas com subtotais inseridos após cada grupo de loja
+  // Linhas com subtotais inseridos após cada grupo de loja
   const linhasComSubtotais = useMemo(() => {
     const linhas = [];
     let lojaAtual = null;
@@ -99,7 +110,6 @@ export default function RelatorioSemanal() {
       }
       linhas.push({ ...row, isSubtotal: false });
 
-      // Verifica se próxima linha é de outra loja ou fim da lista para inserir subtotal
       const proximaLinha = filteredLojaVendedor[idx + 1];
       if (!proximaLinha || proximaLinha.loja !== lojaAtual) {
         const subtotal = subtotaisPorLoja[lojaAtual];
@@ -123,26 +133,15 @@ export default function RelatorioSemanal() {
       [
         "Loja",
         "Vendedor",
-        "Real Semana 1",
-        "Comissão Semana 1",
-        "Real Semana 2",
-        "Comissão Semana 2",
-        "Real Semana 3",
-        "Comissão Semana 3",
-        "Real Semana 4",
-        "Comissão Semana 4",
+        ...Array.from({ length: 6 }, (_, i) => [`Real Semana ${i + 1}`, `Comissão Semana ${i + 1}`]).flat(),
       ],
       ...linhasComSubtotais.map((row) => [
         row.loja,
         row.seller_name,
-        row.real_semana1,
-        row.comissao_semana1,
-        row.real_semana2,
-        row.comissao_semana2,
-        row.real_semana3,
-        row.comissao_semana3,
-        row.real_semana4,
-        row.comissao_semana4,
+        ...Array.from({ length: 6 }, (_, i) => [
+          row[`real_semana${i + 1}`],
+          row[`comissao_semana${i + 1}`],
+        ]).flat(),
       ]),
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -153,19 +152,19 @@ export default function RelatorioSemanal() {
 
   // Dados para gráfico (comissão total por semana, visão loja)
   const chartData = useMemo(() => {
-    const totals = { semana1: 0, semana2: 0, semana3: 0, semana4: 0 };
+    const totals = {};
+    for (let i = 1; i <= 6; i++) totals[`semana${i}`] = 0;
+
     filteredLoja.forEach((row) => {
-      totals.semana1 += Number(row.comissao_semana1) || 0;
-      totals.semana2 += Number(row.comissao_semana2) || 0;
-      totals.semana3 += Number(row.comissao_semana3) || 0;
-      totals.semana4 += Number(row.comissao_semana4) || 0;
+      for (let i = 1; i <= 6; i++) {
+        totals[`semana${i}`] += Number(row[`comissao_semana${i}`]) || 0;
+      }
     });
-    return [
-      { semana: "Semana 1", Comissão: totals.semana1 },
-      { semana: "Semana 2", Comissão: totals.semana2 },
-      { semana: "Semana 3", Comissão: totals.semana3 },
-      { semana: "Semana 4", Comissão: totals.semana4 },
-    ];
+
+    return Array.from({ length: 6 }, (_, i) => ({
+      semana: `Semana ${i + 1}`,
+      Comissão: totals[`semana${i + 1}`],
+    }));
   }, [filteredLoja]);
 
   return (
@@ -223,63 +222,54 @@ export default function RelatorioSemanal() {
         </ResponsiveContainer>
       </div>
 
-      <table
-        border="1"
-        cellPadding="5"
-        cellSpacing="0"
-        style={{ width: "100%", fontSize: 12, marginBottom: 40 }}
-      >
+      <table border="1" cellPadding="5" cellSpacing="0" style={{ width: "100%", fontSize: 12, marginBottom: 40 }}>
         <thead>
           <tr>
             <th>Loja</th>
-            {[1, 2, 3, 4].map((sem) => (
-              <th key={`header_semana_${sem}`} colSpan="2" style={{ textAlign: "center" }}>
+            {[1, 2, 3, 4, 5, 6].map((sem) => (
+              <th key={`header_semana_${sem}`} colSpan="3" style={{ textAlign: "center" }}>
                 Semana {sem}
               </th>
             ))}
           </tr>
           <tr>
             <th></th>
-            {[1, 2, 3, 4].map((sem) => (
+            {[1, 2, 3, 4, 5, 6].map((sem) => (
               <React.Fragment key={`subheader_semana_${sem}`}>
-                <th key={`real_${sem}`}>Real</th>
-                <th key={`comissao_${sem}`}>Comissão</th>
+                <th>Meta</th>
+                <th>Real</th>
+                <th>% Cota</th>
               </React.Fragment>
             ))}
           </tr>
         </thead>
         <tbody>
-          {filteredLoja.map((row, i) => (
-            <tr key={`row_loja_${i}`}>
-              <td>{row.loja}</td>
-              {[1, 2, 3, 4].map((sem) => {
-                const real = Number(row[`real_semana${sem}`]) || 0;
-                const comissao = Number(row[`comissao_semana${sem}`]) || 0;
-                return (
+          {filteredLoja.map((row, i) => {
+            const cotas = calcularCotasAtingidas(row);
+            return (
+              <tr key={`row_loja_${i}`}>
+                <td>{row.loja}</td>
+                {[1, 2, 3, 4, 5, 6].map((sem) => (
                   <React.Fragment key={`data_semana_${sem}_loja_${i}`}>
-                    <td>{real.toFixed(2)}</td>
-                    <td>{comissao.toFixed(2)}</td>
+                    <td>{Number(row[`semana${sem}`]).toFixed(2)}</td>
+                    <td>{Number(row[`real_semana${sem}`] || 0).toFixed(2)}</td>
+                    <td>{cotas[`cota_atingida_semana${sem}`].toFixed(2)}%</td>
                   </React.Fragment>
-                );
-              })}
-            </tr>
-          ))}
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 
       <h2>Visão por Loja e Vendedor</h2>
-      <table
-        border="1"
-        cellPadding="5"
-        cellSpacing="0"
-        style={{ width: "100%", fontSize: 12 }}
-      >
+      <table border="1" cellPadding="5" cellSpacing="0" style={{ width: "100%", fontSize: 12 }}>
         <thead>
           <tr>
             <th>Loja</th>
             <th>Vendedor</th>
-            {[1, 2, 3, 4].map((sem) => (
-              <th key={`header_semana_vendedor_${sem}`} colSpan="2" style={{ textAlign: "center" }}>
+            {[1, 2, 3, 4, 5, 6].map((sem) => (
+              <th key={`header_semana_vendedor_${sem}`} colSpan="3" style={{ textAlign: "center" }}>
                 Semana {sem}
               </th>
             ))}
@@ -287,10 +277,11 @@ export default function RelatorioSemanal() {
           <tr>
             <th></th>
             <th></th>
-            {[1, 2, 3, 4].map((sem) => (
+            {[1, 2, 3, 4, 5, 6].map((sem) => (
               <React.Fragment key={`subheader_semana_vendedor_${sem}`}>
-                <th key={`real_vendedor_${sem}`}>Real</th>
-                <th key={`comissao_vendedor_${sem}`}>Comissão</th>
+                <th>Meta</th>
+                <th>Real</th>
+                <th>% Cota</th>
               </React.Fragment>
             ))}
           </tr>
@@ -298,36 +289,44 @@ export default function RelatorioSemanal() {
         <tbody>
           {linhasComSubtotais.map((row, i) => {
             if (row.isSubtotal) {
+              // Para subtotal, somar metas e realizados para calcular % cota
+              const metas = {};
+              const realizados = {};
+              for (let sem = 1; sem <= 6; sem++) {
+                metas[`semana${sem}`] = filteredLoja.find(l => l.loja === row.loja)?.[`semana${sem}`] || 0;
+                realizados[`semana${sem}`] = row[`real_semana${sem}`] || 0;
+              }
               return (
-                <tr
-                  key={`subtotal_${row.loja}_${i}`}
-                  style={{ fontWeight: "bold", backgroundColor: "#eee" }}
-                >
+                <tr key={`subtotal_${row.loja}_${i}`} style={{ fontWeight: "bold", backgroundColor: "#eee" }}>
                   <td>{row.loja} (Subtotal)</td>
                   <td></td>
-                  {[1, 2, 3, 4].map((sem) => (
-                    <React.Fragment key={`subtotal_semana_${sem}_${row.loja}`}>
-                      <td>{row[`real_semana${sem}`].toFixed(2)}</td>
-                      <td>{row[`comissao_semana${sem}`].toFixed(2)}</td>
-                    </React.Fragment>
-                  ))}
+                  {[1, 2, 3, 4, 5, 6].map((sem) => {
+                    const meta = Number(metas[`semana${sem}`]) || 0;
+                    const real = Number(realizados[`semana${sem}`]) || 0;
+                    const cota = meta > 0 ? (real / meta) * 100 : 0;
+                    return (
+                      <React.Fragment key={`subtotal_semana_${sem}_${row.loja}`}>
+                        <td>{meta.toFixed(2)}</td>
+                        <td>{real.toFixed(2)}</td>
+                        <td>{cota.toFixed(2)}%</td>
+                      </React.Fragment>
+                    );
+                  })}
                 </tr>
               );
             } else {
+              const cotas = calcularCotasAtingidas(row);
               return (
                 <tr key={`row_loja_vendedor_${i}`}>
                   <td>{row.loja}</td>
                   <td>{row.seller_name}</td>
-                  {[1, 2, 3, 4].map((sem) => {
-                    const real = Number(row[`real_semana${sem}`]) || 0;
-                    const comissao = Number(row[`comissao_semana${sem}`]) || 0;
-                    return (
-                      <React.Fragment key={`data_semana_vendedor_${sem}_${i}`}>
-                        <td>{real.toFixed(2)}</td>
-                        <td>{comissao.toFixed(2)}</td>
-                      </React.Fragment>
-                    );
-                  })}
+                  {[1, 2, 3, 4, 5, 6].map((sem) => (
+                    <React.Fragment key={`data_semana_vendedor_${sem}_${i}`}>
+                      <td>{Number(row[`semana${sem}`] || 0).toFixed(2)}</td>
+                      <td>{Number(row[`real_semana${sem}`] || 0).toFixed(2)}</td>
+                      <td>{cotas[`cota_atingida_semana${sem}`].toFixed(2)}%</td>
+                    </React.Fragment>
+                  ))}
                 </tr>
               );
             }

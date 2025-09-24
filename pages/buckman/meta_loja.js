@@ -10,6 +10,13 @@ export default function Metas() {
     semana2: "",
     semana3: "",
     semana4: "",
+    semana5: "",
+    semana6: "",
+    cota_vendedor: "",
+    super_cota: "",
+    cota_ouro: "",
+    comissao_loja: "",
+    qtd_vendedor: "",
   });
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -59,6 +66,13 @@ export default function Metas() {
       semana2: parseFloat(form.semana2) || 0,
       semana3: parseFloat(form.semana3) || 0,
       semana4: parseFloat(form.semana4) || 0,
+      semana5: parseFloat(form.semana5) || 0,
+      semana6: parseFloat(form.semana6) || 0,
+      cota_vendedor: parseFloat(form.cota_vendedor) || 0,
+      super_cota: parseFloat(form.super_cota) || 0,
+      cota_ouro: parseFloat(form.cota_ouro) || 0,
+      comissao_loja: parseFloat(form.comissao_loja) || 0,
+      qtd_vendedor: parseInt(form.qtd_vendedor, 10) || 0,
     });
 
     const res = await fetch(url, {
@@ -76,6 +90,13 @@ export default function Metas() {
         semana2: "",
         semana3: "",
         semana4: "",
+        semana5: "",
+        semana6: "",
+        cota_vendedor: "",
+        super_cota: "",
+        cota_ouro: "",
+        comissao_loja: "",
+        qtd_vendedor: "",
       });
       fetchMetas(page, search);
     } else {
@@ -88,10 +109,17 @@ export default function Metas() {
       id: meta.id,
       codigo: meta.codigo.toString(),
       loja: meta.loja,
-      semana1: meta.semana1.toString(),
-      semana2: meta.semana2.toString(),
-      semana3: meta.semana3.toString(),
-      semana4: meta.semana4.toString(),
+      semana1: meta.semana1?.toString() || "",
+      semana2: meta.semana2?.toString() || "",
+      semana3: meta.semana3?.toString() || "",
+      semana4: meta.semana4?.toString() || "",
+      semana5: meta.semana5?.toString() || "",
+      semana6: meta.semana6?.toString() || "",
+      cota_vendedor: meta.cota_vendedor?.toString() || "",
+      super_cota: meta.super_cota?.toString() || "",
+      cota_ouro: meta.cota_ouro?.toString() || "",
+      comissao_loja: meta.comissao_loja?.toString() || "",
+      qtd_vendedor: meta.qtd_vendedor?.toString() || "",
     });
   };
 
@@ -114,6 +142,13 @@ export default function Metas() {
       semana2: "",
       semana3: "",
       semana4: "",
+      semana5: "",
+      semana6: "",
+      cota_vendedor: "",
+      super_cota: "",
+      cota_ouro: "",
+      comissao_loja: "",
+      qtd_vendedor: "",
     });
   };
 
@@ -144,14 +179,14 @@ export default function Metas() {
       </form>
 
       {/* Formulário */}
-      <form onSubmit={handleSubmit} style={{ marginBottom: 20 }}>
+      <form onSubmit={handleSubmit} style={{ marginBottom: 20, display: "flex", flexWrap: "wrap", gap: "10px" }}>
         <input
           name="codigo"
           placeholder="Código"
           value={form.codigo}
           onChange={handleChange}
           required
-          style={{ marginRight: 10, width: 100 }}
+          style={{ width: 100 }}
           type="number"
         />
         <input
@@ -160,7 +195,7 @@ export default function Metas() {
           value={form.loja}
           onChange={handleChange}
           required
-          style={{ marginRight: 10 }}
+          style={{ flexGrow: 1, minWidth: 150 }}
         />
         <input
           name="semana1"
@@ -169,7 +204,7 @@ export default function Metas() {
           placeholder="Semana 1"
           value={form.semana1}
           onChange={handleChange}
-          style={{ marginRight: 10, width: 80 }}
+          style={{ width: 80 }}
         />
         <input
           name="semana2"
@@ -178,7 +213,7 @@ export default function Metas() {
           placeholder="Semana 2"
           value={form.semana2}
           onChange={handleChange}
-          style={{ marginRight: 10, width: 80 }}
+          style={{ width: 80 }}
         />
         <input
           name="semana3"
@@ -187,7 +222,7 @@ export default function Metas() {
           placeholder="Semana 3"
           value={form.semana3}
           onChange={handleChange}
-          style={{ marginRight: 10, width: 80 }}
+          style={{ width: 80 }}
         />
         <input
           name="semana4"
@@ -196,12 +231,76 @@ export default function Metas() {
           placeholder="Semana 4"
           value={form.semana4}
           onChange={handleChange}
-          style={{ marginRight: 10, width: 80 }}
+          style={{ width: 80 }}
         />
-        <button type="submit">{form.id ? "Atualizar" : "Adicionar"}</button>
-        <button type="button" onClick={handleNew} style={{ marginLeft: 10 }}>
-          Novo
-        </button>
+        <input
+          name="semana5"
+          type="number"
+          step="0.01"
+          placeholder="Semana 5"
+          value={form.semana5}
+          onChange={handleChange}
+          style={{ width: 80 }}
+        />
+        <input
+          name="semana6"
+          type="number"
+          step="0.01"
+          placeholder="Semana 6"
+          value={form.semana6}
+          onChange={handleChange}
+          style={{ width: 80 }}
+        />
+        <input
+          name="cota_vendedor"
+          type="number"
+          step="0.01"
+          placeholder="% Cota Vendedor"
+          value={form.cota_vendedor}
+          onChange={handleChange}
+          style={{ width: 100 }}
+        />
+        <input
+          name="super_cota"
+          type="number"
+          step="0.01"
+          placeholder="% Super Cota"
+          value={form.super_cota}
+          onChange={handleChange}
+          style={{ width: 100 }}
+        />
+        <input
+          name="cota_ouro"
+          type="number"
+          step="0.01"
+          placeholder="% Cota Ouro"
+          value={form.cota_ouro}
+          onChange={handleChange}
+          style={{ width: 100 }}
+        />
+        <input
+          name="comissao_loja"
+          type="number"
+          step="0.01"
+          placeholder="% Comissão Loja"
+          value={form.comissao_loja}
+          onChange={handleChange}
+          style={{ width: 100 }}
+        />
+        <input
+          name="qtd_vendedor"
+          type="number"
+          placeholder="Qtd Vendedor"
+          value={form.qtd_vendedor}
+          onChange={handleChange}
+          style={{ width: 100 }}
+        />
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button type="submit">{form.id ? "Atualizar" : "Adicionar"}</button>
+          <button type="button" onClick={handleNew}>
+            Novo
+          </button>
+        </div>
       </form>
 
       {/* Tabela */}
@@ -209,7 +308,7 @@ export default function Metas() {
         <p>Carregando...</p>
       ) : (
         <>
-          <table border="1" cellPadding="5" cellSpacing="0" style={{ width: "100%" }}>
+          <table border="1" cellPadding="5" cellSpacing="0" style={{ width: "100%", fontSize: 12 }}>
             <thead>
               <tr>
                 <th>ID</th>
@@ -219,6 +318,13 @@ export default function Metas() {
                 <th>Semana 2</th>
                 <th>Semana 3</th>
                 <th>Semana 4</th>
+                <th>Semana 5</th>
+                <th>Semana 6</th>
+                <th>% Cota Vendedor</th>
+                <th>% Super Cota</th>
+                <th>% Cota Ouro</th>
+                <th>% Comissão Loja</th>
+                <th>Qtd Vendedor</th>
                 <th>Ações</th>
               </tr>
             </thead>
@@ -232,6 +338,13 @@ export default function Metas() {
                   <td>{meta.semana2}</td>
                   <td>{meta.semana3}</td>
                   <td>{meta.semana4}</td>
+                  <td>{meta.semana5}</td>
+                  <td>{meta.semana6}</td>
+                  <td>{meta.cota_vendedor}</td>
+                  <td>{meta.super_cota}</td>
+                  <td>{meta.cota_ouro}</td>
+                  <td>{meta.comissao_loja}</td>
+                  <td>{meta.qtd_vendedor}</td>
                   <td>
                     <button onClick={() => handleEdit(meta)} style={{ marginRight: 5 }}>
                       Editar

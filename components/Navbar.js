@@ -1,21 +1,22 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { useRouter } from "next/router";
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [acessos, setAcessos] = useState(null);
   const { data: session } = useSession();
-  const router = useRouter();
 
   useEffect(() => {
     if (session) {
       fetch("/api/usuarios/acessos")
-        .then(res => res.json())
-        .then(setAcessos)
-        .catch(err => console.error("Erro ao carregar acessos", err));
+        .then((res) => res.json())
+        .then((data) => {
+          console.log("Acessos do usuário:", data);
+          setAcessos(data);
+        })
+        .catch((err) => console.error("Erro ao carregar acessos", err));
     }
   }, [session]);
 
@@ -38,8 +39,8 @@ export default function Navbar() {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-blue-600 p-4 flex items-center justify-between shadow-lg">
       {/* Botão Home */}
       <div className="flex items-center space-x-4">
-        <Link 
-          href="/" 
+        <Link
+          href="/"
           onClick={() => setMenuOpen(false)}
           className="text-white font-bold text-lg hover:underline"
         >
@@ -68,16 +69,28 @@ export default function Navbar() {
               </button>
               {openDropdown === "inventario" && (
                 <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[150px] z-50">
-                  <Link href="/contagem" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/contagem"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     Contagem
                   </Link>
-                  <Link href="/upload" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/upload"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     Upload
                   </Link>
-                  <Link href="/download" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/download"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     Download
                   </Link>
-                  <Link href="/relatorios" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/relatorios"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     Relatórios
                   </Link>
                 </div>
@@ -96,10 +109,16 @@ export default function Navbar() {
               </button>
               {openDropdown === "produtos" && (
                 <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[150px] z-50">
-                  <Link href="/produtos" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/produtos"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     Cadastro Produto
                   </Link>
-                  <Link href="/listar_produtos" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/listar_produtos"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     Lista de Produtos
                   </Link>
                 </div>
@@ -118,16 +137,28 @@ export default function Navbar() {
               </button>
               {openDropdown === "compras" && (
                 <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[150px] z-50">
-                  <Link href="/compras" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/compras"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     Nova Compra
                   </Link>
-                  <Link href="/listar_compras" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/listar_compras"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     Lista de Compras
                   </Link>
-                  <Link href="/entradas" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/entradas"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     Entradas
                   </Link>
-                  <Link href="/estoque" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/estoque"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     Estoque
                   </Link>
                 </div>
@@ -146,10 +177,16 @@ export default function Navbar() {
               </button>
               {openDropdown === "comercial" && (
                 <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[150px] z-50">
-                  <Link href="/orcamento" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/orcamento"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     Orçamentos
                   </Link>
-                  <Link href="/vendas" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/vendas"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     Vendas
                   </Link>
                 </div>
@@ -167,29 +204,59 @@ export default function Navbar() {
                 Serviços ▾
               </button>
               {openDropdown === "servicos" && (
-                <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[150px] z-50">
-                  <Link href="/agendamento" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                <div className="absolute top-full right-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[180px] z-50">
+                  <Link
+                    href="/agendamento"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     📅 Agendamento
                   </Link>
-                  <Link href="/servicos" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/servicos"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     ⚙️ Serviços
                   </Link>
-                  <Link href="/produtos" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/produtos"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     ⚙️ Produtos
                   </Link>
-                  <Link href="/profissionais" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/profissionais"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     👩‍⚕️ Profissionais
                   </Link>
-                  <Link href="/clientes" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/profissionais-horarios"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
+                    🕒 Horários dos Profissionais
+                  </Link>
+                  <Link
+                    href="/clientes"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     👤 Clientes
                   </Link>
-                  <Link href="/faturas" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/faturas"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     💳 Faturas
                   </Link>
-                  <Link href="/dashboard_servico" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/dashboard_servico"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     📊 Dashboard
                   </Link>
-                  <Link href="/agendamentos/completar" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black">
+                  <Link
+                    href="/agendamentos/completar"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                  >
                     📝 Completar Agendamentos
                   </Link>
                 </div>
@@ -207,17 +274,29 @@ export default function Navbar() {
                 Buckman ▾
               </button>
               {openDropdown === "buckman" && (
-                <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[220px] z-50">
-                  <Link href="/buckman/vendedores" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap">
+                <div className="absolute top-full left-0 -translate-x-2 mt-1 bg-blue-700 rounded shadow-lg min-w-[220px] z-50">
+                  <Link
+                    href="/buckman/vendedores"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
+                  >
                     Vendedores
                   </Link>
-                  <Link href="/buckman/metas_loja" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap">
+                  <Link
+                    href="/buckman/meta_loja"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
+                  >
                     Metas Loja
                   </Link>
-                  <Link href="/buckman/calendario" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap">
+                  <Link
+                    href="/buckman/calendario"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
+                  >
                     Calendário
                   </Link>
-                  <Link href="/buckman/relatorio_semanal" className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap">
+                  <Link
+                    href="/relatorio_semanal"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
+                  >
                     Relatório Semanal
                   </Link>
                 </div>
@@ -244,7 +323,11 @@ export default function Navbar() {
           {/* Container com padding top para não ficar atrás da navbar fixa */}
 
           {acessos.dashboard && (
-            <Link href="/dashboard" onClick={() => setMenuOpen(false)} className="px-6 py-3 border-b font-semibold text-yellow-300">
+            <Link
+              href="/dashboard"
+              onClick={() => setMenuOpen(false)}
+              className="px-6 py-3 border-b font-semibold text-yellow-300"
+            >
               Dashboard
             </Link>
           )}
@@ -260,16 +343,32 @@ export default function Navbar() {
               </button>
               {openDropdown === "inventario" && (
                 <div className="bg-blue-800">
-                  <Link href="/contagem" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/contagem"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     Contagem
                   </Link>
-                  <Link href="/upload" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/upload"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     Upload
                   </Link>
-                  <Link href="/download" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/download"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     Download
                   </Link>
-                  <Link href="/relatorios" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/relatorios"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     Relatórios
                   </Link>
                 </div>
@@ -288,10 +387,18 @@ export default function Navbar() {
               </button>
               {openDropdown === "produtos" && (
                 <div className="bg-blue-800">
-                  <Link href="/produtos" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/produtos"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     Cadastro Produto
                   </Link>
-                  <Link href="/listar_produtos" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/listar_produtos"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     Lista de Produtos
                   </Link>
                 </div>
@@ -310,16 +417,32 @@ export default function Navbar() {
               </button>
               {openDropdown === "compras" && (
                 <div className="bg-blue-800">
-                  <Link href="/compras" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/compras"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     Nova Compra
                   </Link>
-                  <Link href="/listar_compras" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/listar_compras"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     Lista de Compras
                   </Link>
-                  <Link href="/entradas" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/entradas"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     Entradas
                   </Link>
-                  <Link href="/estoque" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/estoque"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     Estoque
                   </Link>
                 </div>
@@ -338,10 +461,18 @@ export default function Navbar() {
               </button>
               {openDropdown === "comercial" && (
                 <div className="bg-blue-800">
-                  <Link href="/orcamento" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/orcamento"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     Orçamentos
                   </Link>
-                  <Link href="/vendas" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/vendas"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     Vendas
                   </Link>
                 </div>
@@ -360,28 +491,67 @@ export default function Navbar() {
               </button>
               {openDropdown === "servicos" && (
                 <div className="bg-blue-800">
-                  <Link href="/agendamento" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/agendamento"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     📅 Agendamento
                   </Link>
-                  <Link href="/servicos" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/servicos"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     ⚙️ Serviços
                   </Link>
-                  <Link href="/produtos" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/produtos"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     ⚙️ Produtos
                   </Link>
-                  <Link href="/profissionais" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/profissionais"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     👩‍⚕️ Profissionais
                   </Link>
-                  <Link href="/clientes" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/profissionais-horarios"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
+                    🕒 Horários dos Profissionais
+                  </Link>
+                  <Link
+                    href="/clientes"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     👤 Clientes
                   </Link>
-                  <Link href="/faturas" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/faturas"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     💳 Faturas
                   </Link>
-                  <Link href="/dashboard_servico" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/dashboard_servico"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     📊 Dashboard
                   </Link>
-                  <Link href="/agendamentos/completar" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition">
+                  <Link
+                    href="/agendamentos/completar"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                  >
                     📝 Completar Agendamentos
                   </Link>
                 </div>
@@ -401,16 +571,32 @@ export default function Navbar() {
               </button>
               {openDropdown === "buckman" && (
                 <div className="bg-blue-800">
-                  <Link href="/buckman/vendedores" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap">
+                  <Link
+                    href="/buckman/vendedores"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
+                  >
                     Vendedores
                   </Link>
-                  <Link href="/buckman/metas_loja" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap">
+                  <Link
+                    href="/buckman/meta_loja"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
+                  >
                     Metas Loja
                   </Link>
-                  <Link href="/buckman/calendario" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap">
+                  <Link
+                    href="/buckman/calendario"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
+                  >
                     Calendário
                   </Link>
-                  <Link href="/buckman/relatorio_semanal" onClick={() => setMenuOpen(false)} className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap">
+                  <Link
+                    href="/relatorio_semanal"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
+                  >
                     Relatório Semanal
                   </Link>
                 </div>
@@ -425,7 +611,10 @@ export default function Navbar() {
           </div>
 
           <button
-            onClick={() => { setMenuOpen(false); signOut(); }}
+            onClick={() => {
+              setMenuOpen(false);
+              signOut();
+            }}
             className="mx-6 mt-4 mb-6 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded"
           >
             Sair

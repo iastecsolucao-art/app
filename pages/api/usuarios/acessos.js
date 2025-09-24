@@ -22,7 +22,7 @@ export default async function handler(req, res) {
 
     // tenta buscar acessos
     const acessos = await client.query(
-      "SELECT dashboard, inventario, produtos, compras, comercial, servicos FROM acessos_usuario WHERE usuario_id=$1",
+      "SELECT dashboard, inventario, produtos, compras, comercial, servicos, buckman FROM acessos_usuario WHERE usuario_id=$1",
       [usuario_id]
     );
 
