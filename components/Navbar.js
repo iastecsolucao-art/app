@@ -302,7 +302,7 @@ export default function Navbar() {
                     Calendário
                   </Link>
                   <Link
-                    href="/relatorio_semanal"
+                    href="/relatorio_semanal_dinamico"
                     className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
                   >
                     Relatório Semanal
@@ -607,7 +607,7 @@ export default function Navbar() {
                     Calendário
                   </Link>
                   <Link
-                    href="/relatorio_semanal"
+                    href="/relatorio_semanal_dinamico"
                     onClick={() => setMenuOpen(false)}
                     className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
                   >
