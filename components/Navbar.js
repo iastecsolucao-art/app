@@ -46,6 +46,14 @@ export default function Navbar() {
         >
           🏠 Home
         </Link>
+
+        {/* Logo Buckman - só se tiver acesso */}
+        {acessos?.buckman && (
+          <div className="ml-4 text-white font-bold text-xl select-none">
+            {/* Pode substituir por <img src="/path/to/logo.png" alt="Buckman" /> */}
+            BUCKMAN
+          </div>
+        )}
       </div>
 
       {/* --- DESKTOP --- */}
@@ -274,7 +282,7 @@ export default function Navbar() {
                 Buckman ▾
               </button>
               {openDropdown === "buckman" && (
-                <div className="absolute top-full left-0 -translate-x-2 mt-1 bg-blue-700 rounded shadow-lg min-w-[220px] z-50">
+                <div className="absolute top-full left-0 -translate-x-1 mt-1 bg-blue-700 rounded shadow-lg min-w-[220px] z-50">
                   <Link
                     href="/buckman/vendedores"
                     className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
@@ -298,6 +306,12 @@ export default function Navbar() {
                     className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
                   >
                     Relatório Semanal
+                  </Link>
+                  <Link
+                    href="/relatorio_mensal_vendedor_comissao"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
+                  >
+                    Relatório Mensal por Vendedor
                   </Link>
                 </div>
               )}
@@ -598,6 +612,13 @@ export default function Navbar() {
                     className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
                   >
                     Relatório Semanal
+                  </Link>
+                  <Link
+                    href="/relatorio_mensal_vendedor_comissao"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
+                  >
+                    Relatório Mensal por Vendedor
                   </Link>
                 </div>
               )}
