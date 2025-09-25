@@ -11,8 +11,8 @@ export default async function handler(req, res) {
     if (method === "GET") {
       // Paginação e busca
       const q = query.q || "";
-      const page = parseInt(query.page) || 1;
-      const limit = parseInt(query.limit) || 10;
+      const page = parseInt(query.page, 10) || 1;
+      const limit = parseInt(query.limit, 10) || 10;
       const offset = (page - 1) * limit;
 
       const countResult = await pool.query(
@@ -23,7 +23,15 @@ export default async function handler(req, res) {
       const totalPages = Math.ceil(totalItems / limit);
 
       const result = await pool.query(
-        `SELECT * FROM metas_lojas WHERE loja ILIKE $1 ORDER BY id LIMIT $2 OFFSET $3`,
+        `SELECT id, codigo, loja, mes, ano,
+          semana1, semana2, semana3, semana4, semana5, semana6,
+          cota_vendedor, super_cota, cota_ouro, comissao_loja,
+          qtd_vendedor, valor_cota, valor_super_cota, valor_cota_ouro,
+          cota_semana1, cota_semana2, cota_semana3, cota_semana4, cota_semana5, cota_semana6
+         FROM metas_lojas
+         WHERE loja ILIKE $1
+         ORDER BY id
+         LIMIT $2 OFFSET $3`,
         [`%${q}%`, limit, offset]
       );
 
@@ -55,16 +63,24 @@ export default async function handler(req, res) {
         valor_cota,
         valor_super_cota,
         valor_cota_ouro,
+        cota_semana1,
+        cota_semana2,
+        cota_semana3,
+        cota_semana4,
+        cota_semana5,
+        cota_semana6,
       } = body;
 
       if (method === "POST") {
         const insertQuery = `
           INSERT INTO metas_lojas
-          (codigo, loja, mes, ano, semana1, semana2, semana3, semana4, semana5, semana6,
+          (codigo, loja, mes, ano,
+           semana1, semana2, semana3, semana4, semana5, semana6,
            cota_vendedor, super_cota, cota_ouro, comissao_loja, qtd_vendedor,
-           valor_cota, valor_super_cota, valor_cota_ouro)
+           valor_cota, valor_super_cota, valor_cota_ouro,
+           cota_semana1, cota_semana2, cota_semana3, cota_semana4, cota_semana5, cota_semana6)
           VALUES
-          ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+          ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
           RETURNING *;
         `;
         const values = [
@@ -86,6 +102,12 @@ export default async function handler(req, res) {
           valor_cota,
           valor_super_cota,
           valor_cota_ouro,
+          cota_semana1,
+          cota_semana2,
+          cota_semana3,
+          cota_semana4,
+          cota_semana5,
+          cota_semana6,
         ];
         const result = await pool.query(insertQuery, values);
         return res.status(201).json(result.rows[0]);
@@ -99,8 +121,9 @@ export default async function handler(req, res) {
             codigo=$1, loja=$2, mes=$3, ano=$4,
             semana1=$5, semana2=$6, semana3=$7, semana4=$8, semana5=$9, semana6=$10,
             cota_vendedor=$11, super_cota=$12, cota_ouro=$13, comissao_loja=$14,
-            qtd_vendedor=$15, valor_cota=$16, valor_super_cota=$17, valor_cota_ouro=$18
-          WHERE id=$19
+            qtd_vendedor=$15, valor_cota=$16, valor_super_cota=$17, valor_cota_ouro=$18,
+            cota_semana1=$19, cota_semana2=$20, cota_semana3=$21, cota_semana4=$22, cota_semana5=$23, cota_semana6=$24
+          WHERE id=$25
           RETURNING *;
         `;
         const values = [
@@ -122,6 +145,12 @@ export default async function handler(req, res) {
           valor_cota,
           valor_super_cota,
           valor_cota_ouro,
+          cota_semana1,
+          cota_semana2,
+          cota_semana3,
+          cota_semana4,
+          cota_semana5,
+          cota_semana6,
           id,
         ];
         const result = await pool.query(updateQuery, values);
@@ -130,7 +159,7 @@ export default async function handler(req, res) {
     }
 
     if (method === "DELETE") {
-      const id = parseInt(query.id);
+      const id = parseInt(query.id, 10);
       if (!id) return res.status(400).json({ error: "ID é obrigatório para deletar" });
 
       await pool.query("DELETE FROM metas_lojas WHERE id=$1", [id]);

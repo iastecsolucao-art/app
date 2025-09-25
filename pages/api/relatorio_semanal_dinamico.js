@@ -18,6 +18,15 @@ num_semanas AS (
   WHERE EXTRACT(YEAR FROM data) = $1
     AND EXTRACT(MONTH FROM data) = $2
 ),
+metas AS (
+  SELECT
+    loja,
+    valor_cota,
+    valor_super_cota,
+    valor_cota_ouro
+  FROM metas_lojas
+  WHERE mes = $2 AND ano = $1
+),
 vendas_mes AS (
   SELECT
     v.loja,
@@ -35,51 +44,61 @@ vendas_semana AS (
     SUM(v.totalvalue) AS total_vendido_semana
   FROM view_vendas_completa v
   JOIN calendario c ON v.lastchangedate::date = c.data
-  WHERE c.semana BETWEEN $3 AND $4
+  WHERE c.semana IN (SELECT semana FROM semanas_mes)
   GROUP BY v.loja, c.semana
-),
-metas AS (
-  SELECT
-    loja,
-    valor_cota,
-    valor_super_cota,
-    valor_cota_ouro
-  FROM metas_lojas
-  WHERE mes = $2 AND ano = $1
 ),
 vendas_com_metas AS (
   SELECT
-    vs.loja,
-    vs.semana,
-    vs.total_vendido_semana,
+    m.loja,
+    s.semana,
+    COALESCE(vs.total_vendido_semana, 0) AS total_vendido_semana,
     m.valor_cota / ns.total_semanas AS meta_cota_semana,
     m.valor_super_cota / ns.total_semanas AS meta_super_cota_semana,
     m.valor_cota_ouro / ns.total_semanas AS meta_cota_ouro_semana
-  FROM vendas_semana vs
-  JOIN metas m ON TRIM(UPPER(vs.loja)) = TRIM(UPPER(m.loja))
+  FROM metas m
+  CROSS JOIN semanas_mes s
+  LEFT JOIN vendas_semana vs ON TRIM(UPPER(m.loja)) = TRIM(UPPER(vs.loja)) AND s.semana = vs.semana
   CROSS JOIN num_semanas ns
 ),
 resumo_semana AS (
   SELECT
     loja,
     semana,
-    COALESCE(SUM(total_vendido_semana), 0) AS realizado_semana,
+    SUM(total_vendido_semana) AS realizado_semana,
     MAX(meta_cota_semana) AS meta_cota_semana,
     MAX(meta_super_cota_semana) AS meta_super_cota_semana,
     MAX(meta_cota_ouro_semana) AS meta_cota_ouro_semana
   FROM vendas_com_metas
   GROUP BY loja, semana
+),
+lojas AS (
+  SELECT DISTINCT loja FROM metas
+),
+lojas_semanas AS (
+  SELECT l.loja, s.semana
+  FROM lojas l CROSS JOIN semanas_mes s
+),
+dados_completos AS (
+  SELECT
+    ls.loja,
+    ls.semana,
+    COALESCE(rs.realizado_semana, 0) AS realizado_semana,
+    COALESCE(rs.meta_cota_semana, 0) AS meta_cota_semana,
+    COALESCE(rs.meta_super_cota_semana, 0) AS meta_super_cota_semana,
+    COALESCE(rs.meta_cota_ouro_semana, 0) AS meta_cota_ouro_semana
+  FROM lojas_semanas ls
+  LEFT JOIN resumo_semana rs ON TRIM(UPPER(ls.loja)) = TRIM(UPPER(rs.loja)) AND ls.semana = rs.semana
 )
 SELECT
-  rs.loja,
-  rs.semana,
-  rs.realizado_semana,
-  rs.meta_cota_semana,
-  rs.meta_super_cota_semana,
-  rs.meta_cota_ouro_semana,
-  CASE WHEN rs.meta_cota_semana > 0 THEN ROUND((rs.realizado_semana / rs.meta_cota_semana) * 100, 2) ELSE 0 END AS pct_atingido_cota_semana,
-  CASE WHEN rs.meta_super_cota_semana > 0 THEN ROUND((rs.realizado_semana / rs.meta_super_cota_semana) * 100, 2) ELSE 0 END AS pct_atingido_super_semana,
-  CASE WHEN rs.meta_cota_ouro_semana > 0 THEN ROUND((rs.realizado_semana / rs.meta_cota_ouro_semana) * 100, 2) ELSE 0 END AS pct_atingido_ouro_semana,
+  m.loja,
+  dc.semana,
+  dc.realizado_semana,
+  dc.meta_cota_semana,
+  dc.meta_super_cota_semana,
+  dc.meta_cota_ouro_semana,
+  CASE WHEN dc.meta_cota_semana > 0 THEN ROUND((dc.realizado_semana / dc.meta_cota_semana) * 100, 2) ELSE 0 END AS pct_atingido_cota_semana,
+  CASE WHEN dc.meta_super_cota_semana > 0 THEN ROUND((dc.realizado_semana / dc.meta_super_cota_semana) * 100, 2) ELSE 0 END AS pct_atingido_super_semana,
+  CASE WHEN dc.meta_cota_ouro_semana > 0 THEN ROUND((dc.realizado_semana / dc.meta_cota_ouro_semana) * 100, 2) ELSE 0 END AS pct_atingido_ouro_semana,
   m.valor_cota AS meta_cota_mes,
   m.valor_super_cota AS meta_super_cota_mes,
   m.valor_cota_ouro AS meta_cota_ouro_mes,
@@ -89,10 +108,10 @@ SELECT
   CASE WHEN m.valor_cota_ouro > 0 THEN ROUND((COALESCE(vm.total_vendido_mes, 0) / m.valor_cota_ouro) * 100, 2) ELSE 0 END AS pct_atingido_ouro_mes,
   $2 AS mes,
   $1 AS ano
-FROM resumo_semana rs
-JOIN metas m ON TRIM(UPPER(rs.loja)) = TRIM(UPPER(m.loja))
-LEFT JOIN vendas_mes vm ON TRIM(UPPER(rs.loja)) = TRIM(UPPER(vm.loja))
-ORDER BY rs.loja, rs.semana;
+FROM dados_completos dc
+RIGHT JOIN metas m ON TRIM(UPPER(dc.loja)) = TRIM(UPPER(m.loja))
+LEFT JOIN vendas_mes vm ON TRIM(UPPER(m.loja)) = TRIM(UPPER(vm.loja))
+ORDER BY m.loja, dc.semana;
 `;
 
 export default async function handler(req, res) {
@@ -103,19 +122,17 @@ export default async function handler(req, res) {
 
     const ano = parseInt(req.query.ano) || new Date().getFullYear();
     const mes = parseInt(req.query.mes) || new Date().getMonth() + 1;
-    const semanaInicio = parseInt(req.query.semanaInicio) || 1;
-    const semanaFim = parseInt(req.query.semanaFim) || 53;
 
     const result = await pool.query(QUERY_RELATORIO_SEMANAL_DINAMICO, [
       ano,
       mes,
-      semanaInicio,
-      semanaFim,
     ]);
 
+    // Extrai semanas distintas e ordena
     const semanasSet = new Set(result.rows.map((r) => r.semana));
     const semanas = Array.from(semanasSet).sort((a, b) => a - b);
 
+    // Agrupa dados por loja
     const lojasMap = new Map();
 
     result.rows.forEach((row) => {
@@ -146,6 +163,7 @@ export default async function handler(req, res) {
       };
     });
 
+    // Preenche semanas faltantes com zeros para cada loja
     const data = Array.from(lojasMap.values()).map((loja) => {
       semanas.forEach((sem) => {
         if (!loja.semanas[sem]) {

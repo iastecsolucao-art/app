@@ -22,11 +22,18 @@ export default function Metas() {
     valor_cota: "",
     valor_super_cota: "",
     valor_cota_ouro: "",
+    cota_semana1: "",
+    cota_semana2: "",
+    cota_semana3: "",
+    cota_semana4: "",
+    cota_semana5: "",
+    cota_semana6: "",
   });
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab] = useState("geral");
   const limit = 10;
 
   const fetchMetas = async (pageNumber = 1, searchTerm = "") => {
@@ -87,6 +94,12 @@ export default function Metas() {
       valor_cota: parseFloat(form.valor_cota) || 0,
       valor_super_cota: parseFloat(form.valor_super_cota) || 0,
       valor_cota_ouro: parseFloat(form.valor_cota_ouro) || 0,
+      cota_semana1: parseFloat(form.cota_semana1) || 0,
+      cota_semana2: parseFloat(form.cota_semana2) || 0,
+      cota_semana3: parseFloat(form.cota_semana3) || 0,
+      cota_semana4: parseFloat(form.cota_semana4) || 0,
+      cota_semana5: parseFloat(form.cota_semana5) || 0,
+      cota_semana6: parseFloat(form.cota_semana6) || 0,
     });
 
     try {
@@ -117,6 +130,12 @@ export default function Metas() {
           valor_cota: "",
           valor_super_cota: "",
           valor_cota_ouro: "",
+          cota_semana1: "",
+          cota_semana2: "",
+          cota_semana3: "",
+          cota_semana4: "",
+          cota_semana5: "",
+          cota_semana6: "",
         });
         fetchMetas(page, search);
       } else {
@@ -148,7 +167,14 @@ export default function Metas() {
       valor_cota: meta.valor_cota?.toString() || "",
       valor_super_cota: meta.valor_super_cota?.toString() || "",
       valor_cota_ouro: meta.valor_cota_ouro?.toString() || "",
+      cota_semana1: meta.cota_semana1?.toString() || "",
+      cota_semana2: meta.cota_semana2?.toString() || "",
+      cota_semana3: meta.cota_semana3?.toString() || "",
+      cota_semana4: meta.cota_semana4?.toString() || "",
+      cota_semana5: meta.cota_semana5?.toString() || "",
+      cota_semana6: meta.cota_semana6?.toString() || "",
     });
+    setActiveTab("geral");
   };
 
   const handleDelete = async (id) => {
@@ -186,171 +212,285 @@ export default function Metas() {
       valor_cota: "",
       valor_super_cota: "",
       valor_cota_ouro: "",
+      cota_semana1: "",
+      cota_semana2: "",
+      cota_semana3: "",
+      cota_semana4: "",
+      cota_semana5: "",
+      cota_semana6: "",
     });
+    setActiveTab("geral");
   };
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Manutenção de Metas das Lojas</h1>
+    <div style={{ padding: 20, fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" }}>
+      <h1 style={{ marginBottom: 20, color: "#2c3e50" }}>Manutenção de Metas das Lojas</h1>
 
       {/* Pesquisa */}
-      <form onSubmit={handleSearchSubmit} style={{ marginBottom: 20 }}>
+      <form onSubmit={handleSearchSubmit} style={{ marginBottom: 20, display: "flex", gap: 10 }}>
         <input
           type="text"
           placeholder="Pesquisar por loja"
           value={search}
           onChange={handleSearchChange}
-          style={{ marginRight: 10 }}
+          style={{
+            flexGrow: 1,
+            padding: "8px 12px",
+            borderRadius: 4,
+            border: "1px solid #ccc",
+            fontSize: 14,
+          }}
         />
-        <button type="submit">Pesquisar</button>
+        <button
+          type="submit"
+          style={{
+            padding: "8px 16px",
+            backgroundColor: "#2980b9",
+            color: "white",
+            border: "none",
+            borderRadius: 4,
+            cursor: "pointer",
+          }}
+        >
+          Pesquisar
+        </button>
         <button
           type="button"
           onClick={() => {
             setSearch("");
             fetchMetas(1, "");
           }}
-          style={{ marginLeft: 10 }}
+          style={{
+            padding: "8px 16px",
+            backgroundColor: "#7f8c8d",
+            color: "white",
+            border: "none",
+            borderRadius: 4,
+            cursor: "pointer",
+          }}
         >
           Limpar
         </button>
       </form>
 
+      {/* Abas */}
+      <div style={{ marginBottom: 15, display: "flex", gap: 10 }}>
+        <button
+          onClick={() => setActiveTab("geral")}
+          style={{
+            padding: "8px 16px",
+            borderRadius: 4,
+            border: activeTab === "geral" ? "2px solid #2980b9" : "1px solid #ccc",
+            backgroundColor: activeTab === "geral" ? "#d6e9ff" : "white",
+            cursor: "pointer",
+          }}
+        >
+          Dados Gerais
+        </button>
+        <button
+          onClick={() => setActiveTab("semanas")}
+          style={{
+            padding: "8px 16px",
+            borderRadius: 4,
+            border: activeTab === "semanas" ? "2px solid #2980b9" : "1px solid #ccc",
+            backgroundColor: activeTab === "semanas" ? "#d6e9ff" : "white",
+            cursor: "pointer",
+          }}
+        >
+          Metas Semanais
+        </button>
+      </div>
+
       {/* Formulário */}
       <form
         onSubmit={handleSubmit}
         style={{
-          marginBottom: 20,
+          marginBottom: 30,
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))",
-          gap: "10px",
-          alignItems: "center",
+          gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+          gap: 15,
+          backgroundColor: "#ecf0f1",
+          padding: 20,
+          borderRadius: 8,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
         }}
       >
-        <input
-          name="codigo"
-          placeholder="Código"
-          value={form.codigo}
-          onChange={handleChange}
-          required
-          type="number"
-          style={{ minWidth: 80 }}
-        />
-        <input
-          name="loja"
-          placeholder="Loja"
-          value={form.loja}
-          onChange={handleChange}
-          required
-          style={{ minWidth: 150 }}
-        />
-        <input
-          name="mes"
-          type="number"
-          min="1"
-          max="12"
-          placeholder="Mês"
-          value={form.mes}
-          onChange={handleChange}
-          required
-          style={{ minWidth: 80 }}
-        />
-        <input
-          name="ano"
-          type="number"
-          min="2000"
-          max="2100"
-          placeholder="Ano"
-          value={form.ano}
-          onChange={handleChange}
-          required
-          style={{ minWidth: 100 }}
-        />
-        {[1, 2, 3, 4, 5, 6].map((sem) => (
-          <input
-            key={`semana${sem}`}
-            name={`semana${sem}`}
-            type="number"
-            step="0.01"
-            placeholder={`Semana ${sem}`}
-            value={form[`semana${sem}`]}
-            onChange={handleChange}
-            style={{ minWidth: 80 }}
-          />
-        ))}
-        <input
-          name="cota_vendedor"
-          type="number"
-          step="0.01"
-          placeholder="% Cota Vendedor"
-          value={form.cota_vendedor}
-          onChange={handleChange}
-          style={{ minWidth: 100 }}
-        />
-        <input
-          name="super_cota"
-          type="number"
-          step="0.01"
-          placeholder="% Super Cota"
-          value={form.super_cota}
-          onChange={handleChange}
-          style={{ minWidth: 100 }}
-        />
-        <input
-          name="cota_ouro"
-          type="number"
-          step="0.01"
-          placeholder="% Cota Ouro"
-          value={form.cota_ouro}
-          onChange={handleChange}
-          style={{ minWidth: 100 }}
-        />
-        <input
-          name="comissao_loja"
-          type="number"
-          step="0.01"
-          placeholder="% Comissão Loja"
-          value={form.comissao_loja}
-          onChange={handleChange}
-          style={{ minWidth: 100 }}
-        />
-        <input
-          name="qtd_vendedor"
-          type="number"
-          placeholder="Qtd Vendedor"
-          value={form.qtd_vendedor}
-          onChange={handleChange}
-          style={{ minWidth: 100 }}
-        />
-        <input
-          name="valor_cota"
-          type="number"
-          step="0.01"
-          placeholder="Valor Cota"
-          value={form.valor_cota}
-          onChange={handleChange}
-          style={{ minWidth: 100 }}
-        />
-        <input
-          name="valor_super_cota"
-          type="number"
-          step="0.01"
-          placeholder="Valor Super Cota"
-          value={form.valor_super_cota}
-          onChange={handleChange}
-          style={{ minWidth: 100 }}
-        />
-        <input
-          name="valor_cota_ouro"
-          type="number"
-          step="0.01"
-          placeholder="Valor Cota Ouro"
-          value={form.valor_cota_ouro}
-          onChange={handleChange}
-          style={{ minWidth: 100 }}
-        />
+        {activeTab === "geral" && (
+          <>
+            <input
+              name="codigo"
+              placeholder="Código"
+              value={form.codigo}
+              onChange={handleChange}
+              required
+              type="number"
+              style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+            />
+            <input
+              name="loja"
+              placeholder="Loja"
+              value={form.loja}
+              onChange={handleChange}
+              required
+              style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+            />
+            <input
+              name="mes"
+              type="number"
+              min="1"
+              max="12"
+              placeholder="Mês"
+              value={form.mes}
+              onChange={handleChange}
+              required
+              style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+            />
+            <input
+              name="ano"
+              type="number"
+              min="2000"
+              max="2100"
+              placeholder="Ano"
+              value={form.ano}
+              onChange={handleChange}
+              required
+              style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+            />
+
+            <input
+              name="cota_vendedor"
+              type="number"
+              step="0.01"
+              placeholder="% Cota Vendedor"
+              value={form.cota_vendedor}
+              onChange={handleChange}
+              style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+            />
+            <input
+              name="super_cota"
+              type="number"
+              step="0.01"
+              placeholder="% Super Cota"
+              value={form.super_cota}
+              onChange={handleChange}
+              style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+            />
+            <input
+              name="cota_ouro"
+              type="number"
+              step="0.01"
+              placeholder="% Cota Ouro"
+              value={form.cota_ouro}
+              onChange={handleChange}
+              style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+            />
+            <input
+              name="comissao_loja"
+              type="number"
+              step="0.01"
+              placeholder="% Comissão Loja"
+              value={form.comissao_loja}
+              onChange={handleChange}
+              style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+            />
+            <input
+              name="qtd_vendedor"
+              type="number"
+              placeholder="Qtd Vendedor"
+              value={form.qtd_vendedor}
+              onChange={handleChange}
+              style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+            />
+            <input
+              name="valor_cota"
+              type="number"
+              step="0.01"
+              placeholder="Valor Cota"
+              value={form.valor_cota}
+              onChange={handleChange}
+              style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+            />
+            <input
+              name="valor_super_cota"
+              type="number"
+              step="0.01"
+              placeholder="Valor Super Cota"
+              value={form.valor_super_cota}
+              onChange={handleChange}
+              style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+            />
+            <input
+              name="valor_cota_ouro"
+              type="number"
+              step="0.01"
+              placeholder="Valor Cota Ouro"
+              value={form.valor_cota_ouro}
+              onChange={handleChange}
+              style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+            />
+          </>
+        )}
+
+        {activeTab === "semanas" && (
+          <>
+            {[1, 2, 3, 4, 5, 6].map((sem) => (
+              <input
+                key={`semana${sem}`}
+                name={`semana${sem}`}
+                type="number"
+                step="0.01"
+                placeholder={`Semana ${sem}`}
+                value={form[`semana${sem}`]}
+                onChange={handleChange}
+                style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+              />
+            ))}
+
+            {[1, 2, 3, 4, 5, 6].map((sem) => (
+              <input
+                key={`cota_semana${sem}`}
+                name={`cota_semana${sem}`}
+                type="number"
+                step="0.01"
+                placeholder={`Cota Semana ${sem}`}
+                value={form[`cota_semana${sem}`]}
+                onChange={handleChange}
+                style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+              />
+            ))}
+          </>
+        )}
+
         <div style={{ gridColumn: "span 2", display: "flex", gap: "10px" }}>
-          <button type="submit">{form.id ? "Atualizar" : "Adicionar"}</button>
-          <button type="button" onClick={handleNew}>
+          <button
+            type="submit"
+            style={{
+              flexGrow: 1,
+              padding: "10px",
+              backgroundColor: "#27ae60",
+              color: "white",
+              border: "none",
+              borderRadius: 4,
+              cursor: "pointer",
+              fontWeight: "bold",
+            }}
+          >
+            {form.id ? "Atualizar" : "Adicionar"}
+          </button>
+          <button
+            type="button"
+            onClick={handleNew}
+            style={{
+              flexGrow: 1,
+              padding: "10px",
+              backgroundColor: "#c0392b",
+              color: "white",
+              border: "none",
+              borderRadius: 4,
+              cursor: "pointer",
+              fontWeight: "bold",
+            }}
+          >
             Novo
           </button>
         </div>
@@ -361,66 +501,157 @@ export default function Metas() {
         <p>Carregando...</p>
       ) : (
         <>
-          <table border="1" cellPadding="5" cellSpacing="0" style={{ width: "100%", fontSize: 12 }}>
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              fontSize: 13,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+            }}
+          >
             <thead>
-              <tr>
-                <th>ID</th>
-                <th>Código</th>
-                <th>Loja</th>
-                <th>Mês</th>
-                <th>Ano</th>
-                {[1, 2, 3, 4, 5, 6].map((sem) => (
-                  <th key={`header_semana_${sem}`}>Semana {sem}</th>
-                ))}
-                <th>% Cota Vendedor</th>
-                <th>% Super Cota</th>
-                <th>% Cota Ouro</th>
-                <th>% Comissão Loja</th>
-                <th>Qtd Vendedor</th>
-                <th>Valor Cota</th>
-                <th>Valor Super Cota</th>
-                <th>Valor Cota Ouro</th>
-                <th>Ações</th>
+              <tr style={{ backgroundColor: "#2980b9", color: "white" }}>
+                {/* Colunas fixas */}
+                <th style={{ padding: 8, border: "1px solid #ddd" }}>ID</th>
+                <th style={{ padding: 8, border: "1px solid #ddd" }}>Código</th>
+                <th style={{ padding: 8, border: "1px solid #ddd" }}>Loja</th>
+                <th style={{ padding: 8, border: "1px solid #ddd" }}>Mês</th>
+                <th style={{ padding: 8, border: "1px solid #ddd" }}>Ano</th>
+
+                {activeTab === "geral" && (
+                  <>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>% Cota Vendedor</th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>% Super Cota</th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>% Cota Ouro</th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>% Comissão Loja</th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Qtd Vendedor</th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Valor Cota</th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Valor Super Cota</th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Valor Cota Ouro</th>
+                  </>
+                )}
+
+                {activeTab === "semanas" && (
+                  <>
+                    {[1, 2, 3, 4, 5, 6].map((sem) => (
+                      <th key={`header_semana_${sem}`} style={{ padding: 8, border: "1px solid #ddd" }}>
+                        Semana {sem}
+                      </th>
+                    ))}
+                    {[1, 2, 3, 4, 5, 6].map((sem) => (
+                      <th key={`header_cota_semana_${sem}`} style={{ padding: 8, border: "1px solid #ddd" }}>
+                        Cota Semana {sem}
+                      </th>
+                    ))}
+                  </>
+                )}
+
+                <th style={{ padding: 8, border: "1px solid #ddd" }}>Ações</th>
               </tr>
             </thead>
             <tbody>
               {metas.map((meta) => (
-                <tr key={meta.id}>
-                  <td>{meta.id}</td>
-                  <td>{meta.codigo}</td>
-                  <td>{meta.loja}</td>
-                  <td>{meta.mes}</td>
-                  <td>{meta.ano}</td>
-                  {[1, 2, 3, 4, 5, 6].map((sem) => (
-                    <td key={`semana_valor_${sem}_${meta.id}`}>{meta[`semana${sem}`]}</td>
-                  ))}
-                  <td>{meta.cota_vendedor}</td>
-                  <td>{meta.super_cota}</td>
-                  <td>{meta.cota_ouro}</td>
-                  <td>{meta.comissao_loja}</td>
-                  <td>{meta.qtd_vendedor}</td>
-                  <td>{meta.valor_cota}</td>
-                  <td>{meta.valor_super_cota}</td>
-                  <td>{meta.valor_cota_ouro}</td>
-                  <td>
-                    <button onClick={() => handleEdit(meta)} style={{ marginRight: 5 }}>
+                <tr key={meta.id} style={{ borderBottom: "1px solid #ddd" }}>
+                  {/* Colunas fixas */}
+                  <td style={{ padding: 8, textAlign: "center" }}>{meta.id}</td>
+                  <td style={{ padding: 8, textAlign: "center" }}>{meta.codigo}</td>
+                  <td style={{ padding: 8 }}>{meta.loja}</td>
+                  <td style={{ padding: 8, textAlign: "center" }}>{meta.mes}</td>
+                  <td style={{ padding: 8, textAlign: "center" }}>{meta.ano}</td>
+
+                  {activeTab === "geral" && (
+                    <>
+                      <td style={{ padding: 8, textAlign: "right" }}>{meta.cota_vendedor}</td>
+                      <td style={{ padding: 8, textAlign: "right" }}>{meta.super_cota}</td>
+                      <td style={{ padding: 8, textAlign: "right" }}>{meta.cota_ouro}</td>
+                      <td style={{ padding: 8, textAlign: "right" }}>{meta.comissao_loja}</td>
+                      <td style={{ padding: 8, textAlign: "right" }}>{meta.qtd_vendedor}</td>
+                      <td style={{ padding: 8, textAlign: "right" }}>{meta.valor_cota}</td>
+                      <td style={{ padding: 8, textAlign: "right" }}>{meta.valor_super_cota}</td>
+                      <td style={{ padding: 8, textAlign: "right" }}>{meta.valor_cota_ouro}</td>
+                    </>
+                  )}
+
+                  {activeTab === "semanas" && (
+                    <>
+                      {[1, 2, 3, 4, 5, 6].map((sem) => (
+                        <td key={`semana_valor_${sem}_${meta.id}`} style={{ padding: 8, textAlign: "right" }}>
+                          {meta[`semana${sem}`]}
+                        </td>
+                      ))}
+                      {[1, 2, 3, 4, 5, 6].map((sem) => (
+                        <td key={`cota_semana_valor_${sem}_${meta.id}`} style={{ padding: 8, textAlign: "right" }}>
+                          {meta[`cota_semana${sem}`]}
+                        </td>
+                      ))}
+                    </>
+                  )}
+
+                  <td style={{ padding: 8, textAlign: "center" }}>
+                    <button
+                      onClick={() => handleEdit(meta)}
+                      style={{
+                        marginRight: 5,
+                        padding: "4px 8px",
+                        backgroundColor: "#2980b9",
+                        color: "white",
+                        border: "none",
+                        borderRadius: 4,
+                        cursor: "pointer",
+                      }}
+                    >
                       Editar
                     </button>
-                    <button onClick={() => handleDelete(meta.id)}>Excluir</button>
+                    <button
+                      onClick={() => handleDelete(meta.id)}
+                      style={{
+                        padding: "4px 8px",
+                        backgroundColor: "#c0392b",
+                        color: "white",
+                        border: "none",
+                        borderRadius: 4,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Excluir
+                    </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          <div style={{ marginTop: 10 }}>
-            <button onClick={() => fetchMetas(page - 1, search)} disabled={page <= 1 || loading}>
+          {/* Paginação */}
+          <div style={{ marginTop: 15, display: "flex", justifyContent: "center", gap: 10 }}>
+            <button
+              onClick={() => fetchMetas(page - 1, search)}
+              disabled={page <= 1 || loading}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: page <= 1 || loading ? "#bdc3c7" : "#2980b9",
+                color: "white",
+                border: "none",
+                borderRadius: 4,
+                cursor: page <= 1 || loading ? "not-allowed" : "pointer",
+              }}
+            >
               Anterior
             </button>
-            <span style={{ margin: "0 10px" }}>
+            <span style={{ alignSelf: "center" }}>
               Página {page} de {totalPages}
             </span>
-            <button onClick={() => fetchMetas(page + 1, search)} disabled={page >= totalPages || loading}>
+            <button
+              onClick={() => fetchMetas(page + 1, search)}
+              disabled={page >= totalPages || loading}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: page >= totalPages || loading ? "#bdc3c7" : "#2980b9",
+                color: "white",
+                border: "none",
+                borderRadius: 4,
+                cursor: page >= totalPages || loading ? "not-allowed" : "pointer",
+              }}
+            >
               Próxima
             </button>
           </div>
