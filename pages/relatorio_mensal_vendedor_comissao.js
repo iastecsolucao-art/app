@@ -1,14 +1,75 @@
 import React, { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 
+// Componente customizado para múltipla seleção com checkboxes
+function MultiSelectCheckbox({ options, selectedOptions, setSelectedOptions, label }) {
+  const allSelected = options.length > 0 && selectedOptions.length === options.length;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedOptions([]);
+    } else {
+      setSelectedOptions(options);
+    }
+  };
+
+  const toggleOption = (option) => {
+    if (selectedOptions.includes(option)) {
+      setSelectedOptions(selectedOptions.filter((o) => o !== option));
+    } else {
+      setSelectedOptions([...selectedOptions, option]);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        border: "1px solid #ccc",
+        borderRadius: 4,
+        padding: 8,
+        minWidth: 200,
+        maxHeight: 180,
+        overflowY: "auto",
+        fontSize: 14,
+        marginBottom: 16,
+      }}
+    >
+      <strong>{label}</strong>
+      <div>
+        <label style={{ display: "flex", alignItems: "center", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={toggleSelectAll}
+            style={{ marginRight: 8 }}
+          />
+          Selecionar tudo
+        </label>
+      </div>
+      {options.map((option) => (
+        <div key={option}>
+          <label style={{ display: "flex", alignItems: "center", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={selectedOptions.includes(option)}
+              onChange={() => toggleOption(option)}
+              style={{ marginRight: 8 }}
+            />
+            {option}
+          </label>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function RelatorioVendasVendedorMensalComissao() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [ano, setAno] = useState(new Date().getFullYear());
   const [mes, setMes] = useState(new Date().getMonth() + 1);
-  const [loja, setLoja] = useState("");
-  const [vendedor, setVendedor] = useState("");
-  const [abaAtiva, setAbaAtiva] = useState("semana");
+  const [lojas, setLojas] = useState([]); // múltiplas lojas selecionadas
+  const [vendedores, setVendedores] = useState([]); // múltiplos vendedores selecionados
 
   const [lojasDisponiveis, setLojasDisponiveis] = useState([]);
   const [vendedoresDisponiveis, setVendedoresDisponiveis] = useState([]);
@@ -39,9 +100,10 @@ export default function RelatorioVendasVendedorMensalComissao() {
       const params = new URLSearchParams({
         ano,
         mes,
-        ...(loja ? { loja } : {}),
-        ...(vendedor ? { vendedor } : {}),
       });
+      if (lojas.length > 0) params.append("loja", lojas.join(","));
+      if (vendedores.length > 0) params.append("vendedor", vendedores.join(","));
+
       const res = await fetch(`/api/relatorio_mensal_vendedor_comissao?${params.toString()}`);
       const json = await res.json();
       setData(json.data || []);
@@ -97,7 +159,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
           display: "flex",
           gap: 16,
           flexWrap: "wrap",
-          alignItems: "center",
+          alignItems: "flex-start",
           justifyContent: "center",
         }}
       >
@@ -125,71 +187,54 @@ export default function RelatorioVendasVendedorMensalComissao() {
           />
         </label>
 
-        <label style={{ display: "flex", flexDirection: "column", fontWeight: "600", fontSize: 14 }}>
-          Loja
-          <select
-            value={loja}
-            onChange={(e) => setLoja(e.target.value)}
-            style={{ padding: 6, borderRadius: 4, border: "1px solid #ccc", minWidth: 160 }}
+        <MultiSelectCheckbox
+          label="Loja"
+          options={lojasDisponiveis}
+          selectedOptions={lojas}
+          setSelectedOptions={setLojas}
+        />
+
+        <MultiSelectCheckbox
+          label="Vendedor"
+          options={vendedoresDisponiveis}
+          selectedOptions={vendedores}
+          setSelectedOptions={setVendedores}
+        />
+
+        <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+          <button
+            onClick={fetchData}
+            style={{
+              padding: "8px 20px",
+              backgroundColor: "#1976d2",
+              color: "white",
+              border: "none",
+              borderRadius: 4,
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: 14,
+              marginBottom: 8,
+            }}
           >
-            <option value="">Todas</option>
-            {lojasDisponiveis.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </label>
+            Carregar
+          </button>
 
-        <label style={{ display: "flex", flexDirection: "column", fontWeight: "600", fontSize: 14 }}>
-          Vendedor
-          <select
-            value={vendedor}
-            onChange={(e) => setVendedor(e.target.value)}
-            style={{ padding: 6, borderRadius: 4, border: "1px solid #ccc", minWidth: 160 }}
+          <button
+            onClick={exportarExcel}
+            style={{
+              padding: "8px 20px",
+              backgroundColor: "#4caf50",
+              color: "white",
+              border: "none",
+              borderRadius: 4,
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: 14,
+            }}
           >
-            <option value="">Todos</option>
-            {vendedoresDisponiveis.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <button
-          onClick={fetchData}
-          style={{
-            padding: "8px 20px",
-            backgroundColor: "#1976d2",
-            color: "white",
-            border: "none",
-            borderRadius: 4,
-            cursor: "pointer",
-            fontWeight: "600",
-            fontSize: 14,
-            marginTop: 20,
-          }}
-        >
-          Carregar
-        </button>
-
-        <button
-          onClick={exportarExcel}
-          style={{
-            padding: "8px 20px",
-            backgroundColor: "#4caf50",
-            color: "white",
-            border: "none",
-            borderRadius: 4,
-            cursor: "pointer",
-            fontWeight: "600",
-            fontSize: 14,
-            marginTop: 20,
-          }}
-        >
-          Exportar Excel
-        </button>
+            Exportar Excel
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -255,6 +300,9 @@ function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, tabl
           <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>
             Vendedor
           </th>
+          <th style={{ padding: 12, textAlign: "right" }} rowSpan={2}>
+            Total Comissão
+          </th>
 
           <th
             style={{
@@ -302,10 +350,19 @@ function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, tabl
                   subtotalSemana[sem].comissao += d.comissao ?? 0;
                 });
 
+                const totalComissao = semanas.reduce((acc, sem) => {
+                  const d = detalhePorSemana[sem] || { comissao: 0 };
+                  return acc + (d.comissao ?? 0);
+                }, 0);
+
                 return (
                   <tr key={`${row.seller_name}-${row.loja}`} style={{ borderBottom: "1px solid #ddd" }}>
                     <td style={{ padding: 12, textAlign: "left", fontWeight: "600", color: "#333" }}>{row.loja}</td>
                     <td style={{ padding: 12, textAlign: "left", color: "#555" }}>{row.seller_name}</td>
+
+                    <td style={{ padding: 12, textAlign: "right", fontWeight: "600", color: "#2e7d32" }}>
+                      {totalComissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    </td>
 
                     {semanas.map((sem) => {
                       const d = detalhePorSemana[sem] || { meta: 0, realizado: 0, comissao: 0 };
@@ -334,6 +391,13 @@ function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, tabl
               <tr style={{ fontWeight: "bold", backgroundColor: "#f5f5f5" }}>
                 <td style={{ padding: 12 }} colSpan={2}>
                   Subtotal {loja}
+                </td>
+
+                <td style={{ padding: 12, textAlign: "right", fontWeight: "600", color: "#2e7d32" }}>
+                  {semanas.reduce((acc, sem) => acc + (subtotalSemana[sem].comissao ?? 0), 0).toLocaleString("pt-BR", {
+                    style: "currency",
+                    currency: "BRL",
+                  })}
                 </td>
 
                 {semanas.map((sem) => {
