@@ -27,7 +27,9 @@ export default async function handler(req, res) {
           semana1, semana2, semana3, semana4, semana5, semana6,
           cota_vendedor, super_cota, cota_ouro, comissao_loja,
           qtd_vendedor, valor_cota, valor_super_cota, valor_cota_ouro,
-          cota_semana1, cota_semana2, cota_semana3, cota_semana4, cota_semana5, cota_semana6
+          cota_semana1, cota_semana2, cota_semana3, cota_semana4, cota_semana5, cota_semana6,
+          semana1_qtd_vendedor, semana2_qtd_vendedor, semana3_qtd_vendedor,
+          semana4_qtd_vendedor, semana5_qtd_vendedor, semana6_qtd_vendedor
          FROM metas_lojas
          WHERE loja ILIKE $1
          ORDER BY id
@@ -69,6 +71,12 @@ export default async function handler(req, res) {
         cota_semana4,
         cota_semana5,
         cota_semana6,
+        semana1_qtd_vendedor,
+        semana2_qtd_vendedor,
+        semana3_qtd_vendedor,
+        semana4_qtd_vendedor,
+        semana5_qtd_vendedor,
+        semana6_qtd_vendedor,
       } = body;
 
       if (method === "POST") {
@@ -78,9 +86,13 @@ export default async function handler(req, res) {
            semana1, semana2, semana3, semana4, semana5, semana6,
            cota_vendedor, super_cota, cota_ouro, comissao_loja, qtd_vendedor,
            valor_cota, valor_super_cota, valor_cota_ouro,
-           cota_semana1, cota_semana2, cota_semana3, cota_semana4, cota_semana5, cota_semana6)
+           cota_semana1, cota_semana2, cota_semana3, cota_semana4, cota_semana5, cota_semana6,
+           semana1_qtd_vendedor, semana2_qtd_vendedor, semana3_qtd_vendedor,
+           semana4_qtd_vendedor, semana5_qtd_vendedor, semana6_qtd_vendedor)
           VALUES
-          ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+          ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+           $11,$12,$13,$14,$15,$16,$17,$18,
+           $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)
           RETURNING *;
         `;
         const values = [
@@ -108,6 +120,12 @@ export default async function handler(req, res) {
           cota_semana4,
           cota_semana5,
           cota_semana6,
+          semana1_qtd_vendedor,
+          semana2_qtd_vendedor,
+          semana3_qtd_vendedor,
+          semana4_qtd_vendedor,
+          semana5_qtd_vendedor,
+          semana6_qtd_vendedor,
         ];
         const result = await pool.query(insertQuery, values);
         return res.status(201).json(result.rows[0]);
@@ -122,8 +140,10 @@ export default async function handler(req, res) {
             semana1=$5, semana2=$6, semana3=$7, semana4=$8, semana5=$9, semana6=$10,
             cota_vendedor=$11, super_cota=$12, cota_ouro=$13, comissao_loja=$14,
             qtd_vendedor=$15, valor_cota=$16, valor_super_cota=$17, valor_cota_ouro=$18,
-            cota_semana1=$19, cota_semana2=$20, cota_semana3=$21, cota_semana4=$22, cota_semana5=$23, cota_semana6=$24
-          WHERE id=$25
+            cota_semana1=$19, cota_semana2=$20, cota_semana3=$21, cota_semana4=$22, cota_semana5=$23, cota_semana6=$24,
+            semana1_qtd_vendedor=$25, semana2_qtd_vendedor=$26, semana3_qtd_vendedor=$27,
+            semana4_qtd_vendedor=$28, semana5_qtd_vendedor=$29, semana6_qtd_vendedor=$30
+          WHERE id=$31
           RETURNING *;
         `;
         const values = [
@@ -151,6 +171,12 @@ export default async function handler(req, res) {
           cota_semana4,
           cota_semana5,
           cota_semana6,
+          semana1_qtd_vendedor,
+          semana2_qtd_vendedor,
+          semana3_qtd_vendedor,
+          semana4_qtd_vendedor,
+          semana5_qtd_vendedor,
+          semana6_qtd_vendedor,
           id,
         ];
         const result = await pool.query(updateQuery, values);

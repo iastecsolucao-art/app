@@ -28,6 +28,12 @@ export default function Metas() {
     cota_semana4: "",
     cota_semana5: "",
     cota_semana6: "",
+    semana1_qtd_vendedor: "",
+    semana2_qtd_vendedor: "",
+    semana3_qtd_vendedor: "",
+    semana4_qtd_vendedor: "",
+    semana5_qtd_vendedor: "",
+    semana6_qtd_vendedor: "",
   });
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -100,6 +106,12 @@ export default function Metas() {
       cota_semana4: parseFloat(form.cota_semana4) || 0,
       cota_semana5: parseFloat(form.cota_semana5) || 0,
       cota_semana6: parseFloat(form.cota_semana6) || 0,
+      semana1_qtd_vendedor: parseInt(form.semana1_qtd_vendedor, 10) || 0,
+      semana2_qtd_vendedor: parseInt(form.semana2_qtd_vendedor, 10) || 0,
+      semana3_qtd_vendedor: parseInt(form.semana3_qtd_vendedor, 10) || 0,
+      semana4_qtd_vendedor: parseInt(form.semana4_qtd_vendedor, 10) || 0,
+      semana5_qtd_vendedor: parseInt(form.semana5_qtd_vendedor, 10) || 0,
+      semana6_qtd_vendedor: parseInt(form.semana6_qtd_vendedor, 10) || 0,
     });
 
     try {
@@ -136,6 +148,12 @@ export default function Metas() {
           cota_semana4: "",
           cota_semana5: "",
           cota_semana6: "",
+          semana1_qtd_vendedor: "",
+          semana2_qtd_vendedor: "",
+          semana3_qtd_vendedor: "",
+          semana4_qtd_vendedor: "",
+          semana5_qtd_vendedor: "",
+          semana6_qtd_vendedor: "",
         });
         fetchMetas(page, search);
       } else {
@@ -173,6 +191,12 @@ export default function Metas() {
       cota_semana4: meta.cota_semana4?.toString() || "",
       cota_semana5: meta.cota_semana5?.toString() || "",
       cota_semana6: meta.cota_semana6?.toString() || "",
+      semana1_qtd_vendedor: meta.semana1_qtd_vendedor?.toString() || "",
+      semana2_qtd_vendedor: meta.semana2_qtd_vendedor?.toString() || "",
+      semana3_qtd_vendedor: meta.semana3_qtd_vendedor?.toString() || "",
+      semana4_qtd_vendedor: meta.semana4_qtd_vendedor?.toString() || "",
+      semana5_qtd_vendedor: meta.semana5_qtd_vendedor?.toString() || "",
+      semana6_qtd_vendedor: meta.semana6_qtd_vendedor?.toString() || "",
     });
     setActiveTab("geral");
   };
@@ -218,6 +242,12 @@ export default function Metas() {
       cota_semana4: "",
       cota_semana5: "",
       cota_semana6: "",
+      semana1_qtd_vendedor: "",
+      semana2_qtd_vendedor: "",
+      semana3_qtd_vendedor: "",
+      semana4_qtd_vendedor: "",
+      semana5_qtd_vendedor: "",
+      semana6_qtd_vendedor: "",
     });
     setActiveTab("geral");
   };
@@ -298,6 +328,18 @@ export default function Metas() {
           }}
         >
           Metas Semanais
+        </button>
+        <button
+          onClick={() => setActiveTab("vendedores")}
+          style={{
+            padding: "8px 16px",
+            borderRadius: 4,
+            border: activeTab === "vendedores" ? "2px solid #2980b9" : "1px solid #ccc",
+            backgroundColor: activeTab === "vendedores" ? "#d6e9ff" : "white",
+            cursor: "pointer",
+          }}
+        >
+          Vendedores
         </button>
       </div>
 
@@ -394,14 +436,6 @@ export default function Metas() {
               style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
             />
             <input
-              name="qtd_vendedor"
-              type="number"
-              placeholder="Qtd Vendedor"
-              value={form.qtd_vendedor}
-              onChange={handleChange}
-              style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
-            />
-            <input
               name="valor_cota"
               type="number"
               step="0.01"
@@ -454,6 +488,30 @@ export default function Metas() {
                 step="0.01"
                 placeholder={`Cota Semana ${sem}`}
                 value={form[`cota_semana${sem}`]}
+                onChange={handleChange}
+                style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+              />
+            ))}
+          </>
+        )}
+
+        {activeTab === "vendedores" && (
+          <>
+            <input
+              name="qtd_vendedor"
+              type="number"
+              placeholder="Qtd Vendedor"
+              value={form.qtd_vendedor}
+              onChange={handleChange}
+              style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
+            />
+            {[1, 2, 3, 4, 5, 6].map((sem) => (
+              <input
+                key={`semana_qtd_vendedor${sem}`}
+                name={`semana${sem}_qtd_vendedor`}
+                type="number"
+                placeholder={`Qtd Vendedor Semana ${sem}`}
+                value={form[`semana${sem}_qtd_vendedor`]}
                 onChange={handleChange}
                 style={{ padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
               />
@@ -524,7 +582,6 @@ export default function Metas() {
                     <th style={{ padding: 8, border: "1px solid #ddd" }}>% Super Cota</th>
                     <th style={{ padding: 8, border: "1px solid #ddd" }}>% Cota Ouro</th>
                     <th style={{ padding: 8, border: "1px solid #ddd" }}>% Comissão Loja</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Qtd Vendedor</th>
                     <th style={{ padding: 8, border: "1px solid #ddd" }}>Valor Cota</th>
                     <th style={{ padding: 8, border: "1px solid #ddd" }}>Valor Super Cota</th>
                     <th style={{ padding: 8, border: "1px solid #ddd" }}>Valor Cota Ouro</th>
@@ -541,6 +598,17 @@ export default function Metas() {
                     {[1, 2, 3, 4, 5, 6].map((sem) => (
                       <th key={`header_cota_semana_${sem}`} style={{ padding: 8, border: "1px solid #ddd" }}>
                         Cota Semana {sem}
+                      </th>
+                    ))}
+                  </>
+                )}
+
+                {activeTab === "vendedores" && (
+                  <>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Qtd Vendedor</th>
+                    {[1, 2, 3, 4, 5, 6].map((sem) => (
+                      <th key={`qtd_vendedor_semana_${sem}`} style={{ padding: 8, border: "1px solid #ddd" }}>
+                        Qtd Vendedor S{sem}
                       </th>
                     ))}
                   </>
@@ -565,7 +633,6 @@ export default function Metas() {
                       <td style={{ padding: 8, textAlign: "right" }}>{meta.super_cota}</td>
                       <td style={{ padding: 8, textAlign: "right" }}>{meta.cota_ouro}</td>
                       <td style={{ padding: 8, textAlign: "right" }}>{meta.comissao_loja}</td>
-                      <td style={{ padding: 8, textAlign: "right" }}>{meta.qtd_vendedor}</td>
                       <td style={{ padding: 8, textAlign: "right" }}>{meta.valor_cota}</td>
                       <td style={{ padding: 8, textAlign: "right" }}>{meta.valor_super_cota}</td>
                       <td style={{ padding: 8, textAlign: "right" }}>{meta.valor_cota_ouro}</td>
@@ -582,6 +649,17 @@ export default function Metas() {
                       {[1, 2, 3, 4, 5, 6].map((sem) => (
                         <td key={`cota_semana_valor_${sem}_${meta.id}`} style={{ padding: 8, textAlign: "right" }}>
                           {meta[`cota_semana${sem}`]}
+                        </td>
+                      ))}
+                    </>
+                  )}
+
+                  {activeTab === "vendedores" && (
+                    <>
+                      <td style={{ padding: 8, textAlign: "right" }}>{meta.qtd_vendedor}</td>
+                      {[1, 2, 3, 4, 5, 6].map((sem) => (
+                        <td key={`qtd_vendedor_valor_${sem}_${meta.id}`} style={{ padding: 8, textAlign: "right" }}>
+                          {meta[`semana${sem}_qtd_vendedor`]}
                         </td>
                       ))}
                     </>

@@ -30,7 +30,12 @@ metas_lojas_mes AS (
     m.semana4,
     m.semana5,
     m.semana6,
-    m.qtd_vendedor
+    m.semana1_qtd_vendedor,
+    m.semana2_qtd_vendedor,
+    m.semana3_qtd_vendedor,
+    m.semana4_qtd_vendedor,
+    m.semana5_qtd_vendedor,
+    m.semana6_qtd_vendedor
   FROM public.metas_lojas m
   WHERE m.ano = $1 AND m.mes = $2
     AND ($3::text IS NULL OR m.loja = $3)
@@ -75,12 +80,12 @@ vendas_semana_detalhe AS (
     vsc.semana AS semana_mes,
     vsc.total_vendido_semana,
     CASE vsc.semana
-      WHEN 1 THEN (m.cota_semana1 / NULLIF(m.qtd_vendedor, 0))
-      WHEN 2 THEN (m.cota_semana2 / NULLIF(m.qtd_vendedor, 0))
-      WHEN 3 THEN (m.cota_semana3 / NULLIF(m.qtd_vendedor, 0))
-      WHEN 4 THEN (m.cota_semana4 / NULLIF(m.qtd_vendedor, 0))
-      WHEN 5 THEN (m.cota_semana5 / NULLIF(m.qtd_vendedor, 0))
-      WHEN 6 THEN (m.cota_semana6 / NULLIF(m.qtd_vendedor, 0))
+      WHEN 1 THEN (m.cota_semana1 / NULLIF(m.semana1_qtd_vendedor, 0))
+      WHEN 2 THEN (m.cota_semana2 / NULLIF(m.semana2_qtd_vendedor, 0))
+      WHEN 3 THEN (m.cota_semana3 / NULLIF(m.semana3_qtd_vendedor, 0))
+      WHEN 4 THEN (m.cota_semana4 / NULLIF(m.semana4_qtd_vendedor, 0))
+      WHEN 5 THEN (m.cota_semana5 / NULLIF(m.semana5_qtd_vendedor, 0))
+      WHEN 6 THEN (m.cota_semana6 / NULLIF(m.semana6_qtd_vendedor, 0))
       ELSE 0
     END AS meta_semana,
     m.cota_vendedor,
