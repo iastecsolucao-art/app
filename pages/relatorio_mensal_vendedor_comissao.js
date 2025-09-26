@@ -1,78 +1,18 @@
 import React, { useState, useEffect, useRef } from "react";
+import Select from "react-select";
 import * as XLSX from "xlsx";
-
-// Componente customizado para múltipla seleção com checkboxes
-function MultiSelectCheckbox({ options, selectedOptions, setSelectedOptions, label }) {
-  const allSelected = options.length > 0 && selectedOptions.length === options.length;
-
-  const toggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedOptions([]);
-    } else {
-      setSelectedOptions(options);
-    }
-  };
-
-  const toggleOption = (option) => {
-    if (selectedOptions.includes(option)) {
-      setSelectedOptions(selectedOptions.filter((o) => o !== option));
-    } else {
-      setSelectedOptions([...selectedOptions, option]);
-    }
-  };
-
-  return (
-    <div
-      style={{
-        border: "1px solid #ccc",
-        borderRadius: 4,
-        padding: 8,
-        minWidth: 200,
-        maxHeight: 180,
-        overflowY: "auto",
-        fontSize: 14,
-        marginBottom: 16,
-      }}
-    >
-      <strong>{label}</strong>
-      <div>
-        <label style={{ display: "flex", alignItems: "center", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={allSelected}
-            onChange={toggleSelectAll}
-            style={{ marginRight: 8 }}
-          />
-          Selecionar tudo
-        </label>
-      </div>
-      {options.map((option) => (
-        <div key={option}>
-          <label style={{ display: "flex", alignItems: "center", cursor: "pointer" }}>
-            <input
-              type="checkbox"
-              checked={selectedOptions.includes(option)}
-              onChange={() => toggleOption(option)}
-              style={{ marginRight: 8 }}
-            />
-            {option}
-          </label>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export default function RelatorioVendasVendedorMensalComissao() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [ano, setAno] = useState(new Date().getFullYear());
   const [mes, setMes] = useState(new Date().getMonth() + 1);
-  const [lojas, setLojas] = useState([]); // múltiplas lojas selecionadas
-  const [vendedores, setVendedores] = useState([]); // múltiplos vendedores selecionados
 
   const [lojasDisponiveis, setLojasDisponiveis] = useState([]);
   const [vendedoresDisponiveis, setVendedoresDisponiveis] = useState([]);
+
+  const [lojasSelecionadas, setLojasSelecionadas] = useState([]);
+  const [vendedoresSelecionados, setVendedoresSelecionados] = useState([]);
 
   const tableRef = useRef(null);
 
@@ -85,8 +25,9 @@ export default function RelatorioVendasVendedorMensalComissao() {
         ]);
         const lojas = await resLojas.json();
         const vendedores = await resVendedores.json();
-        setLojasDisponiveis(lojas);
-        setVendedoresDisponiveis(vendedores);
+
+        setLojasDisponiveis(lojas.map((l) => ({ value: l, label: l })));
+        setVendedoresDisponiveis(vendedores.map((v) => ({ value: v, label: v })));
       } catch (error) {
         console.error("Erro ao carregar filtros:", error);
       }
@@ -101,8 +42,10 @@ export default function RelatorioVendasVendedorMensalComissao() {
         ano,
         mes,
       });
-      if (lojas.length > 0) params.append("loja", lojas.join(","));
-      if (vendedores.length > 0) params.append("vendedor", vendedores.join(","));
+      if (lojasSelecionadas.length > 0)
+        params.append("loja", lojasSelecionadas.map((l) => l.value).join(","));
+      if (vendedoresSelecionados.length > 0)
+        params.append("vendedor", vendedoresSelecionados.map((v) => v.value).join(","));
 
       const res = await fetch(`/api/relatorio_mensal_vendedor_comissao?${params.toString()}`);
       const json = await res.json();
@@ -113,10 +56,28 @@ export default function RelatorioVendasVendedorMensalComissao() {
     setLoading(false);
   };
 
+  const exportarExcel = () => {
+    if (!tableRef.current) return;
+    const wb = XLSX.utils.table_to_book(tableRef.current, { sheet: "Relatório" });
+    XLSX.writeFile(wb, `relatorio_vendas_${ano}_${mes}.xlsx`);
+  };
+
   const getColor = (pct) => {
     if (pct >= 100) return "#2e7d32";
     if (pct >= 80) return "#ed6c02";
     return "#d32f2f";
+  };
+
+  // Ajuste: seta baseada em comparação com 100% (meta)
+  const getArrow = (currentPct) => {
+    const meta = 100;
+    if (currentPct > meta) {
+      return <span style={{ color: "#2e7d32", marginLeft: 4 }}>▲</span>;
+    } else if (currentPct < meta) {
+      return <span style={{ color: "#d32f2f", marginLeft: 4 }}>▼</span>;
+    } else {
+      return <span style={{ color: "#999", marginLeft: 4 }}>▶</span>;
+    }
   };
 
   const agruparPorLoja = (data) => {
@@ -131,12 +92,6 @@ export default function RelatorioVendasVendedorMensalComissao() {
   const formatarPercentual = (valor) => {
     if (valor === null || valor === undefined || isNaN(valor)) return "0,00%";
     return valor.toFixed(2).replace(".", ",") + "%";
-  };
-
-  const exportarExcel = () => {
-    if (!tableRef.current) return;
-    const wb = XLSX.utils.table_to_book(tableRef.current, { sheet: "Relatório" });
-    XLSX.writeFile(wb, `relatorio_vendas_${ano}_${mes}.xlsx`);
   };
 
   return (
@@ -187,19 +142,31 @@ export default function RelatorioVendasVendedorMensalComissao() {
           />
         </label>
 
-        <MultiSelectCheckbox
-          label="Loja"
-          options={lojasDisponiveis}
-          selectedOptions={lojas}
-          setSelectedOptions={setLojas}
-        />
+        <div style={{ minWidth: 220 }}>
+          <label style={{ fontWeight: "600", fontSize: 14, marginBottom: 4 }}>Loja</label>
+          <Select
+            options={lojasDisponiveis}
+            value={lojasSelecionadas}
+            onChange={setLojasSelecionadas}
+            isMulti
+            placeholder="Selecione loja(s)"
+            closeMenuOnSelect={false}
+            styles={{ menu: (provided) => ({ ...provided, zIndex: 9999 }) }}
+          />
+        </div>
 
-        <MultiSelectCheckbox
-          label="Vendedor"
-          options={vendedoresDisponiveis}
-          selectedOptions={vendedores}
-          setSelectedOptions={setVendedores}
-        />
+        <div style={{ minWidth: 220 }}>
+          <label style={{ fontWeight: "600", fontSize: 14, marginBottom: 4 }}>Vendedor</label>
+          <Select
+            options={vendedoresDisponiveis}
+            value={vendedoresSelecionados}
+            onChange={setVendedoresSelecionados}
+            isMulti
+            placeholder="Selecione vendedor(es)"
+            closeMenuOnSelect={false}
+            styles={{ menu: (provided) => ({ ...provided, zIndex: 9999 }) }}
+          />
+        </div>
 
         <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
           <button
@@ -246,11 +213,10 @@ export default function RelatorioVendasVendedorMensalComissao() {
       ) : (
         <div
           style={{
-            overflowX: "scroll",
-            overflowY: "visible",
+            overflowX: "auto",
+            overflowY: "hidden",
             whiteSpace: "nowrap",
-            scrollbarWidth: "auto", // Firefox
-            msOverflowStyle: "auto", // IE 10+
+            maxWidth: "100vw",
           }}
         >
           <TabelaSemana
@@ -258,6 +224,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
             getColor={getColor}
             agruparPorLoja={agruparPorLoja}
             formatarPercentual={formatarPercentual}
+            getArrow={getArrow}
             tableRef={tableRef}
           />
         </div>
@@ -266,7 +233,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
   );
 }
 
-function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, tableRef }) {
+function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, getArrow, tableRef }) {
   const grupos = agruparPorLoja(data);
 
   const semanasSet = new Set();
@@ -300,7 +267,45 @@ function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, tabl
           <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>
             Vendedor
           </th>
-          <th style={{ padding: 12, textAlign: "right" }} rowSpan={2}>
+
+          <th
+            style={{
+              padding: 12,
+              textAlign: "right",
+              minWidth: 120,
+            }}
+            rowSpan={2}
+          >
+            Total Meta
+          </th>
+          <th
+            style={{
+              padding: 12,
+              textAlign: "right",
+              minWidth: 120,
+            }}
+            rowSpan={2}
+          >
+            Total Real
+          </th>
+          <th
+            style={{
+              padding: 12,
+              textAlign: "right",
+              minWidth: 80,
+            }}
+            rowSpan={2}
+          >
+            %M
+          </th>
+          <th
+            style={{
+              padding: 12,
+              textAlign: "right",
+              minWidth: 120,
+            }}
+            rowSpan={2}
+          >
             Total Comissão
           </th>
 
@@ -334,6 +339,10 @@ function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, tabl
             return acc;
           }, {});
 
+          let subtotalMeta = 0;
+          let subtotalReal = 0;
+          let subtotalComissao = 0;
+
           return (
             <React.Fragment key={loja}>
               {itens.map((row) => {
@@ -350,23 +359,98 @@ function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, tabl
                   subtotalSemana[sem].comissao += d.comissao ?? 0;
                 });
 
-                const totalComissao = semanas.reduce((acc, sem) => {
-                  const d = detalhePorSemana[sem] || { comissao: 0 };
-                  return acc + (d.comissao ?? 0);
-                }, 0);
+                let totalMetaVendedor = 0;
+                let totalRealVendedor = 0;
+                let totalComissaoVendedor = 0;
+                semanas.forEach((sem) => {
+                  const d = detalhePorSemana[sem] || { meta: 0, realizado: 0, comissao: 0 };
+                  totalMetaVendedor += d.meta ?? 0;
+                  totalRealVendedor += d.realizado ?? 0;
+                  totalComissaoVendedor += d.comissao ?? 0;
+                });
+
+                subtotalMeta += totalMetaVendedor;
+                subtotalReal += totalRealVendedor;
+                subtotalComissao += totalComissaoVendedor;
+
+                const percentualMes = totalMetaVendedor > 0 ? (totalRealVendedor / totalMetaVendedor) * 100 : 0;
 
                 return (
                   <tr key={`${row.seller_name}-${row.loja}`} style={{ borderBottom: "1px solid #ddd" }}>
                     <td style={{ padding: 12, textAlign: "left", fontWeight: "600", color: "#333" }}>{row.loja}</td>
                     <td style={{ padding: 12, textAlign: "left", color: "#555" }}>{row.seller_name}</td>
 
-                    <td style={{ padding: 12, textAlign: "right", fontWeight: "600", color: "#2e7d32" }}>
-                      {totalComissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    <td style={{ padding: 12, textAlign: "right", fontWeight: "600", color: "#d32f2f" }}>
+                      {totalMetaVendedor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    </td>
+                    <td style={{ padding: 12, textAlign: "right", fontWeight: "600", color: "#d32f2f" }}>
+                      {totalRealVendedor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                     </td>
 
-                    {semanas.map((sem) => {
-                      const d = detalhePorSemana[sem] || { meta: 0, realizado: 0, comissao: 0 };
+                    <td
+                      style={{
+                        padding: 12,
+                        textAlign: "right",
+                        fontWeight: "600",
+                        color: getColor(percentualMes),
+                        whiteSpace: "nowrap",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "flex-end",
+                        gap: 6,
+                      }}
+                    >
+                      {percentualMes.toFixed(2).replace(".", ",")}%{getArrow(percentualMes)}
+                    </td>
+
+                    <td
+                      style={{
+                        padding: 12,
+                        textAlign: "right",
+                        fontWeight: "600",
+                        color: totalRealVendedor >= totalMetaVendedor ? "#2e7d32" : "#d32f2f",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                        <span style={{ fontWeight: "600" }}>
+                          {totalComissaoVendedor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </span>
+                        <span style={{ fontSize: 12, color: "#555" }}>
+                          {totalRealVendedor >= totalMetaVendedor ? (
+                            <>
+                              {totalRealVendedor / totalMetaVendedor <= 1.2 && <>🥉 Cota</>}
+                              {totalRealVendedor / totalMetaVendedor > 1.2 && totalRealVendedor / totalMetaVendedor <= 1.4 && <>🥈 Super Cota</>}
+                              {totalRealVendedor / totalMetaVendedor > 1.4 && <>🥇 Cota Ouro</>}
+                            </>
+                          ) : (
+                            <>Abaixo</>
+                          )}
+                        </span>
+                      </div>
+                    </td>
+
+                    {semanas.map((sem, idx) => {
+                      const d = detalhePorSemana[sem] || { meta: 0, realizado: 0, comissao: 0, cota_vendedor: 0, super_cota: 0, cota_ouro: 0 };
                       const pctSemana = d.meta > 0 ? (d.realizado / d.meta) * 100 : 0;
+
+                      let tipoCota = "";
+                      let percentualComissao = 0;
+                      const ratio = d.meta > 0 ? d.realizado / d.meta : 0;
+
+                      if (ratio <= 1.20) {
+                        percentualComissao = d.cota_vendedor ?? 0;
+                        tipoCota = "Cota";
+                      } else if (ratio > 1.20 && ratio <= 1.40) {
+                        percentualComissao = d.super_cota ?? 0;
+                        tipoCota = "Super Cota";
+                      } else if (ratio > 1.40) {
+                        percentualComissao = d.cota_ouro ?? 0;
+                        tipoCota = "Cota Ouro";
+                      }
+
+                      const comissaoCalculada = d.realizado * (percentualComissao / 100);
+
                       return (
                         <React.Fragment key={sem}>
                           <td style={{ border: "1px solid #ccc", padding: 8, color: "#d32f2f" }}>
@@ -375,11 +459,48 @@ function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, tabl
                           <td style={{ border: "1px solid #ccc", padding: 8 }}>
                             {(d.realizado ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                           </td>
-                          <td style={{ border: "1px solid #ccc", padding: 8, color: getColor(pctSemana), fontWeight: "600" }}>
+
+                          <td
+                            style={{
+                              border: "1px solid #ccc",
+                              padding: 8,
+                              color: getColor(pctSemana),
+                              fontWeight: "600",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "flex-end",
+                              gap: 6,
+                            }}
+                          >
                             {formatarPercentual(pctSemana)}
+                            {getArrow(pctSemana)}
                           </td>
-                          <td style={{ border: "1px solid #ccc", padding: 8, fontWeight: "600" }}>
-                            {(d.comissao ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+
+                          <td
+                            style={{
+                              border: "1px solid #ccc",
+                              padding: 8,
+                              fontWeight: "600",
+                              whiteSpace: "nowrap",
+                              color: d.realizado >= d.meta ? "#2e7d32" : "#d32f2f",
+                            }}
+                          >
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                              <span style={{ fontWeight: "600" }}>
+                                {comissaoCalculada.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                              </span>
+                              <span style={{ fontSize: 12, color: "#555" }}>
+                                {d.realizado >= d.meta ? (
+                                  <>
+                                    {ratio <= 1.2 && <>🥉 Cota</>}
+                                    {ratio > 1.2 && ratio <= 1.4 && <>🥈 Super Cota</>}
+                                    {ratio > 1.4 && <>🥇 Cota Ouro</>}
+                                  </>
+                                ) : (
+                                  <>Abaixo</>
+                                )}
+                              </span>
+                            </div>
                           </td>
                         </React.Fragment>
                       );
@@ -387,17 +508,89 @@ function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, tabl
                   </tr>
                 );
               })}
-
               <tr style={{ fontWeight: "bold", backgroundColor: "#f5f5f5" }}>
                 <td style={{ padding: 12 }} colSpan={2}>
                   Subtotal {loja}
                 </td>
 
-                <td style={{ padding: 12, textAlign: "right", fontWeight: "600", color: "#2e7d32" }}>
-                  {semanas.reduce((acc, sem) => acc + (subtotalSemana[sem].comissao ?? 0), 0).toLocaleString("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  })}
+                <td
+                  style={{
+                    padding: 12,
+                    textAlign: "right",
+                    fontWeight: "600",
+                    color: "#d32f2f",
+                    minWidth: 120,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {subtotalMeta.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                </td>
+
+                <td
+                  style={{
+                    padding: 12,
+                    textAlign: "right",
+                    fontWeight: "600",
+                    color: "#d32f2f",
+                    minWidth: 120,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {subtotalReal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                </td>
+
+                <td
+                  style={{
+                    padding: 12,
+                    textAlign: "right",
+                    fontWeight: "600",
+                    color: getColor(subtotalMeta > 0 ? (subtotalReal / subtotalMeta) * 100 : 0),
+                    whiteSpace: "nowrap",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "flex-end",
+                    gap: 6,
+                  }}
+                >
+                  {subtotalMeta > 0 ? (
+                    <>
+                      {((subtotalReal / subtotalMeta) * 100).toFixed(2).replace(".", ",")}%
+                      {getArrow((subtotalReal / subtotalMeta) * 100, null)}
+                      {(subtotalReal / subtotalMeta) * 100 >= 100 && (subtotalReal / subtotalMeta) * 100 <= 120 && <span>🥉</span>}
+                      {(subtotalReal / subtotalMeta) * 100 > 120 && (subtotalReal / subtotalMeta) * 100 <= 140 && <span>🥈</span>}
+                      {(subtotalReal / subtotalMeta) * 100 > 140 && <span>🥇</span>}
+                    </>
+                  ) : (
+                    "Abaixo"
+                  )}
+                </td>
+
+                <td
+                  style={{
+                    padding: 12,
+                    textAlign: "right",
+                    fontWeight: "600",
+                    color: subtotalReal >= subtotalMeta ? "#2e7d32" : "#d32f2f",
+                    minWidth: 120,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                    <span style={{ fontWeight: "600" }}>
+                      {subtotalComissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    </span>
+                    <span style={{ fontSize: 12, color: "#555" }}>
+                      {subtotalReal >= subtotalMeta ? (
+                        <>
+                          {subtotalReal / subtotalMeta <= 1.2 && <>🥉 Cota</>}
+                          {subtotalReal / subtotalMeta > 1.2 && subtotalReal / subtotalMeta <= 1.4 && <>🥈 Super Cota</>}
+                          {subtotalReal / subtotalMeta > 1.4 && <>🥇 Cota Ouro</>}
+                        </>
+                      ) : (
+                        <>Abaixo</>
+                      )}
+                    </span>
+                  </div>
                 </td>
 
                 {semanas.map((sem) => {
@@ -411,11 +604,46 @@ function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, tabl
                       <td style={{ border: "1px solid #ccc", padding: 8 }}>
                         {s.realizado.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                       </td>
-                      <td style={{ border: "1px solid #ccc", padding: 8, color: getColor(pct), fontWeight: "600" }}>
+
+                      <td
+                        style={{
+                          border: "1px solid #ccc",
+                          padding: 8,
+                          fontWeight: "600",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "flex-end",
+                          gap: 6,
+                          color: getColor(pct),
+                        }}
+                      >
                         {formatarPercentual(pct)}
                       </td>
-                      <td style={{ border: "1px solid #ccc", padding: 8, fontWeight: "600" }}>
-                        {s.comissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+
+                      <td
+                        style={{
+                          border: "1px solid #ccc",
+                          padding: 8,
+                          fontWeight: "600",
+                          color: s.realizado >= s.meta ? "#2e7d32" : "#d32f2f",
+                        }}
+                      >
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                          <span style={{ fontWeight: "600" }}>
+                            {s.comissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                          </span>
+                          <span style={{ fontSize: 12, color: "#555" }}>
+                            {s.realizado >= s.meta ? (
+                              <>
+                                {s.realizado / s.meta <= 1.2 && <>🥉 Cota</>}
+                                {s.realizado / s.meta > 1.2 && s.realizado / s.meta <= 1.4 && <>🥈 Super Cota</>}
+                                {s.realizado / s.meta > 1.4 && <>🥇 Cota Ouro</>}
+                              </>
+                            ) : (
+                              <>Abaixo</>
+                            )}
+                          </span>
+                        </div>
                       </td>
                     </React.Fragment>
                   );

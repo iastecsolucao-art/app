@@ -8,6 +8,9 @@ const QUERY_VENDAS_VENDEDOR_MENSAL_FILTROS = `
 WITH metas_lojas_mes AS (
   SELECT
     m.loja,
+    m.cota_vendedor,
+    m.super_cota,
+    m.cota_ouro,
     m.cota_semana1,
     m.cota_semana2,
     m.cota_semana3,
@@ -19,17 +22,11 @@ WITH metas_lojas_mes AS (
     m.semana3,
     m.semana4,
     m.semana5,
-    m.semana6
+    m.semana6,
+    m.qtd_vendedor
   FROM public.metas_lojas m
   WHERE m.ano = $1 AND m.mes = $2
     AND ($3::text IS NULL OR m.loja = $3)
-),
-qtd_vendedores AS (
-  SELECT loja, COUNT(DISTINCT seller_name) AS qtd
-  FROM view_vendas_completa
-  WHERE EXTRACT(YEAR FROM lastchangedate) = $1
-    AND EXTRACT(MONTH FROM lastchangedate) = $2
-  GROUP BY loja
 ),
 vendas_semanais AS (
   SELECT
@@ -70,39 +67,65 @@ vendas_semana_detalhe AS (
     vsc.semana AS semana_mes,
     vsc.total_vendido_semana,
     CASE vsc.semana
-      WHEN 1 THEN (m.cota_semana1 / NULLIF(qv.qtd, 0))
-      WHEN 2 THEN (m.cota_semana2 / NULLIF(qv.qtd, 0))
-      WHEN 3 THEN (m.cota_semana3 / NULLIF(qv.qtd, 0))
-      WHEN 4 THEN (m.cota_semana4 / NULLIF(qv.qtd, 0))
-      WHEN 5 THEN (m.cota_semana5 / NULLIF(qv.qtd, 0))
-      WHEN 6 THEN (m.cota_semana6 / NULLIF(qv.qtd, 0))
+      WHEN 1 THEN (m.cota_semana1 / NULLIF(m.qtd_vendedor, 0))
+      WHEN 2 THEN (m.cota_semana2 / NULLIF(m.qtd_vendedor, 0))
+      WHEN 3 THEN (m.cota_semana3 / NULLIF(m.qtd_vendedor, 0))
+      WHEN 4 THEN (m.cota_semana4 / NULLIF(m.qtd_vendedor, 0))
+      WHEN 5 THEN (m.cota_semana5 / NULLIF(m.qtd_vendedor, 0))
+      WHEN 6 THEN (m.cota_semana6 / NULLIF(m.qtd_vendedor, 0))
       ELSE 0
     END AS meta_semana,
+    m.cota_vendedor,
+    m.super_cota,
+    m.cota_ouro,
     CASE vsc.semana
-      WHEN 1 THEN vsc.total_vendido_semana * (m.semana1::numeric / 100.0)
-      WHEN 2 THEN vsc.total_vendido_semana * (m.semana2::numeric / 100.0)
-      WHEN 3 THEN vsc.total_vendido_semana * (m.semana3::numeric / 100.0)
-      WHEN 4 THEN vsc.total_vendido_semana * (m.semana4::numeric / 100.0)
-      WHEN 5 THEN vsc.total_vendido_semana * (m.semana5::numeric / 100.0)
-      WHEN 6 THEN vsc.total_vendido_semana * (m.semana6::numeric / 100.0)
+      WHEN 1 THEN (m.semana1::numeric / 100.0)
+      WHEN 2 THEN (m.semana2::numeric / 100.0)
+      WHEN 3 THEN (m.semana3::numeric / 100.0)
+      WHEN 4 THEN (m.semana4::numeric / 100.0)
+      WHEN 5 THEN (m.semana5::numeric / 100.0)
+      WHEN 6 THEN (m.semana6::numeric / 100.0)
       ELSE 0
-    END AS comissao_semana
+    END AS percentual_comissao_semana
   FROM vendas_semanais_completas vsc
   JOIN metas_lojas_mes m ON vsc.loja = m.loja
-  LEFT JOIN qtd_vendedores qv ON vsc.loja = qv.loja
 )
 SELECT
   v.seller_name,
   v.loja,
   SUM(v.total_vendido_semana) AS realizado_mes,
   SUM(v.meta_semana) AS meta_mes,
-  SUM(v.comissao_semana) AS comissao_total_mes,
+  SUM(
+    CASE 
+      WHEN v.meta_semana = 0 THEN 0
+      ELSE
+        v.total_vendido_semana * 
+        CASE
+          WHEN v.total_vendido_semana / v.meta_semana <= 1.20 THEN v.cota_vendedor / 100.0
+          WHEN v.total_vendido_semana / v.meta_semana > 1.20 AND v.total_vendido_semana / v.meta_semana <= 1.40 THEN v.super_cota / 100.0
+          ELSE v.cota_ouro / 100.0
+        END
+    END
+  ) AS comissao_total_mes,
   COALESCE(json_agg(
     json_build_object(
       'semana', 'S' || v.semana_mes,
       'realizado', v.total_vendido_semana,
       'meta', v.meta_semana,
-      'comissao', v.comissao_semana
+      'comissao', 
+        CASE 
+          WHEN v.meta_semana = 0 THEN 0
+          ELSE
+            v.total_vendido_semana * 
+            CASE
+              WHEN v.total_vendido_semana / v.meta_semana <= 1.20 THEN v.cota_vendedor / 100.0
+              WHEN v.total_vendido_semana / v.meta_semana > 1.20 AND v.total_vendido_semana / v.meta_semana <= 1.40 THEN v.super_cota / 100.0
+              ELSE v.cota_ouro / 100.0
+            END
+        END,
+      'cota_vendedor', v.cota_vendedor,
+      'super_cota', v.super_cota,
+      'cota_ouro', v.cota_ouro
     ) ORDER BY v.semana_mes
   ) FILTER (WHERE v.semana_mes IS NOT NULL), '[]') AS detalhe_semanal
 FROM vendas_semana_detalhe v
