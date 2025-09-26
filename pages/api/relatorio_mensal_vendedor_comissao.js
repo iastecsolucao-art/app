@@ -5,12 +5,19 @@ const pool = new Pool({
 });
 
 const QUERY_VENDAS_VENDEDOR_MENSAL_FILTROS = `
-WITH metas_lojas_mes AS (
+WITH parametros AS (
+  SELECT valor_atual::int AS semanas
+  FROM parametros
+  WHERE parametro = 'SEMANAS'
+  LIMIT 1
+),
+metas_lojas_mes AS (
   SELECT
     m.loja,
     m.cota_vendedor,
     m.super_cota,
     m.cota_ouro,
+    m.abaixo_cota,
     m.cota_semana1,
     m.cota_semana2,
     m.cota_semana3,
@@ -55,8 +62,9 @@ vendas_semanais_completas AS (
   ) v
   CROSS JOIN (
     SELECT DISTINCT (EXTRACT(WEEK FROM data) - EXTRACT(WEEK FROM DATE_TRUNC('month', data)) + 1)::int AS semana
-    FROM calendario
+    FROM calendario, parametros p
     WHERE EXTRACT(YEAR FROM data) = $1 AND EXTRACT(MONTH FROM data) = $2
+      AND (EXTRACT(WEEK FROM data) - EXTRACT(WEEK FROM DATE_TRUNC('month', data)) + 1) <= p.semanas
   ) s
   LEFT JOIN vendas_semanais vs ON v.loja = vs.loja AND v.seller_name = vs.seller_name AND s.semana = vs.semana_mes
 ),
@@ -78,6 +86,7 @@ vendas_semana_detalhe AS (
     m.cota_vendedor,
     m.super_cota,
     m.cota_ouro,
+    m.abaixo_cota,
     CASE vsc.semana
       WHEN 1 THEN (m.semana1::numeric / 100.0)
       WHEN 2 THEN (m.semana2::numeric / 100.0)
@@ -98,6 +107,8 @@ SELECT
   SUM(
     CASE 
       WHEN v.meta_semana = 0 THEN 0
+      WHEN v.total_vendido_semana < v.meta_semana THEN
+        v.total_vendido_semana * (v.abaixo_cota / 100.0)
       ELSE
         v.total_vendido_semana * 
         CASE
@@ -115,6 +126,8 @@ SELECT
       'comissao', 
         CASE 
           WHEN v.meta_semana = 0 THEN 0
+          WHEN v.total_vendido_semana < v.meta_semana THEN
+            v.total_vendido_semana * (v.abaixo_cota / 100.0)
           ELSE
             v.total_vendido_semana * 
             CASE
@@ -125,7 +138,8 @@ SELECT
         END,
       'cota_vendedor', v.cota_vendedor,
       'super_cota', v.super_cota,
-      'cota_ouro', v.cota_ouro
+      'cota_ouro', v.cota_ouro,
+      'abaixo_cota', v.abaixo_cota
     ) ORDER BY v.semana_mes
   ) FILTER (WHERE v.semana_mes IS NOT NULL), '[]') AS detalhe_semanal
 FROM vendas_semana_detalhe v

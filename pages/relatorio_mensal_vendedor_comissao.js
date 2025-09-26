@@ -68,7 +68,6 @@ export default function RelatorioVendasVendedorMensalComissao() {
     return "#d32f2f";
   };
 
-  // Ajuste: seta baseada em comparação com 100% (meta)
   const getArrow = (currentPct) => {
     const meta = 100;
     if (currentPct > meta) {
@@ -363,9 +362,11 @@ function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, getA
                 let totalRealVendedor = 0;
                 let totalComissaoVendedor = 0;
                 semanas.forEach((sem) => {
-                  const d = detalhePorSemana[sem] || { meta: 0, realizado: 0, comissao: 0 };
+                  const d = detalhePorSemana[sem] || { meta: 0, realizado: 0, comissao: 0, abaixo_cota: 0 };
                   totalMetaVendedor += d.meta ?? 0;
                   totalRealVendedor += d.realizado ?? 0;
+
+                  // Use comissão já calculada no backend
                   totalComissaoVendedor += d.comissao ?? 0;
                 });
 
@@ -430,26 +431,24 @@ function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, getA
                       </div>
                     </td>
 
-                    {semanas.map((sem, idx) => {
-                      const d = detalhePorSemana[sem] || { meta: 0, realizado: 0, comissao: 0, cota_vendedor: 0, super_cota: 0, cota_ouro: 0 };
+                    {semanas.map((sem) => {
+                      const d = detalhePorSemana[sem] || { meta: 0, realizado: 0, comissao: 0, cota_vendedor: 0, super_cota: 0, cota_ouro: 0, abaixo_cota: 0 };
                       const pctSemana = d.meta > 0 ? (d.realizado / d.meta) * 100 : 0;
 
-                      let tipoCota = "";
-                      let percentualComissao = 0;
                       const ratio = d.meta > 0 ? d.realizado / d.meta : 0;
+                      let tipoCota = "";
 
-                      if (ratio <= 1.20) {
-                        percentualComissao = d.cota_vendedor ?? 0;
+                      if (ratio < 1) {
+                        tipoCota = "Abaixo";
+                      } else if (ratio <= 1.20) {
                         tipoCota = "Cota";
-                      } else if (ratio > 1.20 && ratio <= 1.40) {
-                        percentualComissao = d.super_cota ?? 0;
+                      } else if (ratio <= 1.40) {
                         tipoCota = "Super Cota";
-                      } else if (ratio > 1.40) {
-                        percentualComissao = d.cota_ouro ?? 0;
+                      } else {
                         tipoCota = "Cota Ouro";
                       }
 
-                      const comissaoCalculada = d.realizado * (percentualComissao / 100);
+                      const comissaoCalculada = d.comissao ?? 0;
 
                       return (
                         <React.Fragment key={sem}>
@@ -490,14 +489,14 @@ function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, getA
                                 {comissaoCalculada.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                               </span>
                               <span style={{ fontSize: 12, color: "#555" }}>
-                                {d.realizado >= d.meta ? (
-                                  <>
-                                    {ratio <= 1.2 && <>🥉 Cota</>}
-                                    {ratio > 1.2 && ratio <= 1.4 && <>🥈 Super Cota</>}
-                                    {ratio > 1.4 && <>🥇 Cota Ouro</>}
-                                  </>
-                                ) : (
+                                {tipoCota === "Abaixo" ? (
                                   <>Abaixo</>
+                                ) : tipoCota === "Cota" ? (
+                                  <>🥉 Cota</>
+                                ) : tipoCota === "Super Cota" ? (
+                                  <>🥈 Super Cota</>
+                                ) : (
+                                  <>🥇 Cota Ouro</>
                                 )}
                               </span>
                             </div>
