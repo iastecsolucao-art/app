@@ -38,7 +38,7 @@ metas_lojas_mes AS (
     m.semana6_qtd_vendedor
   FROM public.metas_lojas m
   WHERE m.ano = $1 AND m.mes = $2
-    AND ($3::text IS NULL OR m.loja = $3)
+    AND ($3::text[] IS NULL OR m.loja = ANY($3::text[]))
 ),
 vendas_semanais AS (
   SELECT
@@ -46,12 +46,13 @@ vendas_semanais AS (
     v.loja,
     (EXTRACT(WEEK FROM c.data) - EXTRACT(WEEK FROM DATE_TRUNC('month', c.data)) + 1)::int AS semana_mes,
     SUM(v.totalvalue) AS total_vendido_semana
-  FROM view_vendas_completa v
-  JOIN calendario c ON v.lastchangedate::date = c.data
+  FROM invoices_saida_com_entradas v
+  JOIN calendario c ON v.invoicedate::date = c.data
   WHERE EXTRACT(YEAR FROM c.data) = $1
     AND EXTRACT(MONTH FROM c.data) = $2
-    AND ($3::text IS NULL OR v.loja = $3)
-    AND ($4::text IS NULL OR v.seller_name = $4)
+    AND ($3::text[] IS NULL OR v.loja = ANY($3::text[]))
+    AND ($4::text[] IS NULL OR v.seller_name = ANY($4::text[]))
+    AND ($5::int[] IS NULL OR EXTRACT(DAY FROM c.data) = ANY($5::int[]))
   GROUP BY v.seller_name, v.loja, semana_mes
 ),
 vendas_semanais_completas AS (
@@ -61,15 +62,16 @@ vendas_semanais_completas AS (
     s.semana,
     COALESCE(vs.total_vendido_semana, 0) AS total_vendido_semana
   FROM (
-    SELECT DISTINCT loja, seller_name FROM view_vendas_completa
-    WHERE ($3::text IS NULL OR loja = $3)
-      AND ($4::text IS NULL OR seller_name = $4)
+    SELECT DISTINCT loja, seller_name FROM invoices_saida_com_entradas
+    WHERE ($3::text[] IS NULL OR loja = ANY($3::text[]))
+      AND ($4::text[] IS NULL OR seller_name = ANY($4::text[]))
   ) v
   CROSS JOIN (
     SELECT DISTINCT (EXTRACT(WEEK FROM data) - EXTRACT(WEEK FROM DATE_TRUNC('month', data)) + 1)::int AS semana
     FROM calendario, parametros p
     WHERE EXTRACT(YEAR FROM data) = $1 AND EXTRACT(MONTH FROM data) = $2
       AND (EXTRACT(WEEK FROM data) - EXTRACT(WEEK FROM DATE_TRUNC('month', data)) + 1) <= p.semanas
+      AND ($5::int[] IS NULL OR EXTRACT(DAY FROM data) = ANY($5::int[]))
   ) s
   LEFT JOIN vendas_semanais vs ON v.loja = vs.loja AND v.seller_name = vs.seller_name AND s.semana = vs.semana_mes
 ),
@@ -160,10 +162,19 @@ export default async function handler(req, res) {
 
     const ano = parseInt(req.query.ano) || new Date().getFullYear();
     const mes = parseInt(req.query.mes) || new Date().getMonth() + 1;
-    const loja = req.query.loja || null;
-    const vendedor = req.query.vendedor || null;
 
-    const result = await pool.query(QUERY_VENDAS_VENDEDOR_MENSAL_FILTROS, [ano, mes, loja, vendedor]);
+    // Converte string CSV em array, ou null se vazio
+    const parseCsvParam = (param) => {
+      if (!param) return null;
+      if (Array.isArray(param)) return param;
+      return param.split(",").map((v) => v.trim()).filter((v) => v.length > 0);
+    };
+
+    const lojas = parseCsvParam(req.query.loja);
+    const vendedores = parseCsvParam(req.query.vendedor);
+    const dias = parseCsvParam(req.query.dia)?.map((d) => parseInt(d, 10)) || null;
+
+    const result = await pool.query(QUERY_VENDAS_VENDEDOR_MENSAL_FILTROS, [ano, mes, lojas, vendedores, dias]);
 
     res.status(200).json({ data: result.rows, mes, ano });
   } catch (error) {
