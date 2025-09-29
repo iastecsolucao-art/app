@@ -46,7 +46,7 @@ vendas_semanais AS (
     v.loja,
     (EXTRACT(WEEK FROM c.data) - EXTRACT(WEEK FROM DATE_TRUNC('month', c.data)) + 1)::int AS semana_mes,
     SUM(v.totalvalue) AS total_vendido_semana
-  FROM invoices_saida_com_entradas v
+  FROM view_vendas_liquida v
   JOIN calendario c ON v.invoicedate::date = c.data
   WHERE EXTRACT(YEAR FROM c.data) = $1
     AND EXTRACT(MONTH FROM c.data) = $2
