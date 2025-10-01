@@ -11,7 +11,7 @@ export default function Home() {
   const [trialEmail, setTrialEmail] = useState("");
   const [acessos, setAcessos] = useState(null);
 
-  // 🔹 Buscar acessos do usuário logado
+  // Buscar acessos do usuário logado
   useEffect(() => {
     if (session) {
       fetch("/api/usuarios/acessos")
@@ -21,7 +21,7 @@ export default function Home() {
     }
   }, [session]);
 
-  // 🔹 Login manual
+  // Login manual
   async function handleCredLogin(e) {
     e.preventDefault();
     await signIn("credentials", {
@@ -32,7 +32,7 @@ export default function Home() {
     });
   }
 
-  // 🔹 Ativar Trial
+  // Ativar Trial
   async function handleTrialAccess(e) {
     e.preventDefault();
     const res = await fetch("/api/free-trial", {
@@ -53,7 +53,7 @@ export default function Home() {
     }
   }
 
-  // 🔹 Format Date
+  // Format Date
   function formatDate(dateString) {
     if (!dateString) return null;
     const d = new Date(dateString);
@@ -64,7 +64,16 @@ export default function Home() {
     });
   }
 
-  // 🔹 Se sessão ainda carregando → evita tela "..."
+  // Calcula dias restantes para expiração
+  const diasRestantes = session?.user?.expiracao
+    ? Math.ceil(
+        (new Date(session.user.expiracao) - new Date()) / (1000 * 60 * 60 * 24)
+      )
+    : null;
+
+  const expirado = diasRestantes !== null && diasRestantes < 0;
+
+  // Se sessão ainda carregando → evita tela "..."
   if (status === "loading") {
     return (
       <div className="flex items-center justify-center h-screen text-gray-600">
@@ -73,16 +82,11 @@ export default function Home() {
     );
   }
 
-  const expirado =
-    session?.user?.expiracao &&
-    new Date(session.user.expiracao) < new Date();
-
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
       <main className="flex flex-col flex-1 items-center justify-center text-center px-6">
-
         {!session ? (
-          // 🔹 Tela login
+          // Tela login
           <div className="bg-white shadow-md rounded px-8 pt-6 pb-8 max-w-md w-full">
             <h2 className="text-xl font-bold mb-4">
               Bem-vindo ao <span className="text-blue-600">App IasTec</span>
@@ -168,7 +172,7 @@ export default function Home() {
             )}
           </div>
         ) : (
-          // 🔹 Tela logado
+          // Tela logado
           <div className="bg-white shadow-md rounded px-8 pt-6 pb-8 max-w-xl w-full">
             <h2 className="text-2xl font-bold mb-4">
               👋 Bem-vindo, {session.user?.name || session.user?.email}
@@ -181,17 +185,14 @@ export default function Home() {
               </p>
             )}
 
-            {session.user?.role === "trial" ? (
-              <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
-                🚀 Você está usando a <b>versão de teste</b>.
-              </div>
-            ) : (
+            {/* Mostrar mensagem do Google só se expirar em 10 dias ou menos */}
+            {session.user?.role !== "trial" && diasRestantes !== null && diasRestantes <= 10 && (
               <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
                 ✅ Seu acesso via Google é válido por 10 dias.
               </div>
             )}
 
-            {/* 🔹 Botões dinâmicos conforme acessos */}
+            {/* Botões dinâmicos conforme acessos */}
             <div className="space-y-3">
               {acessos?.dashboard && (
                 <Link href="/dashboard" className="block bg-yellow-500 text-white px-6 py-2 rounded">
@@ -221,6 +222,11 @@ export default function Home() {
               {acessos?.servicos && (
                 <Link href="/servicos" className="block bg-purple-600 text-white px-6 py-2 rounded">
                   ⚙️ Serviços
+                </Link>
+              )}
+              {acessos?.buckman && (
+                <Link href="/relatorio_mensal_vendedor_comissao" className="block bg-gray-700 text-white px-6 py-2 rounded">
+                  📈 Relatório Mensal por Vendedor
                 </Link>
               )}
               {session.user?.role === "admin" && (

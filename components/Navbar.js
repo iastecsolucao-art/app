@@ -282,8 +282,8 @@ export default function Navbar() {
                 Buckman ▾
               </button>
               {openDropdown === "buckman" && (
-                <div className="absolute top-full left-0 -translate-x-1 mt-1 bg-blue-700 rounded shadow-lg min-w-[220px] z-50">
-                  <Link
+  <div className="absolute top-full right-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[180px] z-50">
+<Link
                     href="/buckman/vendedores"
                     className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
                   >
@@ -644,4 +644,5 @@ export default function Navbar() {
       )}
     </nav>
   );
+
 }
