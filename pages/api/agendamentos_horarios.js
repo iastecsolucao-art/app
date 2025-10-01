@@ -1,4 +1,3 @@
-// pages/api/agendamentos_horarios.js
 import pool from '../../lib/db';
 
 export default async function handler(req, res) {
@@ -13,7 +12,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1. Buscar duração do serviço
     const servicoRes = await pool.query(
       'SELECT duracao_minutos FROM servicos WHERE nome = $1 LIMIT 1',
       [servico_nome]
@@ -23,7 +21,6 @@ export default async function handler(req, res) {
     }
     const duracao = servicoRes.rows[0].duracao_minutos || 30;
 
-    // 2. Obter dia da semana da data (ex: Segunda-feira)
     const diasSemana = [
       "Domingo",
       "Segunda-feira",
@@ -35,18 +32,16 @@ export default async function handler(req, res) {
     ];
     const diaSemana = diasSemana[new Date(data).getDay()];
 
-    // 3. Buscar horários do profissional para o dia da semana
     const horariosRes = await pool.query(
-      `SELECT abertura, fechamento FROM horarios_estabelecimento 
+      `SELECT abertura, fechamento, inicio_almoco, fim_almoco FROM horarios_estabelecimento 
        WHERE profissional_id = $1 AND dia_semana = $2 LIMIT 1`,
       [profissional_id, diaSemana]
     );
     if (horariosRes.rowCount === 0) {
       return res.status(404).json({ error: 'Horários não encontrados para o profissional neste dia' });
     }
-    const { abertura, fechamento } = horariosRes.rows[0];
+    const { abertura, fechamento, inicio_almoco, fim_almoco } = horariosRes.rows[0];
 
-    // 4. Buscar agendamentos já feitos para o profissional na data
     const agendamentosRes = await pool.query(
       `SELECT data_inicio FROM agendamentos
        WHERE profissional_id = $1 AND DATE(data_inicio) = $2`,
@@ -54,13 +49,18 @@ export default async function handler(req, res) {
     );
     const agendamentos = agendamentosRes.rows.map(r => r.data_inicio.toTimeString().slice(0,5));
 
-    // 5. Gerar horários possíveis com base na duração e intervalo
-    function gerarHorarios(abertura, fechamento, duracao) {
+    function gerarHorarios(abertura, fechamento, duracao, inicioAlmoco, fimAlmoco) {
       const horarios = [];
       let current = new Date(`1970-01-01T${abertura}`);
       const end = new Date(`1970-01-01T${fechamento}`);
+      const almocoInicio = inicioAlmoco ? new Date(`1970-01-01T${inicioAlmoco}`) : null;
+      const almocoFim = fimAlmoco ? new Date(`1970-01-01T${fimAlmoco}`) : null;
 
       while (current <= end) {
+        if (almocoInicio && almocoFim && current >= almocoInicio && current < almocoFim) {
+          current = new Date(almocoFim.getTime());
+          continue;
+        }
         const h = current.toTimeString().slice(0,5);
         horarios.push(h);
         current = new Date(current.getTime() + duracao * 60000);
@@ -68,9 +68,8 @@ export default async function handler(req, res) {
       return horarios;
     }
 
-    const possiveis = gerarHorarios(abertura, fechamento, duracao);
+    const possiveis = gerarHorarios(abertura, fechamento, duracao, inicio_almoco, fim_almoco);
 
-    // 6. Filtrar horários livres
     const livres = possiveis.filter(h => !agendamentos.includes(h));
 
     return res.status(200).json({ horarios: livres });

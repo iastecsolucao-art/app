@@ -24,11 +24,16 @@ export default async function handler(req, res) {
         "UPDATE servicos SET nome=$1, descricao=$2, duracao_minutos=$3 WHERE id=$4 AND empresa_id=$5 RETURNING *",
         [nome, descricao, duracao_minutos || 60, id, empresa_id]
       );
+      if (result.rows.length === 0) return res.status(404).json({ error: "Serviço não encontrado ou sem permissão" });
       return res.json(result.rows[0]);
     }
 
     if (req.method === "DELETE") {
-      await client.query("DELETE FROM servicos WHERE id=$1 AND empresa_id=$2", [id, empresa_id]);
+      const result = await client.query(
+        "DELETE FROM servicos WHERE id=$1 AND empresa_id=$2 RETURNING *",
+        [id, empresa_id]
+      );
+      if (result.rows.length === 0) return res.status(404).json({ error: "Serviço não encontrado ou sem permissão" });
       return res.json({ message: "Serviço removido" });
     }
 

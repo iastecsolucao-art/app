@@ -25,6 +25,21 @@ export default function Agendamento() {
   const [profissionais, setProfissionais] = useState([]);
   const [clientes, setClientes] = useState([]);
 
+  // Função para filtrar horários excluindo intervalo de almoço
+  function filtrarHorarios(horarios, inicioAlmoco, fimAlmoco) {
+    if (!inicioAlmoco || !fimAlmoco) return horarios;
+    const inicio = inicioAlmoco.split(":").map(Number);
+    const fim = fimAlmoco.split(":").map(Number);
+
+    return horarios.filter((h) => {
+      const [hHora, hMin] = h.split(":").map(Number);
+      if (hHora > inicio[0] && hHora < fim[0]) return false;
+      if (hHora === inicio[0] && hMin >= inicio[1]) return false;
+      if (hHora === fim[0] && hMin < fim[1]) return false;
+      return true;
+    });
+  }
+
   // Carregar dados iniciais e eventos
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -78,7 +93,7 @@ export default function Agendamento() {
       .catch(() => setEvents([]));
   }, [status]);
 
-  // Buscar horários disponíveis via API customizada
+  // Buscar horários disponíveis via API customizada e filtrar intervalo de almoço
   useEffect(() => {
     if (!profissional || !servico || !selectedDate) {
       setAvailableHours([]);
@@ -96,7 +111,15 @@ export default function Agendamento() {
           return;
         }
         const data = await res.json();
-        setAvailableHours(data.horarios || []);
+
+        // Aplica filtro para remover horários do intervalo de almoço
+        const horariosFiltrados = filtrarHorarios(
+          data.horarios || [],
+          data.inicio_almoco,
+          data.fim_almoco
+        );
+
+        setAvailableHours(horariosFiltrados);
       } catch (err) {
         console.error("Erro ao buscar horários disponíveis:", err);
         setAvailableHours([]);

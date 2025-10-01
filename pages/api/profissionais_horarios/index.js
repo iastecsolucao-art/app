@@ -4,7 +4,10 @@ import { authOptions } from "../auth/[...nextauth]";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+const MAX_DIA_SEMANA_LENGTH = 15;
+
 export default async function handler(req, res) {
+  const { id } = req.query;
   const session = await getServerSession(req, res, authOptions);
   if (!session) return res.status(401).json({ error: "Não autenticado" });
 
@@ -19,6 +22,13 @@ export default async function handler(req, res) {
 
     function emptyToNull(value) {
       return value === "" ? null : value;
+    }
+
+    function tratarDiaSemana(dia_semana) {
+      if (typeof dia_semana === "string" && dia_semana.length > MAX_DIA_SEMANA_LENGTH) {
+        return dia_semana.substring(0, MAX_DIA_SEMANA_LENGTH);
+      }
+      return dia_semana;
     }
 
     if (req.method === "GET") {
@@ -36,6 +46,53 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const {
         profissional_id,
+        dia_semana, // espera array de strings
+        abertura,
+        inicio_almoco,
+        fim_almoco,
+        intervalo_inicio,
+        intervalo_fim,
+        fechamento,
+      } = req.body;
+
+      if (!profissional_id || !dia_semana || !abertura || !fechamento) {
+        return res.status(400).json({ error: "Campos obrigatórios faltando" });
+      }
+
+      if (!Array.isArray(dia_semana)) {
+        return res.status(400).json({ error: "dia_semana deve ser um array" });
+      }
+
+      const diaSemanaTratado = dia_semana.map(d => tratarDiaSemana(d));
+
+      const insertedRows = [];
+
+      for (const dia of diaSemanaTratado) {
+        const result = await client.query(
+          `INSERT INTO horarios_estabelecimento
+           (empresa_id, profissional_id, dia_semana, abertura, inicio_almoco, fim_almoco, intervalo_inicio, intervalo_fim, fechamento)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+          [
+            empresa_id,
+            profissional_id,
+            dia,
+            abertura,
+            emptyToNull(inicio_almoco),
+            emptyToNull(fim_almoco),
+            emptyToNull(intervalo_inicio),
+            emptyToNull(intervalo_fim),
+            fechamento,
+          ]
+        );
+        insertedRows.push(result.rows[0]);
+      }
+
+      return res.status(201).json(insertedRows);
+    }
+
+    if (req.method === "PUT") {
+      const {
+        profissional_id,
         dia_semana,
         abertura,
         inicio_almoco,
@@ -49,24 +106,52 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "Campos obrigatórios faltando" });
       }
 
+      const diaSemanaTratado = tratarDiaSemana(dia_semana);
+
       const result = await client.query(
-        `INSERT INTO horarios_estabelecimento
-         (empresa_id, profissional_id, dia_semana, abertura, inicio_almoco, fim_almoco, intervalo_inicio, intervalo_fim, fechamento)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        `UPDATE horarios_estabelecimento SET
+          profissional_id = $1,
+          dia_semana = $2,
+          abertura = $3,
+          inicio_almoco = $4,
+          fim_almoco = $5,
+          intervalo_inicio = $6,
+          intervalo_fim = $7,
+          fechamento = $8
+         WHERE id = $9 AND empresa_id = $10
+         RETURNING *`,
         [
-          empresa_id,
           profissional_id,
-          dia_semana,
+          diaSemanaTratado,
           abertura,
           emptyToNull(inicio_almoco),
           emptyToNull(fim_almoco),
           emptyToNull(intervalo_inicio),
           emptyToNull(intervalo_fim),
           fechamento,
+          id,
+          empresa_id,
         ]
       );
 
-      return res.status(201).json(result.rows[0]);
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: "Horário não encontrado ou não pertence à empresa" });
+      }
+
+      return res.status(200).json(result.rows[0]);
+    }
+
+    if (req.method === "DELETE") {
+      const result = await client.query(
+        "DELETE FROM horarios_estabelecimento WHERE id=$1 AND empresa_id=$2",
+        [id, empresa_id]
+      );
+
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: "Horário não encontrado ou não pertence à empresa" });
+      }
+
+      return res.status(200).json({ message: "Horário removido com sucesso" });
     }
 
     return res.status(405).json({ error: "Método não permitido" });

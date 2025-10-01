@@ -25,6 +25,8 @@
     "file-saver": "^2.0.5",
     "formidable": "^3.5.4",
     "googleapis": "^160.0.0",
+    "html2pdf.js": "^0.12.1",
+    "jspdf": "^3.0.3",
     "next": "^15.5.3",
     "next-auth": "^4.24.11",
     "pg": "^8.16.3",

@@ -88,7 +88,7 @@ export default function ProfissionaisHorarios() {
     setEditId(horario.id);
     setForm({
       profissional_id: horario.profissional_id,
-      dias_semana: horario.dia_semana.split(",").map(d => d.trim()),
+      dias_semana: [horario.dia_semana], // único dia para edição
       abertura: horario.abertura || "",
       inicio_almoco: horario.inicio_almoco || "",
       fim_almoco: horario.fim_almoco || "",
@@ -133,7 +133,7 @@ export default function ProfissionaisHorarios() {
 
     const payload = {
       profissional_id: form.profissional_id,
-      dia_semana: form.dias_semana.join(", "),
+      dia_semana: form.dias_semana, // envia array direto
       abertura: form.abertura,
       inicio_almoco: form.inicio_almoco,
       fim_almoco: form.fim_almoco,
@@ -281,12 +281,15 @@ export default function ProfissionaisHorarios() {
                 type="checkbox"
                 checked={form.dias_semana.includes(dia)}
                 onChange={() => toggleDiaSemana(dia)}
-                disabled={loading}
+                disabled={loading || editId !== null} // bloqueia múltiplos dias na edição
               />
               <span>{dia}</span>
             </label>
           ))}
         </div>
+        {editId !== null && (
+          <p className="text-sm text-gray-600 mt-1">Na edição, só é possível alterar um dia por vez.</p>
+        )}
       </div>
 
       {["abertura", "inicio_almoco", "fim_almoco", "intervalo_inicio", "intervalo_fim", "fechamento"].map(campo => (

@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   const client = await pool.connect();
   try {
     const usuario = await client.query(
-      "SELECT id, empresa_id FROM usuarios WHERE email=$1",
+      "SELECT empresa_id FROM usuarios WHERE email=$1",
       [session.user.email]
     );
     if (usuario.rows.length === 0) return res.status(404).json({ error: "Usuário não encontrado" });
