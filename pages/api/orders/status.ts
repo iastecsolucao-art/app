@@ -10,6 +10,7 @@ type OrderRow = {
   metodo?: string | null;
   created_at?: string | Date | null;
   cliente_email?: string | null;
+  cliente?: string | null;
   pagamento_pagseguros?: string | null;
   mp_payment_id?: string | null;
 };
@@ -30,7 +31,10 @@ function normalize(o: OrderRow) {
   };
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "method_not_allowed" });
   }
@@ -48,7 +52,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // === Consulta por referência (preferencial) ==========================
     if (ref) {
-      // 1) Schema com 'referencia' / 'mp_payment_id' / 'metodo'
       try {
         const { rows } = await dbQuery<OrderRow>(
           `
@@ -66,15 +69,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               OR mp_payment_id = $1
            ORDER BY created_at DESC
            LIMIT 1
-        `,
+          `,
           [ref]
         );
         if (rows.length) {
           return res.status(200).json({ ok: true, order: normalize(rows[0]) });
         }
-      } catch {}
-
-      // 2) Fallback: schema antigo, sem 'referencia' (aí não dá pra achar por ref)
+      } catch {
+        // ignora – cai no 404
+      }
       return res.status(404).json({ error: "not_found" });
     }
 
@@ -95,14 +98,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             FROM pedido
            WHERE id = $1
            LIMIT 1
-        `,
+          `,
           [id]
         );
         if (rows.length) {
           return res.status(200).json({ ok: true, order: normalize(rows[0]) });
         }
       } catch {
-        // Fallback sem 'referencia/metodo'
+        // Fallback sem referencia/metodo
         const { rows } = await dbQuery<OrderRow>(
           `
           SELECT id,
@@ -114,7 +117,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             FROM pedido
            WHERE id = $1
            LIMIT 1
-        `,
+          `,
           [id]
         );
         if (rows.length) {
@@ -126,6 +129,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // === Lista por e-mail (para "Meus pedidos") ==========================
     if (email) {
+      // Primeiro tenta na coluna cliente_email
       try {
         const { rows } = await dbQuery<OrderRow>(
           `
@@ -134,3 +138,64 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                  status,
                  total,
                  metodo,
+                 created_at,
+                 cliente_email,
+                 pagamento_pagseguros,
+                 mp_payment_id
+            FROM pedido
+           WHERE LOWER(cliente_email) = LOWER($1)
+           ORDER BY created_at DESC
+           LIMIT 50
+          `,
+          [email]
+        );
+        if (rows.length) {
+          return res.status(200).json({
+            ok: true,
+            orders: rows.map(normalize),
+          });
+        }
+      } catch {
+        // ignora e tenta o fallback
+      }
+
+      // Fallback: alguns schemas salvam o e-mail na coluna "cliente"
+      try {
+        const { rows } = await dbQuery<OrderRow>(
+          `
+          SELECT id,
+                 referencia,
+                 status,
+                 total,
+                 metodo,
+                 created_at,
+                 cliente AS cliente_email,
+                 pagamento_pagseguros,
+                 mp_payment_id
+            FROM pedido
+           WHERE LOWER(cliente) = LOWER($1)
+           ORDER BY created_at DESC
+           LIMIT 50
+          `,
+          [email]
+        );
+        if (rows.length) {
+          return res.status(200).json({
+            ok: true,
+            orders: rows.map(normalize),
+          });
+        }
+      } catch {
+        // ignora – continuará pro 404 abaixo
+      }
+
+      return res.status(200).json({ ok: true, orders: [] });
+    }
+
+    // Não deveria chegar aqui
+    return res.status(400).json({ error: "invalid_params" });
+  } catch (e: any) {
+    console.error("[/api/orders/status] error:", e);
+    return res.status(500).json({ error: "db_error", detail: e?.message });
+  }
+}
