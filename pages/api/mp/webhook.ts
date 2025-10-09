@@ -1,120 +1,64 @@
-// pages/api/mp/webhook.ts
 import type { NextApiRequest, NextApiResponse } from "next";
-import { MP_API, MP_ACCESS_TOKEN } from "../../../lib/mp";
+import { pool } from "../../../lib/db";
 
-// Dica: se for implementar verificação de assinatura (x-signature) no futuro,
-// habilite o raw body e calcule o HMAC. Por ora, usamos o body parseado.
-export const config = {
-  api: {
-    bodyParser: true,
-  },
-};
-
-function jsonSafe(text: string) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
-}
-
-async function fetchMP(path: string) {
-  const r = await fetch(`${MP_API}${path}`, {
-    headers: {
-      Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-  });
-  const text = await r.text();
-  const data = jsonSafe(text);
-  return { ok: r.ok, status: r.status, data };
+// mapeamento simples de status do MP para sua tabela
+function mapMpStatus(s: string) {
+  const v = (s || "").toLowerCase();
+  if (v === "approved") return "PAGO";
+  if (v === "rejected") return "RECUSADO";
+  if (v === "cancelled") return "CANCELADO";
+  return "PENDENTE";
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "method_not_allowed" });
-  }
-
-  // Logs úteis para depuração
-  console.log("[MP webhook] headers:", req.headers);
-  console.log("[MP webhook] body:", req.body);
-
-  // Estruturas comuns do MP:
-  // 1) Novo webhook: { type: 'payment'|'merchant_order'|..., action: 'payment.updated'|..., data: { id: '...' } }
-  // 2) Clássico (em alguns cenários): query com topic/id (mas o webhook costuma ser POST com body)
-  const body: any = req.body ?? {};
-  const type = body?.type || body?.topic; // topic (compat)
-  const action = body?.action;
-  let id: string | null = body?.data?.id ? String(body.data.id) : null;
-
-  // Fallback para notificações antigas (pouco comuns via webhook):
-  if (!id && typeof req.query?.id === "string") id = req.query.id as string;
+  if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
 
   try {
-    if (type === "payment" || (action && action.startsWith("payment"))) {
-      if (!id) {
-        console.warn("[MP webhook] payment event sem data.id");
-        return res.status(200).json({ ok: true, note: "missing payment id" });
-      }
-
-      // Confirma pagamento junto ao MP
-      const payResp = await fetchMP(`/v1/payments/${id}`);
-      console.log("[MP webhook] GET /v1/payments/:id ->", payResp.status, payResp.data);
-
-      if (!payResp.ok) {
-        // Mesmo se falhar a consulta, responda 200 para evitar loop de reentrega;
-        // você pode reprocessar depois via fila/cron.
-        return res.status(200).json({ ok: true, warn: "payment fetch failed" });
-      }
-
-      const p: any = payResp.data;
-      const status = p?.status;               // approved, rejected, pending, etc.
-      const status_detail = p?.status_detail; // detalhes
-      const external_reference = p?.external_reference; // id do seu pedido
-      const transaction_amount = p?.transaction_amount;
-
-      // TODO: Atualize seu pedido local aqui (por external_reference ou outra chave sua)
-      // await db.pedidos.updateByReferencia(external_reference, { status_mp: status, ... });
-
-      console.log("[MP webhook] pagamento confirmado:", {
-        id,
-        status,
-        status_detail,
-        external_reference,
-        transaction_amount,
-      });
-
-      return res.status(200).json({ ok: true });
+    // Hot: Mercado Pago pode te enviar query params tipo ?type=payment&id=12345
+    // e/ou JSON com data.id. Trate os dois casos:
+    const paymentId = (req.query?.id as string) || (req.body?.data?.id as string);
+    if (!paymentId) {
+      console.log("[MP webhook] payload sem payment id", req.query, req.body);
+      return res.status(202).json({ ok: true });
     }
 
-    if (type === "merchant_order" || (action && action.startsWith("merchant_order"))) {
-      if (!id) {
-        console.warn("[MP webhook] merchant_order event sem data.id");
-        return res.status(200).json({ ok: true, note: "missing merchant_order id" });
+    // 1) Buscar detalhes do pagamento no MP (para obter status e external_reference)
+    // const mp = new MercadoPago(process.env.MP_ACCESS_TOKEN!);
+    // const pay = await mp.payments.get(paymentId);
+    // const status = pay.status;                // 'approved' | 'pending' | ...
+    // const externalReference = pay.external_reference;
+
+    // MOCK:
+    const status = "approved";
+    const externalReference = "emp1-EXEMPLO-123";
+
+    const client = await pool.connect();
+    try {
+      // 2) Atualizar por referencia (melhor) e também registrar o gateway_id
+      const r = await client.query(
+        `UPDATE pedido
+           SET status = $1, gateway_id = COALESCE(gateway_id, $2)
+         WHERE referencia = $3
+         RETURNING id`,
+        [mapMpStatus(status), String(paymentId), externalReference]
+      );
+
+      // fallback: se por algum motivo não achou pela referência, tenta pelo id do gateway
+      if (r.rowCount === 0) {
+        await client.query(
+          `UPDATE pedido
+             SET status = $1
+           WHERE gateway = 'mercadopago' AND gateway_id = $2`,
+          [mapMpStatus(status), String(paymentId)]
+        );
       }
-
-      const moResp = await fetchMP(`/merchant_orders/${id}`);
-      console.log("[MP webhook] GET /merchant_orders/:id ->", moResp.status, moResp.data);
-
-      if (!moResp.ok) {
-        return res.status(200).json({ ok: true, warn: "merchant_order fetch failed" });
-      }
-
-      const mo: any = moResp.data;
-      // Você pode somar payments aprovados e checar o total, etc.
-      // mo.payments => [{ status, transaction_amount, ... }]
-      // mo.external_reference => referência do seu pedido
-      // TODO: atualizar pedido local se fizer sentido.
-
-      return res.status(200).json({ ok: true });
+    } finally {
+      client.release();
     }
 
-    // Outros tipos de evento: apenas logue e responda 200
-    console.log("[MP webhook] tipo não tratado:", { type, action, id });
-    return res.status(200).json({ ok: true, note: "unhandled event" });
-  } catch (err: any) {
-    // Importante: evite retornar erro != 2xx (o MP tentará reenviar).
-    console.error("[MP webhook] erro inesperado:", err);
-    return res.status(200).json({ ok: true, error: "handled_exception" });
+    return res.status(200).json({ ok: true });
+  } catch (e: any) {
+    console.error("[MP webhook] error:", e);
+    return res.status(500).json({ error: "webhook_error" });
   }
 }
