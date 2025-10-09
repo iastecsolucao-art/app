@@ -1,12 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 
-export default function UploadPromocao({ empresaId }) {
+function UploadPromocao({ empresaId }) {
   const [file, setFile] = useState(null);
   const [descricao, setDescricao] = useState("");
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
+
+  useEffect(() => {
+    console.log("empresaId recebido no componente:", empresaId);
+  }, [empresaId]);
 
   const handleFileChange = (e) => {
     const f = e.target.files[0];
@@ -21,6 +26,7 @@ export default function UploadPromocao({ empresaId }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!file) {
       setMessage("Selecione um arquivo para upload.");
       return;
@@ -37,6 +43,10 @@ export default function UploadPromocao({ empresaId }) {
       setMessage("A data fim deve ser igual ou posterior à data início.");
       return;
     }
+    if (!empresaId) {
+      setMessage("Erro: empresaId não está definido.");
+      return;
+    }
 
     setLoading(true);
     setMessage(null);
@@ -47,14 +57,13 @@ export default function UploadPromocao({ empresaId }) {
       formData.append("descricao", descricao);
       formData.append("data_inicio", dataInicio);
       formData.append("data_fim", dataFim);
-      formData.append("empresa_id", empresaId);
+      formData.append("empresa_id", String(empresaId));
 
-      const res = await fetch("/api/promocoes/upload", {
+      const res = await fetch("https://n8n.iastec.servicos.ws/webhook-test/upload_app", {
         method: "POST",
         body: formData,
       });
 
-      const data = await res.json();
       if (res.ok) {
         setMessage("Promoção cadastrada com sucesso!");
         setFile(null);
@@ -62,6 +71,7 @@ export default function UploadPromocao({ empresaId }) {
         setDataInicio("");
         setDataFim("");
       } else {
+        const data = await res.json();
         setMessage(data.error || "Erro ao cadastrar promoção.");
       }
     } catch (err) {
@@ -137,6 +147,27 @@ export default function UploadPromocao({ empresaId }) {
           {loading ? "Enviando..." : "Enviar Promoção"}
         </button>
       </form>
+    </div>
+  );
+}
+
+export default function PaginaUpload() {
+  const { data: session, status } = useSession();
+
+  if (status === "loading") {
+    return <p>Carregando...</p>;
+  }
+
+  if (!session) {
+    return <p>Você precisa estar logado para acessar esta página.</p>;
+  }
+
+  const empresaId = session.user?.empresa_id;
+
+  return (
+    <div>
+      <h1>Cadastro de Promoção</h1>
+      <UploadPromocao empresaId={empresaId} />
     </div>
   );
 }

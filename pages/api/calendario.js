@@ -1,6 +1,6 @@
 import { Pool } from "pg";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL_VENDEDORES });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL_VENDEDORES});
 
 export default async function handler(req, res) {
   try {

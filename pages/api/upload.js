@@ -1,88 +1,55 @@
-import fs from "fs";
-import { Pool } from "pg";
-import { parse } from "csv-parse/sync";
-import formidable from "formidable";
+import { IncomingForm } from "formidable";
+import fs from "fs/promises";
+import path from "path";
 
 export const config = {
-  api: {
-    bodyParser: false, // importante para usar formidable
-  },
+  api: { bodyParser: false }, // necessário p/ multipart
 };
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", ["POST"]);
-    return res.status(405).end(`Método ${req.method} não permitido`);
-  }
-
-  const form = formidable({ multiples: false, keepExtensions: true });
+  if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido" });
 
   try {
-    const { fields, files } = await new Promise((resolve, reject) => {
-      form.parse(req, (err, fields, files) => {
-        if (err) reject(err);
-        else resolve({ fields, files });
-      });
+    const form = new IncomingForm({
+      multiples: false,
+      keepExtensions: true,
+      // não setamos uploadDir aqui; vamos mover manualmente
     });
 
-    let tipo = fields.tipo;
-    if (Array.isArray(tipo)) {
-      tipo = tipo[0];
-    }
+    form.parse(req, async (err, fields, files) => {
+      if (err) {
+        console.error("Formidable error:", err);
+        return res.status(500).json({ error: "Falha ao processar upload" });
+      }
 
-    console.log("Tipo recebido:", tipo);
+      // Pode vir como objeto ou array dependendo da versão
+      const file = Array.isArray(files.file) ? files.file[0] : files.file;
+      if (!file) return res.status(400).json({ error: "Arquivo 'file' é obrigatório" });
 
-    let file = files.file;
-    if (Array.isArray(file)) {
-      file = file[0];
-    }
+      const mimetype = file.mimetype || file.type || "";
+      if (!mimetype.startsWith("image/")) {
+        return res.status(400).json({ error: "Somente imagens são aceitas neste endpoint" });
+      }
 
-    if (!file) {
-      return res.status(400).json({ error: "Arquivo não enviado" });
-    }
+      const tempPath = file.filepath || file.path; // compat com versões
+      const uploadsDir = path.join(process.cwd(), "public", "uploads");
+      await fs.mkdir(uploadsDir, { recursive: true });
 
-    const filePath = file.filepath || file.filePath;
-    if (!filePath) {
-      return res.status(400).json({ error: "Caminho do arquivo não encontrado" });
-    }
+      const ext = path.extname(file.originalFilename || file.newFilename || ".jpg");
+      const safeName = (file.originalFilename || `img${Date.now()}${ext}`)
+        .replace(/[^a-zA-Z0-9._-]/g, "_");
+      const finalName = `${Date.now()}_${safeName}`;
+      const finalPath = path.join(uploadsDir, finalName);
 
-    const content = fs.readFileSync(filePath, "utf-8");
-    const records = parse(content, {
-      columns: true,
-      skip_empty_lines: true,
+      // move/copia o arquivo temp para /public/uploads
+      await fs.copyFile(tempPath, finalPath);
+
+      // URL pública (Next serve /public direto)
+      const publicUrl = `/uploads/${finalName}`;
+      return res.status(201).json({ url: publicUrl });
     });
-
-    const client = await pool.connect();
-
-    if (tipo === "produtos") {
-      for (const row of records) {
-        await client.query(
-          `INSERT INTO produto (descricao, codigo_barra, empresa_id) 
-           VALUES ($1, $2, (SELECT id FROM empresa WHERE nome = $3 LIMIT 1))
-           ON CONFLICT (codigo_barra) DO UPDATE SET descricao = EXCLUDED.descricao`,
-          [row.descricao, row.codbarra, row.empresa]
-        );
-      }
-    } else if (tipo === "tabela_apoio") {
-      for (const row of records) {
-        await client.query(
-          `INSERT INTO contagem_apoio (setor, operador, loja) 
-           VALUES ($1, $2, $3)
-           ON CONFLICT DO NOTHING`,
-          [row.setor, row.operador, row.loja]
-        );
-      }
-    } else {
-      client.release();
-      return res.status(400).json({ error: "Tipo inválido" });
-    }
-
-    client.release();
-    return res.status(200).json({ message: "Upload processado com sucesso" });
-  } catch (error) {
-    console.error("Erro ao processar upload:", error);
-    return res.status(500).json({ error: "Erro ao processar arquivo" });
+  } catch (e) {
+    console.error("Upload handler error:", e);
+    return res.status(500).json({ error: "Erro no servidor" });
   }
 }
