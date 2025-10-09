@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
+import QRCode from "qrcode";
 
-/* ====== Tipos ====== */
+/* ========== Tipos ========== */
 type Produto = {
   id: number;
   descricao: string;
@@ -9,7 +10,24 @@ type Produto = {
   foto_url?: string | null;
 };
 type CartItem = Produto & { qty: number };
-type Cliente = { nome: string; email: string; telefone: string; cpf?: string };
+
+type Cliente = {
+  nome: string;
+  email: string;
+  telefone: string;
+  cpf?: string;
+};
+
+type Endereco = {
+  cep: string;
+  rua: string;
+  numero: string;
+  complemento?: string;
+  bairro: string;
+  cidade: string;
+  uf: string;
+};
+
 type PixResp = {
   id: string | number;
   status?: string;
@@ -18,6 +36,7 @@ type PixResp = {
   ticket_url?: string;
   date_of_expiration?: string;
 };
+
 type BoletoResp = {
   id: string | number;
   boleto_url?: string;
@@ -25,11 +44,11 @@ type BoletoResp = {
   status?: string;
 };
 
-/* ====== Util ====== */
+/* ========== Utils ========== */
 const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-const onlyDigits = (s: string) => s.replace(/\D/g, "");
+const onlyDigits = (s: string) => (s || "").replace(/\D/g, "");
 const nameParts = (n: string) => {
   const p = (n || "").trim().split(/\s+/);
   return { first: p[0] || n || "", last: p.slice(1).join(" ") || "-" };
@@ -42,7 +61,18 @@ const safeJson = <T,>(t: string): T | null => {
   }
 };
 
-/* ====== Modal simples ====== */
+// máscaras simples
+const fmtPhone = (v: string) => {
+  const d = onlyDigits(v).slice(0, 11);
+  if (d.length <= 10) return d.replace(/(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3").trim();
+  return d.replace(/(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3").trim();
+};
+const fmtCPF = (v: string) =>
+  onlyDigits(v).slice(0, 11).replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, "$1.$2.$3-$4").trim();
+const fmtCEP = (v: string) =>
+  onlyDigits(v).slice(0, 8).replace(/(\d{5})(\d{0,3})/, "$1-$2").trim();
+
+/* ========== Modal ========== */
 function Modal({
   open,
   onClose,
@@ -80,7 +110,7 @@ function Modal({
   );
 }
 
-/* ====== Página ====== */
+/* ========== Página ========== */
 export default function LojaEmpresa() {
   const router = useRouter();
   const { empresaId } = router.query;
@@ -96,6 +126,22 @@ export default function LojaEmpresa() {
     telefone: "",
     cpf: "",
   });
+
+  // entrega
+  const [querEntrega, setQuerEntrega] = useState(false);
+  const [endereco, setEndereco] = useState<Endereco>({
+    cep: "",
+    rua: "",
+    numero: "",
+    complemento: "",
+    bairro: "",
+    cidade: "",
+    uf: "",
+  });
+
+  // erros de validação
+  const [erros, setErros] = useState<Record<string, string>>({});
+
   const [metodo, setMetodo] = useState<"PIX" | "BOLETO" | "CARTAO">("PIX");
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -103,6 +149,7 @@ export default function LojaEmpresa() {
   // PIX Modal
   const [pixOpen, setPixOpen] = useState(false);
   const [pixData, setPixData] = useState<PixResp | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   const total = useMemo(
     () => cart.reduce((acc, it) => acc + Number(it.preco || 0) * it.qty, 0),
@@ -129,6 +176,55 @@ export default function LojaEmpresa() {
     })();
   }, [empresaId]);
 
+  /* ---- Auto-preenche por CEP (ViaCEP) ---- */
+  useEffect(() => {
+    const cepDigits = onlyDigits(endereco.cep);
+    if (cepDigits.length !== 8) return;
+    let canceled = false;
+    (async () => {
+      try {
+        const r = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`);
+        const d = await r.json();
+        if (!canceled && !d?.erro) {
+          setEndereco((e) => ({
+            ...e,
+            rua: d.logradouro || e.rua,
+            bairro: d.bairro || e.bairro,
+            cidade: d.localidade || e.cidade,
+            uf: d.uf || e.uf,
+          }));
+        }
+      } catch {}
+    })();
+    return () => {
+      canceled = true;
+    };
+  }, [endereco.cep]);
+
+  /* ---- Gera imagem do QR (fallback) ---- */
+  useEffect(() => {
+    (async () => {
+      if (!pixData) {
+        setQrDataUrl(null);
+        return;
+      }
+      if (pixData.qr_code_base64) {
+        setQrDataUrl(`data:image/png;base64,${pixData.qr_code_base64}`);
+        return;
+      }
+      if (pixData.qr_code) {
+        try {
+          const url = await QRCode.toDataURL(pixData.qr_code, { width: 256, margin: 1 });
+          setQrDataUrl(url);
+        } catch {
+          setQrDataUrl(null);
+        }
+      } else {
+        setQrDataUrl(null);
+      }
+    })();
+  }, [pixData]);
+
   /* ---- Carrinho ---- */
   const add = (p: Produto) =>
     setCart((c) => {
@@ -146,7 +242,34 @@ export default function LojaEmpresa() {
     );
   const del = (id: number) => setCart((c) => c.filter((x) => x.id !== id));
 
-  /* ---- Compartilhar WhatsApp ---- */
+  /* ---- Validação ---- */
+  function validar(): boolean {
+    const e: Record<string, string> = {};
+    const nome = (cliente.nome || "").trim();
+    const email = (cliente.email || "").trim();
+    const telDigits = onlyDigits(cliente.telefone);
+    const cpfDigits = onlyDigits(cliente.cpf || "");
+
+    if (nome.length < 3) e.nome = "Informe o nome completo.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = "E-mail inválido.";
+    if (telDigits.length < 10) e.telefone = "Telefone inválido.";
+    if (metodo === "BOLETO" && cpfDigits.length !== 11) e.cpf = "CPF obrigatório para boleto.";
+
+    if (querEntrega) {
+      const cepDigits = onlyDigits(endereco.cep);
+      if (cepDigits.length !== 8) e.cep = "CEP inválido.";
+      if (!endereco.rua) e.rua = "Informe a rua.";
+      if (!endereco.numero) e.numero = "Informe o número.";
+      if (!endereco.bairro) e.bairro = "Informe o bairro.";
+      if (!endereco.cidade) e.cidade = "Informe a cidade.";
+      if (!/^[A-Z]{2}$/i.test(endereco.uf || "")) e.uf = "UF inválida.";
+    }
+
+    setErros(e);
+    return Object.keys(e).length === 0;
+  }
+
+  /* ---- WhatsApp ---- */
   const shareWhatsApp = () => {
     if (cart.length === 0) return;
     const url =
@@ -160,17 +283,27 @@ export default function LojaEmpresa() {
     window.open(`https://wa.me/?text=${msg}`, "_blank");
   };
 
+  /* ---- Meus pedidos ---- */
+  function abrirMeusPedidos() {
+    const email = (cliente.email || "").trim();
+    if (email) {
+      router.push(`/pedidos?email=${encodeURIComponent(email)}`);
+    } else {
+      router.push(`/pedidos`);
+    }
+  }
+
   /* ---- Finalizar compra ---- */
   const finalizarCompra = async () => {
     if (loading) return;
     setStatus(null);
 
-    if (!cliente.nome || !cliente.email) {
-      setStatus("Informe nome e e-mail.");
-      return;
-    }
     if (cart.length === 0) {
       setStatus("Seu carrinho está vazio.");
+      return;
+    }
+    if (!validar()) {
+      setStatus("Verifique os campos destacados.");
       return;
     }
 
@@ -184,6 +317,21 @@ export default function LojaEmpresa() {
           ? cart[0].descricao
           : `Pedido (${cart.length} itens) • Loja #${empresaId}`;
 
+      // shipping opcional
+      const shipping = querEntrega
+        ? {
+            address: {
+              zip_code: onlyDigits(endereco.cep),
+              street_name: endereco.rua,
+              street_number: endereco.numero,
+              neighborhood: endereco.bairro,
+              city: endereco.cidade,
+              state: (endereco.uf || "").toUpperCase(),
+              complement: endereco.complemento || "",
+            },
+          }
+        : undefined;
+
       if (metodo === "PIX") {
         const r = await fetch("/api/mp/pix", {
           method: "POST",
@@ -193,11 +341,13 @@ export default function LojaEmpresa() {
             description,
             referenceId: referencia,
             payer: {
-              email: cliente.email,
+              email: (cliente.email || "").trim(),
               first_name: first,
               last_name: last,
               cpf: onlyDigits(cliente.cpf || ""),
+              phone: onlyDigits(cliente.telefone || ""),
             },
+            shipping,
           }),
         });
 
@@ -213,7 +363,7 @@ export default function LojaEmpresa() {
                 .join(" | ")) ||
             (data as any)?.message ||
             "Falha ao criar PIX.";
-          setStatus(`PIX: ${msg}`);
+        setStatus(`PIX: ${msg}`);
           return;
         }
 
@@ -232,11 +382,13 @@ export default function LojaEmpresa() {
             description,
             referenceId: referencia,
             payer: {
-              email: cliente.email,
+              email: (cliente.email || "").trim(),
               first_name: first,
               last_name: last,
               cpf: onlyDigits(cliente.cpf || ""),
+              phone: onlyDigits(cliente.telefone || ""),
             },
+            shipping,
           }),
         });
 
@@ -252,7 +404,7 @@ export default function LojaEmpresa() {
                 .join(" | ")) ||
             (data as any)?.message ||
             "Falha ao criar Boleto.";
-        setStatus(`Boleto: ${msg}`);
+          setStatus(`Boleto: ${msg}`);
           return;
         }
 
@@ -284,14 +436,25 @@ export default function LojaEmpresa() {
     }
   };
 
+  /* ========== UI ========== */
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-blue-600 text-white px-4 py-3">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
           <h1 className="text-lg font-semibold">Loja #{String(empresaId || "")}</h1>
-          <div className="text-sm">
-            {cart.length} itens — <strong>{brl(total)}</strong>
+
+          <div className="flex items-center gap-2">
+            <button
+              className="rounded bg-white/10 hover:bg-white/20 px-3 py-1 text-sm"
+              onClick={abrirMeusPedidos}
+              title="Consultar meus pedidos"
+            >
+              Meus pedidos
+            </button>
+            <div className="text-sm">
+              {cart.length} itens — <strong>{brl(total)}</strong>
+            </div>
           </div>
         </div>
       </header>
@@ -333,7 +496,7 @@ export default function LojaEmpresa() {
           </div>
         </section>
 
-        {/* Carrinho */}
+        {/* Carrinho + Dados */}
         <aside className="bg-white rounded-lg shadow p-4 h-max">
           <h2 className="text-lg font-semibold mb-3">Carrinho</h2>
 
@@ -385,36 +548,136 @@ export default function LojaEmpresa() {
 
           {/* Dados do cliente */}
           <div className="space-y-2">
-            <input
-              placeholder="Nome"
-              className="w-full border rounded px-3 py-2"
-              value={cliente.nome}
-              onChange={(e) => setCliente((v) => ({ ...v, nome: e.target.value }))}
-            />
-            <input
-              placeholder="Email"
-              className="w-full border rounded px-3 py-2"
-              value={cliente.email}
-              onChange={(e) => setCliente((v) => ({ ...v, email: e.target.value }))}
-            />
-            <input
-              placeholder="Telefone"
-              className="w-full border rounded px-3 py-2"
-              value={cliente.telefone}
-              onChange={(e) => setCliente((v) => ({ ...v, telefone: e.target.value }))}
-            />
-            <input
-              placeholder="CPF (opcional para PIX • obrigatório para Boleto)"
-              className="w-full border rounded px-3 py-2"
-              value={cliente.cpf || ""}
-              onChange={(e) =>
-                setCliente((v) => ({ ...v, cpf: onlyDigits(e.target.value || "") }))
-              }
-            />
+            <div>
+              <input
+                placeholder="Nome completo"
+                className={`w-full border rounded px-3 py-2 ${erros.nome ? "border-red-500" : ""}`}
+                value={cliente.nome}
+                onChange={(e) => setCliente((v) => ({ ...v, nome: e.target.value }))}
+              />
+              {erros.nome && <p className="text-xs text-red-600">{erros.nome}</p>}
+            </div>
+            <div>
+              <input
+                placeholder="E-mail"
+                className={`w-full border rounded px-3 py-2 ${erros.email ? "border-red-500" : ""}`}
+                value={cliente.email}
+                onChange={(e) => setCliente((v) => ({ ...v, email: e.target.value }))}
+              />
+              {erros.email && <p className="text-xs text-red-600">{erros.email}</p>}
+            </div>
+            <div>
+              <input
+                placeholder="Telefone"
+                className={`w-full border rounded px-3 py-2 ${erros.telefone ? "border-red-500" : ""}`}
+                value={fmtPhone(cliente.telefone)}
+                onChange={(e) => setCliente((v) => ({ ...v, telefone: e.target.value }))}
+              />
+              {erros.telefone && <p className="text-xs text-red-600">{erros.telefone}</p>}
+            </div>
+            <div>
+              <input
+                placeholder="CPF (opcional para PIX • obrigatório p/ Boleto)"
+                className={`w-full border rounded px-3 py-2 ${erros.cpf ? "border-red-500" : ""}`}
+                value={fmtCPF(cliente.cpf || "")}
+                onChange={(e) => setCliente((v) => ({ ...v, cpf: e.target.value }))}
+              />
+              {erros.cpf && <p className="text-xs text-red-600">{erros.cpf}</p>}
+            </div>
+          </div>
+
+          {/* Entrega */}
+          <div className="mt-4">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={querEntrega}
+                onChange={(e) => setQuerEntrega(e.target.checked)}
+              />
+              <span>Quero entrega</span>
+            </label>
+
+            {querEntrega && (
+              <div className="mt-3 grid grid-cols-1 gap-2">
+                <div>
+                  <input
+                    placeholder="CEP"
+                    className={`w-full border rounded px-3 py-2 ${erros.cep ? "border-red-500" : ""}`}
+                    value={fmtCEP(endereco.cep)}
+                    onChange={(e) => setEndereco((v) => ({ ...v, cep: e.target.value }))}
+                  />
+                  {erros.cep && <p className="text-xs text-red-600">{erros.cep}</p>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <input
+                      placeholder="Rua"
+                      className={`w-full border rounded px-3 py-2 ${erros.rua ? "border-red-500" : ""}`}
+                      value={endereco.rua}
+                      onChange={(e) => setEndereco((v) => ({ ...v, rua: e.target.value }))}
+                    />
+                    {erros.rua && <p className="text-xs text-red-600">{erros.rua}</p>}
+                  </div>
+                  <div>
+                    <input
+                      placeholder="Número"
+                      className={`w-full border rounded px-3 py-2 ${erros.numero ? "border-red-500" : ""}`}
+                      value={endereco.numero}
+                      onChange={(e) => setEndereco((v) => ({ ...v, numero: e.target.value }))}
+                    />
+                    {erros.numero && <p className="text-xs text-red-600">{erros.numero}</p>}
+                  </div>
+                </div>
+
+                <input
+                  placeholder="Complemento (opcional)"
+                  className="w-full border rounded px-3 py-2"
+                  value={endereco.complemento || ""}
+                  onChange={(e) => setEndereco((v) => ({ ...v, complemento: e.target.value }))}
+                />
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <input
+                      placeholder="Bairro"
+                      className={`w-full border rounded px-3 py-2 ${erros.bairro ? "border-red-500" : ""}`}
+                      value={endereco.bairro}
+                      onChange={(e) => setEndereco((v) => ({ ...v, bairro: e.target.value }))}
+                    />
+                    {erros.bairro && <p className="text-xs text-red-600">{erros.bairro}</p>}
+                  </div>
+                  <div>
+                    <input
+                      placeholder="Cidade"
+                      className={`w-full border rounded px-3 py-2 ${erros.cidade ? "border-red-500" : ""}`}
+                      value={endereco.cidade}
+                      onChange={(e) => setEndereco((v) => ({ ...v, cidade: e.target.value }))}
+                    />
+                    {erros.cidade && <p className="text-xs text-red-600">{erros.cidade}</p>}
+                  </div>
+                </div>
+
+                <div>
+                  <input
+                    placeholder="UF (ex.: SP)"
+                    className={`w-full border rounded px-3 py-2 ${erros.uf ? "border-red-500" : ""}`}
+                    value={endereco.uf}
+                    onChange={(e) =>
+                      setEndereco((v) => ({
+                        ...v,
+                        uf: (e.target.value || "").toUpperCase().slice(0, 2),
+                      }))
+                    }
+                  />
+                  {erros.uf && <p className="text-xs text-red-600">{erros.uf}</p>}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Método de pagamento */}
-          <div className="mt-3 space-y-2">
+          <div className="mt-4 space-y-2">
             <div className="font-medium">Forma de pagamento</div>
             <label className="flex items-center gap-2">
               <input
@@ -476,10 +739,10 @@ export default function LojaEmpresa() {
           <p className="text-sm text-gray-600">Carregando…</p>
         ) : (
           <div className="space-y-3">
-            {pixData.qr_code_base64 ? (
+            {qrDataUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={`data:image/png;base64,${pixData.qr_code_base64}`}
+                src={qrDataUrl}
                 alt="QR Code PIX"
                 className="w-56 h-56 mx-auto rounded"
               />
@@ -512,11 +775,7 @@ export default function LojaEmpresa() {
             <p className="text-xs text-gray-500 text-center">
               ID: {String(pixData.id || "")}
               {pixData.date_of_expiration ? (
-                <>
-                  {" "}
-                  • Expira em:{" "}
-                  {new Date(pixData.date_of_expiration).toLocaleString("pt-BR")}
-                </>
+                <> • Expira em: {new Date(pixData.date_of_expiration).toLocaleString("pt-BR")}</>
               ) : null}
             </p>
           </div>
