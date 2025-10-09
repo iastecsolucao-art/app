@@ -3,10 +3,16 @@ import { Pool } from "pg";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }, // Neon no Vercel
+  // Em Neon/Vercel não use SSL strict se já vem no URL
+  // ssl: { rejectUnauthorized: false }
 });
 
-export async function db<T = any>(query: string, params?: any[]): Promise<T[]> {
-  const { rows } = await pool.query(query, params);
-  return rows as T[];
+export async function dbQuery<T = any>(text: string, params?: any[]) {
+  const client = await pool.connect();
+  try {
+    const res = await client.query<T>(text, params);
+    return res;
+  } finally {
+    client.release();
+  }
 }

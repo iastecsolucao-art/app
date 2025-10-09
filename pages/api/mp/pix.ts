@@ -1,11 +1,25 @@
 // pages/api/mp/pix.ts
 import type { NextApiRequest, NextApiResponse } from "next";
-import { db } from "../../../lib/db";
+import crypto from "node:crypto";
+import { dbQuery } from "../../../lib/db";
 import { mpPost } from "../../../lib/mp";
 
-// extrai empresa_id de "emp1-1699999999999"
+type Body = {
+  amount: number;            // em reais (ex.: 1, 10.5)
+  description?: string;
+  referenceId?: string;      // emp1-16999999999
+  payer: {
+    email: string;
+    first_name?: string;
+    last_name?: string;
+    cpf?: string;
+  };
+};
+
+// extrai empresa_id de "emp1-16999..."
 function empresaFromRef(ref?: string) {
-  const m = String(ref || "").match(/^emp(\d+)-/);
+  if (!ref) return null;
+  const m = String(ref).match(/^emp(\d+)-/);
   return m ? Number(m[1]) : null;
 }
 
@@ -15,55 +29,84 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { amount, description, referenceId, payer } = req.body || {};
-    if (!amount || !referenceId || !payer?.email) {
+    const { amount, description, referenceId, payer } = (req.body || {}) as Body;
+
+    if (!amount || !payer?.email || !referenceId) {
       return res.status(400).json({ error: "invalid_body" });
     }
 
-    // 1) Cria pagamento PIX no Mercado Pago
-    const body = {
+    const empresa_id = empresaFromRef(referenceId) || 1; // fallback 1 se não vier com prefixo
+    const idemp = crypto.randomUUID();
+
+    // Mercado Pago (PIX – sandbox)
+    const mpBody = {
       transaction_amount: Number(amount),
-      description: description || `Pedido ${referenceId}`,
+      description: description ?? "Pedido",
       payment_method_id: "pix",
       payer: {
         email: payer.email,
-        first_name: payer.first_name || undefined,
-        last_name:  payer.last_name  || undefined,
-        identification: payer.cpf ? { type: "CPF", number: String(payer.cpf) } : undefined,
+        first_name: payer.first_name,
+        last_name: payer.last_name,
+        identification: payer.cpf
+          ? { type: "CPF", number: String(payer.cpf).replace(/\D/g, "") }
+          : undefined,
       },
     };
 
-    const pay = await mpPost("/v1/payments", body);
+    const mp = await mpPost("/v1/payments", mpBody, idemp);
+    if (!mp.ok) {
+      console.error("[MP][pix] erro:", mp.status, mp.data);
+      return res.status(mp.status).json({
+        error: "mp_error",
+        details: mp.data,
+      });
+    }
 
-    // campos relevantes que queremos guardar
-    const mp_payment_id = pay?.id;
-    const qr_text       = pay?.point_of_interaction?.transaction_data?.qr_code ?? null;
-    const qr_image_url  = pay?.point_of_interaction?.transaction_data?.qr_code_base64
-      ? `data:image/png;base64,${pay.point_of_interaction.transaction_data.qr_code_base64}`
-      : null;
-    const expires_at    = pay?.date_of_expiration ?? null;
+    // pega dados úteis para UI
+    const paymentId = mp.data.id;
+    const poi = mp.data.point_of_interaction?.transaction_data || {};
+    const qr_code = poi.qr_code || null;
+    const qr_code_base64 = poi.qr_code_base64 || null;
+    const expires_at = poi?.expiration_date || mp.data.date_of_expiration || null;
 
-    // 2) Salva pedido com status CRIADO
-    const empresa_id = empresaFromRef(referenceId) ?? 1;
-    await db(
-      `INSERT INTO pedido
-        (empresa_id, total, status, created_at, referencia, pagamento_pagseguros, cliente)
-       VALUES ($1, $2, 'CRIADO', NOW(), $3, $4, $5)`,
-      [empresa_id, Number(amount), String(referenceId), 'mercadopago', payer.email]
+    // grava pedido no Postgres (colunas que você mostrou no print)
+    // id (serial) é gerado automaticamente
+    await dbQuery(
+      `
+      INSERT INTO pedido
+        (empresa_id, cliente_id, total, status, created_at, pagamento_pagseguros, cliente)
+      VALUES ($1, NULL, $2, $3, NOW(), $4, $5)
+      `,
+      [
+        empresa_id,
+        Number(amount),
+        "CRIADO",
+        "mercado_pago",  // sua coluna no print chama "pagamento_pagseguros"
+        "cliente",
+      ]
     );
 
-    // 3) Devolve dados p/ a página do PIX
+    // Se você TIVER colunas referencia/mp_payment_id, use este insert em vez do de cima:
+    /*
+    await dbQuery(
+      \`
+      INSERT INTO pedido
+        (empresa_id, total, status, created_at, pagamento_pagseguros, cliente, referencia, mp_payment_id)
+      VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7)
+      \`,
+      [empresa_id, Number(amount), "CRIADO", "mercado_pago", "cliente", referenceId, paymentId]
+    );
+    */
+
     return res.status(201).json({
-      chargeId: String(mp_payment_id),
-      qr_text,
-      qr_image_url,
+      chargeId: String(paymentId),
+      qr_image_url: qr_code_base64 ? `data:image/png;base64,${qr_code_base64}` : null,
+      qr_text: qr_code,
       expires_at,
+      referenceId,
     });
   } catch (e: any) {
-    console.error("[/api/mp/pix] ERROR:", e?.status, e?.data || e?.message);
-    return res.status(e?.status || 500).json({
-      error: "server_error",
-      details: e?.data || e?.message || "Internal Server Error",
-    });
+    console.error("[/mp/pix] exception:", e);
+    return res.status(500).json({ error: "server_error", message: e?.message });
   }
 }
