@@ -1,64 +1,29 @@
+// pages/api/mp/webhook.ts
 import type { NextApiRequest, NextApiResponse } from "next";
-import { pool } from "../../../lib/db";
-
-// mapeamento simples de status do MP para sua tabela
-function mapMpStatus(s: string) {
-  const v = (s || "").toLowerCase();
-  if (v === "approved") return "PAGO";
-  if (v === "rejected") return "RECUSADO";
-  if (v === "cancelled") return "CANCELADO";
-  return "PENDENTE";
-}
+import { db } from "../../../lib/db";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
 
   try {
-    // Hot: Mercado Pago pode te enviar query params tipo ?type=payment&id=12345
-    // e/ou JSON com data.id. Trate os dois casos:
-    const paymentId = (req.query?.id as string) || (req.body?.data?.id as string);
-    if (!paymentId) {
-      console.log("[MP webhook] payload sem payment id", req.query, req.body);
-      return res.status(202).json({ ok: true });
-    }
+    // O MP pode mandar dois formatos. Guardamos tudo que chegar para auditoria.
+    console.log("[MP webhook] headers:", req.headers);
+    console.log("[MP webhook] body:", req.body);
 
-    // 1) Buscar detalhes do pagamento no MP (para obter status e external_reference)
-    // const mp = new MercadoPago(process.env.MP_ACCESS_TOKEN!);
-    // const pay = await mp.payments.get(paymentId);
-    // const status = pay.status;                // 'approved' | 'pending' | ...
-    // const externalReference = pay.external_reference;
+    const topic = req.body?.type || req.query?.type;
+    const dataId = req.body?.data?.id || req.query?.data_id || req.query?.id;
 
-    // MOCK:
-    const status = "approved";
-    const externalReference = "emp1-EXEMPLO-123";
-
-    const client = await pool.connect();
-    try {
-      // 2) Atualizar por referencia (melhor) e também registrar o gateway_id
-      const r = await client.query(
-        `UPDATE pedido
-           SET status = $1, gateway_id = COALESCE(gateway_id, $2)
-         WHERE referencia = $3
-         RETURNING id`,
-        [mapMpStatus(status), String(paymentId), externalReference]
-      );
-
-      // fallback: se por algum motivo não achou pela referência, tenta pelo id do gateway
-      if (r.rowCount === 0) {
-        await client.query(
-          `UPDATE pedido
-             SET status = $1
-           WHERE gateway = 'mercadopago' AND gateway_id = $2`,
-          [mapMpStatus(status), String(paymentId)]
-        );
-      }
-    } finally {
-      client.release();
+    // Se o evento for pagamento aprovado, marque o pedido como PAGO.
+    // Você pode buscar a referência pelo payment_id, se tiver salvo,
+    // ou usar a sua própria referência (depende de como montou o fluxo).
+    if (String(topic).toLowerCase().includes("payment") && dataId) {
+      // Exemplo simples: marcar o último pedido CRIADO como PAGO
+      await db(`UPDATE pedido SET status='PAGO' WHERE status='CRIADO' ORDER BY id DESC LIMIT 1`);
     }
 
     return res.status(200).json({ ok: true });
   } catch (e: any) {
-    console.error("[MP webhook] error:", e);
+    console.error("[MP webhook] ERROR:", e);
     return res.status(500).json({ error: "webhook_error" });
   }
 }

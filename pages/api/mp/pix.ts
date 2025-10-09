@@ -1,62 +1,69 @@
+// pages/api/mp/pix.ts
 import type { NextApiRequest, NextApiResponse } from "next";
-import { pool } from "../../../lib/db";
+import { db } from "../../../lib/db";
+import { mpPost } from "../../../lib/mp";
+
+// extrai empresa_id de "emp1-1699999999999"
+function empresaFromRef(ref?: string) {
+  const m = String(ref || "").match(/^emp(\d+)-/);
+  return m ? Number(m[1]) : null;
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
-
-  const {
-    empresaId,              // pegue da sessão se preferir
-    referenceId,            // sua referência (external_reference)
-    amount,                 // em REAIS, ex 1.00
-    description,
-    customer: { name, email },
-  } = req.body;
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "method_not_allowed" });
+  }
 
   try {
-    // 1) Criar pagamento no MP (SDK/Fetch) e obter payment/preference (exemplo genérico)
-    // const mp = new MercadoPago(process.env.MP_ACCESS_TOKEN!);
-    // const mpResp = await mp.payments.create({...});
-    // const paymentId = mpResp.id;
-    // const qrImage = mpResp.point_of_interaction.transaction_data.qr_code_base64;
-    // const qrText  = mpResp.point_of_interaction.transaction_data.qr_code;
-
-    // MOCK para exemplo:
-    const paymentId = "mp_test_" + Date.now();
-
-    // 2) Gravar o pedido como CRIADO
-    const client = await pool.connect();
-    try {
-      await client.query(
-        `INSERT INTO pedido (empresa_id, referencia, email, nome, total, metodo, descricao, status, gateway, gateway_id, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now())
-         ON CONFLICT (referencia) DO NOTHING`,
-        [
-          empresaId ?? 1,
-          referenceId,
-          email,
-          name,
-          Number(amount),
-          "PIX",
-          description ?? null,
-          "CRIADO",
-          "mercadopago",
-          paymentId,
-        ]
-      );
-    } finally {
-      client.release();
+    const { amount, description, referenceId, payer } = req.body || {};
+    if (!amount || !referenceId || !payer?.email) {
+      return res.status(400).json({ error: "invalid_body" });
     }
 
-    // 3) Devolva os dados para a tela do PIX transparente
+    // 1) Cria pagamento PIX no Mercado Pago
+    const body = {
+      transaction_amount: Number(amount),
+      description: description || `Pedido ${referenceId}`,
+      payment_method_id: "pix",
+      payer: {
+        email: payer.email,
+        first_name: payer.first_name || undefined,
+        last_name:  payer.last_name  || undefined,
+        identification: payer.cpf ? { type: "CPF", number: String(payer.cpf) } : undefined,
+      },
+    };
+
+    const pay = await mpPost("/v1/payments", body);
+
+    // campos relevantes que queremos guardar
+    const mp_payment_id = pay?.id;
+    const qr_text       = pay?.point_of_interaction?.transaction_data?.qr_code ?? null;
+    const qr_image_url  = pay?.point_of_interaction?.transaction_data?.qr_code_base64
+      ? `data:image/png;base64,${pay.point_of_interaction.transaction_data.qr_code_base64}`
+      : null;
+    const expires_at    = pay?.date_of_expiration ?? null;
+
+    // 2) Salva pedido com status CRIADO
+    const empresa_id = empresaFromRef(referenceId) ?? 1;
+    await db(
+      `INSERT INTO pedido
+        (empresa_id, total, status, created_at, referencia, pagamento_pagseguros, cliente)
+       VALUES ($1, $2, 'CRIADO', NOW(), $3, $4, $5)`,
+      [empresa_id, Number(amount), String(referenceId), 'mercadopago', payer.email]
+    );
+
+    // 3) Devolve dados p/ a página do PIX
     return res.status(201).json({
-      chargeId: paymentId,
-      referencia: referenceId,
-      qr_image_url: null,     // preencha com o dado real do MP
-      qr_text: null,          // idem
-      expires_at: null
+      chargeId: String(mp_payment_id),
+      qr_text,
+      qr_image_url,
+      expires_at,
     });
   } catch (e: any) {
-    console.error("[MP create] error:", e);
-    return res.status(500).json({ error: "mp_create_failed" });
+    console.error("[/api/mp/pix] ERROR:", e?.status, e?.data || e?.message);
+    return res.status(e?.status || 500).json({
+      error: "server_error",
+      details: e?.data || e?.message || "Internal Server Error",
+    });
   }
 }

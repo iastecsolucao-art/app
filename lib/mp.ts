@@ -1,40 +1,33 @@
 // lib/mp.ts
 import crypto from "node:crypto";
 
-/** Use .env.local para alternar */
-export const MP_ENV =
-  (process.env.MP_ENV || "sandbox").toLowerCase() === "production"
-    ? "production"
-    : "sandbox";
-
-/** Tokens/Pubs */
-export const MP_ACCESS_TOKEN =
-  MP_ENV === "production"
-    ? (process.env.MP_ACCESS_TOKEN_PROD as string)
-    : (process.env.MP_ACCESS_TOKEN_TEST as string);
-
-export const MP_PUBLIC_KEY =
-  MP_ENV === "production"
-    ? (process.env.MP_PUBLIC_KEY_PROD as string)
-    : (process.env.MP_PUBLIC_KEY_TEST as string);
-
-/** Webhook público (https) */
-export const MP_WEBHOOK_URL = process.env.MP_WEBHOOK_URL || "";
-
-/** Base da API (é a mesma para sandbox/prod; o que muda é o token) */
 export const MP_API = "https://api.mercadopago.com";
+export const MP_TOKEN = process.env.MP_ACCESS_TOKEN || "";
 
-/** Helpers */
-export const safeJson = <T = any>(s: string): T | null => {
-  try {
-    return JSON.parse(s) as T;
-  } catch {
-    return null;
+export function mpHeaders(idem?: string) {
+  return {
+    Authorization: `Bearer ${MP_TOKEN}`,
+    "Content-Type": "application/json",
+    "X-Idempotency-Key": idem || crypto.randomUUID(),
+  };
+}
+
+export async function mpPost(path: string, body: any, idem?: string) {
+  const r = await fetch(`${MP_API}${path}`, {
+    method: "POST",
+    headers: mpHeaders(idem),
+    body: JSON.stringify(body),
+  });
+
+  const text = await r.text();
+  let data: any = null;
+  try { data = JSON.parse(text); } catch {}
+
+  if (!r.ok) {
+    // loga body bruto pra facilitar debug
+    console.error("[MP] POST error", r.status, data || text);
+    const msg = typeof data === "object" ? data : { error: text };
+    throw Object.assign(new Error("mp_error"), { status: r.status, data: msg });
   }
-};
-
-export const mpHeaders = (idemp?: string) => ({
-  "Content-Type": "application/json",
-  Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
-  "X-Idempotency-Key": idemp ?? crypto.randomUUID(),
-});
+  return data;
+}
