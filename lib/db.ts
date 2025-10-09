@@ -3,15 +3,16 @@ import { Pool } from "pg";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // Em Neon/Vercel não use SSL strict se já vem no URL
-  // ssl: { rejectUnauthorized: false }
+  // se estiver em provedor que exige SSL (Neon/Render/Heroku/etc)
+  ssl: { rejectUnauthorized: false },
 });
 
+// Conveniência: execute consultas com pool gerenciado.
 export async function dbQuery<T = any>(text: string, params?: any[]) {
   const client = await pool.connect();
   try {
-    const res = await client.query<T>(text, params);
-    return res;
+    const result = await client.query<T>(text, params);
+    return result; // { rows, rowCount, ... }
   } finally {
     client.release();
   }
