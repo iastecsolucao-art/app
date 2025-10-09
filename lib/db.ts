@@ -1,19 +1,29 @@
 // lib/db.ts
 import { Pool } from "pg";
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  // se estiver em provedor que exige SSL (Neon/Render/Heroku/etc)
-  ssl: { rejectUnauthorized: false },
-});
+declare global {
+  // eslint-disable-next-line no-var
+  var _pgPool: Pool | undefined;
+}
 
-// Conveniência: execute consultas com pool gerenciado.
+const pool =
+  global._pgPool ??
+  new Pool({
+    connectionString: process.env.DATABASE_URL,
+    // Se o seu DATABASE_URL não tem sslmode=require, habilite ssl manualmente:
+    // ssl: { rejectUnauthorized: false },
+  });
+
+if (!global._pgPool) global._pgPool = pool;
+
 export async function dbQuery<T = any>(text: string, params?: any[]) {
   const client = await pool.connect();
   try {
-    const result = await client.query<T>(text, params);
-    return result; // { rows, rowCount, ... }
+    const res = await client.query<T>(text, params);
+    return res; // ou res.rows, se preferir
   } finally {
     client.release();
   }
 }
+
+export { pool };
