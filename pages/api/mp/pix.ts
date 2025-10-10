@@ -2,29 +2,37 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import crypto from "node:crypto";
 import { dbQuery } from "../../../lib/db";
-import { mpPost, MP_WEBHOOK_URL } from "../../../lib/mp";
+import { mpPost } from "../../../lib/mp";
+
+type Address = {
+  cep?: string;
+  rua?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
+};
 
 type Body = {
-  amount: number;                // em reais (ex.: 1, 10.5)
+  amount: number;                 // em reais (ex.: 1, 10.5)
   description?: string;
-  referenceId?: string;          // ex.: emp1-16999999999
+  referenceId?: string;           // ex.: emp1-16999999999
   payer: {
     email: string;
     first_name?: string;
     last_name?: string;
     cpf?: string;
+    phone?: string;
   };
-  // opcional (se você enviar do front): dados de entrega
-  shipping?: {
-    address?: {
-      zip_code?: string;
-      street_name?: string;
-      street_number?: string;
-      neighborhood?: string;
-      city?: string;
-      state?: string;
-      complement?: string;
-    };
+  customer?: {
+    nome?: string;
+    email?: string;
+    telefone?: string;
+  };
+  entrega?: {
+    habilitada?: boolean;
+    endereco?: Address;
   };
 };
 
@@ -35,173 +43,107 @@ function empresaFromRef(ref?: string) {
   return m ? Number(m[1]) : null;
 }
 
-const makeIdemp = () =>
-  typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-
-const QR_FROM_TEXT = (text: string) =>
-  `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(
-    text
-  )}`;
-
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "method_not_allowed" });
   }
 
   try {
-    const { amount, description, referenceId, payer } = (req.body || {}) as Body;
+    const { amount, description, referenceId, payer, customer, entrega } =
+      (req.body || {}) as Body;
 
-    // validação mínima
-    if (!(amount > 0) || !payer?.email || !referenceId) {
+    if (!amount || !payer?.email || !referenceId) {
       return res.status(400).json({ error: "invalid_body" });
     }
 
-    const empresa_id = empresaFromRef(referenceId) ?? 1;
-    const idempotency = makeIdemp();
+    const empresa_id = empresaFromRef(referenceId) || 1;
+    const idemp = crypto.randomUUID();
 
-    // monta nome do cliente
-    const firstName = (payer.first_name || "").trim();
-    const lastName  = (payer.last_name  || "").trim();
-    const fullName  = `${firstName} ${lastName}`.trim() || null;
-
-    // Corpo do pagamento PIX
+    // ==== Mercado Pago (PIX – sandbox/produção conforme seu .env) ====
     const mpBody: any = {
       transaction_amount: Number(amount),
       description: description ?? "Pedido",
       payment_method_id: "pix",
-      notification_url: MP_WEBHOOK_URL,     // garante updates no webhook
-      external_reference: referenceId,      // MUITO IMPORTANTE: amarra pagamento ao seu pedido
       payer: {
         email: payer.email,
-        first_name: firstName || undefined,
-        last_name: lastName || undefined,
+        first_name: payer.first_name,
+        last_name: payer.last_name,
         identification: payer.cpf
           ? { type: "CPF", number: String(payer.cpf).replace(/\D/g, "") }
           : undefined,
       },
     };
 
-    // (opcional) se você enviou shipping do front e quiser levar algo ao MP:
-    if (req.body?.shipping?.address) {
-      mpBody.additional_info = {
-        items: [{ title: description || "Pedido", quantity: 1, unit_price: Number(amount) }],
-        payer: { first_name: firstName || undefined, last_name: lastName || undefined },
-        shipments: {
-          receiver_address: {
-            zip_code: req.body.shipping.address.zip_code,
-            street_name: req.body.shipping.address.street_name,
-            street_number: req.body.shipping.address.street_number,
-            neighborhood: req.body.shipping.address.neighborhood,
-            city_name: req.body.shipping.address.city,
-            state_name: req.body.shipping.address.state,
-            comment: req.body.shipping.address.complement,
-          },
-        },
-      };
-    }
-
-    const mp = await mpPost("/v1/payments", mpBody, idempotency);
+    const mp = await mpPost("/v1/payments", mpBody, idemp);
     if (!mp.ok) {
-      // Ex.: 401 Unauthorized use of live credentials / 403 PolicyAgent
       console.error("[MP][pix] erro:", mp.status, mp.data);
-      return res.status(mp.status).json({ error: "mp_error", details: mp.data });
+      return res.status(mp.status).json({
+        error: "mp_error",
+        details: mp.data,
+      });
     }
 
-    const data = mp.data ?? {};
+    // ==== Dados para UI ====
+    const paymentId = mp.data.id;
+    const poi = mp.data.point_of_interaction?.transaction_data || {};
+    const qr_code = poi.qr_code || null;
+    const qr_code_base64 = poi.qr_code_base64 || null;
+    const expires_at = poi?.expiration_date || mp.data.date_of_expiration || null;
 
-    // Algumas contas retornam em caminhos diferentes (sandbox/produção)
-    const td =
-      data?.point_of_interaction?.transaction_data ??
-      data?.transaction_data ??
-      {};
+    // ==== Dados do cliente/entrega para gravação ====
+    const clienteNome =
+      customer?.nome ||
+      `${payer.first_name || ""} ${payer.last_name || ""}`.trim() ||
+      "cliente";
 
-    // Texto do pix copia-e-cola
-    const qr_text: string | null =
-      td.qr_code ?? td.qrCode ?? data?.qr_code ?? null;
+    const clienteEmail = customer?.email || payer.email || null;
+    const clienteTelefone = customer?.telefone || payer.phone || null;
 
-    // Base64 (nem sempre vem no sandbox)
-    const qr_code_base64: string | null =
-      td.qr_code_base64 ?? td.qrCodeBase64 ?? null;
+    const entregaJson =
+      entrega?.habilitada && entrega?.endereco
+        ? JSON.stringify({
+            habilitada: true,
+            ...entrega.endereco,
+          })
+        : JSON.stringify({ habilitada: false });
 
-    // Se não vier base64, gera a imagem do QR a partir do texto
-    const qr_image_url =
-      qr_code_base64
-        ? `data:image/png;base64,${qr_code_base64}`
-        : qr_text
-        ? QR_FROM_TEXT(qr_text)
-        : null;
-
-    const expires_at: string | null =
-      td.expiration_date ?? data?.date_of_expiration ?? null;
-
-    // Página de pagamento do MP (fallback útil)
-    const ticket_url: string | null =
-      td.ticket_url ?? data?.transaction_details?.external_resource_url ?? null;
-
-    const paymentId = String(data?.id ?? data?.payment?.id ?? "");
-
-    // ====== GRAVA O PEDIDO COM TODOS OS CAMPOS ÚTEIS ======
-    // se sua tabela tiver DEFAULT NOW(), pode remover "created_at" do INSERT
+    // ==== Grava pedido ====
+    // Observação: mantenho as suas colunas já existentes (pelo seu print).
+    // Se não tiver alguma coluna, crie com a migração acima.
     await dbQuery(
       `
-      INSERT INTO pedido (
-        referencia,
-        metodo,
-        descricao,
-        gateway,
-        gateway_id,
-        email,
-        nome,
-        cliente,
-        empresa_id,
-        total,
-        status,
-        created_at
-      ) VALUES (
-        $1,  $2,  $3,  $4,  $5,
-        $6,  $7,  $8,  $9, $10,
-        $11, NOW()
-      )
+      INSERT INTO pedido
+        (empresa_id, total, status, created_at,
+         pagamento_pagseguros, cliente, cliente_email, cliente_telefone,
+         referencia, mp_payment_id, entrega_json)
+      VALUES ($1, $2, $3, NOW(),
+              $4, $5, $6, $7,
+              $8, $9, $10)
       `,
       [
-        referenceId,            // $1
-        "PIX",                  // $2  (ou "mercado_pago", como preferir exibir)
-        description ?? null,    // $3
-        "mp",                   // $4  (gateway)
-        paymentId || null,      // $5  (gateway_id = id do pagamento MP)
-        payer.email,            // $6
-        fullName,               // $7
-        "cliente",              // $8  (livre; use como quiser)
-        empresa_id,             // $9
-        Number(amount),         // $10
-        "CRIADO",               // $11 (status inicial)
+        empresa_id,
+        Number(amount),
+        "CRIADO",
+        "mercado_pago",
+        clienteNome,
+        clienteEmail,
+        clienteTelefone,
+        referenceId,
+        String(paymentId),
+        entregaJson,
       ]
     );
 
-    // (opcional) se você tiver unique em referencia e preferir upsert:
-    // CREATE UNIQUE INDEX IF NOT EXISTS ux_pedido_referencia ON pedido(referencia);
-    // await dbQuery(`
-    //   INSERT ... ON CONFLICT (referencia)
-    //   DO UPDATE SET gateway_id = EXCLUDED.gateway_id, email = EXCLUDED.email, nome = EXCLUDED.nome;
-    // `, [...]);
-
     return res.status(201).json({
-      chargeId: paymentId || null,
-      qr_image_url,     // mostra a imagem
-      qr_text,          // botão "Copiar código PIX"
-      expires_at,
-      ticket_url,       // fallback para abrir a página do MP
-      referenceId,      // mantém a referência para "Meus pedidos" e webhook
+      id: String(paymentId),
+      status: mp.data.status,
+      qr_code,
+      qr_code_base64,
+      ticket_url: poi?.ticket_url || null,
+      date_of_expiration: expires_at,
     });
   } catch (e: any) {
     console.error("[/mp/pix] exception:", e);
-    return res
-      .status(500)
-      .json({ error: "server_error", message: e?.message || "unknown" });
+    return res.status(500).json({ error: "server_error", message: e?.message });
   }
 }
