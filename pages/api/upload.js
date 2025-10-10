@@ -1,55 +1,60 @@
-import { IncomingForm } from "formidable";
-import fs from "fs/promises";
-import path from "path";
+// pages/api/upload.ts
+import type { NextApiRequest, NextApiResponse } from "next";
+import { IncomingForm, File as FormidableFile } from "formidable";
+import { v2 as cloudinary } from "cloudinary";
 
+// ⛔ Desabilita o bodyParser para aceitar multipart
 export const config = {
-  api: { bodyParser: false }, // necessário p/ multipart
+  api: {
+    bodyParser: false,
+  },
 };
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido" });
+// Configure via variáveis de ambiente
+// CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME!,
+  api_key: process.env.CLOUDINARY_API_KEY!,
+  api_secret: process.env.CLOUDINARY_API_SECRET!,
+});
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "method_not_allowed" });
+  }
 
   try {
     const form = new IncomingForm({
-      multiples: false,
       keepExtensions: true,
-      // não setamos uploadDir aqui; vamos mover manualmente
+      maxFileSize: 10 * 1024 * 1024, // 10MB
+      multiples: false,
     });
 
     form.parse(req, async (err, fields, files) => {
       if (err) {
-        console.error("Formidable error:", err);
-        return res.status(500).json({ error: "Falha ao processar upload" });
+        return res.status(400).json({ error: "parse_error", detail: err.message });
       }
 
-      // Pode vir como objeto ou array dependendo da versão
-      const file = Array.isArray(files.file) ? files.file[0] : files.file;
-      if (!file) return res.status(400).json({ error: "Arquivo 'file' é obrigatório" });
-
-      const mimetype = file.mimetype || file.type || "";
-      if (!mimetype.startsWith("image/")) {
-        return res.status(400).json({ error: "Somente imagens são aceitas neste endpoint" });
+      const file = files.file as FormidableFile | undefined;
+      if (!file?.filepath) {
+        return res.status(400).json({ error: "missing_file", detail: "Campo 'file' não encontrado" });
       }
 
-      const tempPath = file.filepath || file.path; // compat com versões
-      const uploadsDir = path.join(process.cwd(), "public", "uploads");
-      await fs.mkdir(uploadsDir, { recursive: true });
+      // Faz upload para o Cloudinary
+      const up = await cloudinary.uploader.upload(file.filepath, {
+        folder: "produtos",
+        // opcional: public_id: `produto_${Date.now()}`
+      });
 
-      const ext = path.extname(file.originalFilename || file.newFilename || ".jpg");
-      const safeName = (file.originalFilename || `img${Date.now()}${ext}`)
-        .replace(/[^a-zA-Z0-9._-]/g, "_");
-      const finalName = `${Date.now()}_${safeName}`;
-      const finalPath = path.join(uploadsDir, finalName);
-
-      // move/copia o arquivo temp para /public/uploads
-      await fs.copyFile(tempPath, finalPath);
-
-      // URL pública (Next serve /public direto)
-      const publicUrl = `/uploads/${finalName}`;
-      return res.status(201).json({ url: publicUrl });
+      return res.status(200).json({
+        url: up.secure_url,
+        public_id: up.public_id,
+        width: up.width,
+        height: up.height,
+        format: up.format,
+      });
     });
-  } catch (e) {
-    console.error("Upload handler error:", e);
-    return res.status(500).json({ error: "Erro no servidor" });
+  } catch (e: any) {
+    return res.status(500).json({ error: "upload_error", detail: e?.message });
   }
 }

@@ -1,192 +1,165 @@
 {
-  "name": "Desativar workflows expirados",
+  "name": "Ativa/Desativa workflows por expiração",
   "nodes": [
     {
       "parameters": {
         "triggerTimes": {
           "item": [
             {
-              "mode": "everyDay",
               "hour": 3
             }
           ]
         }
       },
-      "id": "3b2b2b78-8a4c-4c7a-9d7b-6d9ab7d2a0b1",
-      "name": "Cron - diário 03:00",
+      "id": "Cron_0300",
+      "name": "Cron 03:00",
       "type": "n8n-nodes-base.cron",
-      "typeVersion": 2,
-      "position": [
-        260,
-        200
-      ]
+      "typeVersion": 1.0,
+      "position": [120, 280]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT DISTINCT workflow\nFROM usuarios\nWHERE workflow IS NOT NULL\n  AND TRIM(workflow) <> ''\n  AND expiracao < NOW();"
+        "query": "SELECT empresa_id AS empresa,\n       workflow,\n       expiracao\n  FROM usuarios\n WHERE workflow IS NOT NULL;"
       },
-      "id": "a9d2ad38-34e3-4a35-9e34-2a8a0b4fb2a7",
-      "name": "Postgres - expiram < NOW()",
+      "id": "PG_Usuarios",
+      "name": "Postgres (usuarios)",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [
-        520,
-        200
-      ],
+      "typeVersion": 1.2,
+      "position": [340, 280],
       "credentials": {
         "postgres": {
           "id": "",
-          "name": ""
+          "name": "COLOQUE-SUAS-CREDENCIAIS-AQUI"
         }
       }
     },
     {
       "parameters": {
-        "functionCode": "const items = $items(\"Postgres - expiram < NOW()\", 0, 0);\nconst set = new Set();\nfor (const i of items) {\n  const name = String(i.json.workflow || '').trim();\n  if (name) set.add(name);\n}\nreturn Array.from(set).map(n => ({ json: { workflowName: n } }));"
+        "functionCode": "const out = [];\nfor (const item of items) {\n  const w = (item.json.workflow || '').trim();\n  if (!w) continue;\n  out.push({ json: {\n    workflow: w,\n    expiracao: item.json.expiracao,\n    empresa: item.json.empresa\n  }});\n}\nreturn out;"
       },
-      "id": "7f0a6d9d-3f70-4f32-87f2-4b4cbd9d0e3d",
+      "id": "Normalize",
       "name": "Normaliza nomes",
       "type": "n8n-nodes-base.function",
-      "typeVersion": 2,
-      "position": [
-        760,
-        200
-      ]
+      "typeVersion": 2.0,
+      "position": [560, 280]
     },
     {
       "parameters": {
-        "url": "={{$env.N8N_BASE_URL || \"https://SEU-N8N\"}}/rest/workflows",
+        "url": "{{$env.N8N_BASE_URL}}/rest/workflows?filter[name]={{$json.workflow}}",
         "options": {
-          "sendQuery": true,
-          "queryParametersUi": {
-            "parameter": [
-              {
-                "name": "filter[name]",
-                "value": "={{$json[\"workflowName\"]}}"
-              },
-              {
-                "name": "limit",
-                "value": "50"
-              }
-            ]
-          }
-        },
-        "authentication": "headerAuth"
-      },
-      "id": "f8a0c54a-3bb1-4a3a-8b8f-1b9a5b22a6a7",
-      "name": "n8n API - GET workflow por nome",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [
-        1000,
-        140
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "",
-          "name": ""
+          "headers": {
+            "X-N8N-API-KEY": "{{$env.N8N_API_KEY}}"
+          },
+          "timeout": 20000
         }
-      }
+      },
+      "id": "HTTP_GetWF",
+      "name": "n8n API - GET workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [780, 280]
     },
     {
       "parameters": {
-        "functionCode": "const r = items[0].json;\nconst arr = (r && r.data) ? r.data : [];\nif (!arr.length) {\n  return [{ json: { skip: true, reason: 'workflow não encontrado', workflowName: $json.workflowName } }];\n}\nreturn [{ json: { workflowId: arr[0].id, workflowName: arr[0].name } }];"
+        "functionCode": "/* A API retorna uma lista. Pegamos o primeiro e anexamos o id */\nconst out = [];\nfor (const item of items) {\n  const body = item.json;\n  const list = Array.isArray(body.data) ? body.data : body;\n  let id = null;\n  let name = null;\n  if (Array.isArray(list) && list.length > 0) {\n    id = list[0].id;\n    name = list[0].name || list[0].displayName || null;\n  }\n  out.push({ json: { foundId: id, foundName: name } });\n}\nreturn out;"
       },
-      "id": "f2d2a6d7-3a9a-4f5f-85e6-5ac8b364a3b2",
-      "name": "Extrai ID do workflow",
+      "id": "ExtractID",
+      "name": "Extrai ID",
       "type": "n8n-nodes-base.function",
-      "typeVersion": 2,
-      "position": [
-        1220,
-        140
-      ]
+      "typeVersion": 2.0,
+      "position": [980, 280]
     },
     {
       "parameters": {
         "conditions": {
+          "boolean": [],
           "string": [
             {
-              "value1": "={{$json[\"skip\"]}}",
-              "operation": "isEmpty"
+              "value1": "={{$json.foundId}}",
+              "operation": "isNotEmpty"
             }
           ]
         }
       },
-      "id": "6b936f38-0f98-4a5f-8b9f-6d13f0a2e0dd",
+      "id": "IfFound",
       "name": "Encontrou ID?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        1420,
-        140
-      ]
+      "typeVersion": 2.0,
+      "position": [1180, 280]
     },
     {
       "parameters": {
-        "url": "={{$env.N8N_BASE_URL || \"https://SEU-N8N\"}}/rest/workflows/{{$json[\"workflowId\"]}}",
-        "authentication": "headerAuth",
-        "requestMethod": "PATCH",
-        "jsonParameters": true,
-        "optionsUi": {
-          "bodyParametersJson": "={{ JSON.stringify({ active: false }) }}"
-        }
+        "functionCode": "/* Decide se expirou (<= agora) ou está válido (> agora) */\nconst out = [];\nfor (const item of items) {\n  const exp = new Date($item(0,0).$node[\"Normaliza nomes\"].json.expiracao || item.json.expiracao);\n  const now = new Date();\n  const expirou = exp.getTime() <= now.getTime();\n  out.push({ json: { expirou } });\n}\nreturn out;"
       },
-      "id": "b0e5d1f9-54d6-4e36-9fd9-7ea22f6f3d2d",
+      "id": "CheckExpired",
+      "name": "Está expirada?",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2.0,
+      "position": [1380, 240]
+    },
+    {
+      "parameters": {
+        "url": "{{$env.N8N_BASE_URL}}/rest/workflows/{{$json.foundId}}",
+        "method": "PATCH",
+        "sendBody": true,
+        "jsonParameters": true,
+        "options": {
+          "headers": {
+            "X-N8N-API-KEY": "{{$env.N8N_API_KEY}}"
+          },
+          "timeout": 20000
+        },
+        "bodyParametersJson": "={\"active\": false}"
+      },
+      "id": "HTTP_Patch_Disable",
       "name": "n8n API - PATCH active=false",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [
-        1620,
-        40
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "",
-          "name": ""
-        }
-      }
+      "typeVersion": 4.2,
+      "position": [1600, 200]
     },
     {
       "parameters": {
-        "functionCode": "return [{ json: { deactivated: true, workflowId: $json.workflowId, workflowName: $json.workflowName } }];"
+        "url": "{{$env.N8N_BASE_URL}}/rest/workflows/{{$json.foundId}}",
+        "method": "PATCH",
+        "sendBody": true,
+        "jsonParameters": true,
+        "options": {
+          "headers": {
+            "X-N8N-API-KEY": "{{$env.N8N_API_KEY}}"
+          },
+          "timeout": 20000
+        },
+        "bodyParametersJson": "={\"active\": true}"
       },
-      "id": "9b9b4a7a-3c40-4df9-a2d2-7b8b0a57b4aa",
-      "name": "Marca como desativado",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 2,
-      "position": [
-        1820,
-        40
-      ]
+      "id": "HTTP_Patch_Enable",
+      "name": "n8n API - PATCH active=true",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 300]
     },
     {
-      "parameters": {
-        "functionCode": "return [{ json: { skipped: true, workflowName: $json.workflowName, reason: $json.reason || 'não encontrado' } }];"
-      },
-      "id": "0c7a6b51-9c0a-4ae3-8f4b-6a5db5d6e1a1",
-      "name": "Marca como ignorado",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 2,
-      "position": [
-        1620,
-        240
-      ]
+      "parameters": {},
+      "id": "Ignored",
+      "name": "Ignorado",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1.0,
+      "position": [1380, 360]
     }
   ],
   "connections": {
-    "Cron - diário 03:00": {
+    "Cron 03:00": {
       "main": [
         [
           {
-            "node": "Postgres - expiram < NOW()",
+            "node": "Postgres (usuarios)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Postgres - expiram < NOW()": {
+    "Postgres (usuarios)": {
       "main": [
         [
           {
@@ -201,25 +174,25 @@
       "main": [
         [
           {
-            "node": "n8n API - GET workflow por nome",
+            "node": "n8n API - GET workflow",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "n8n API - GET workflow por nome": {
+    "n8n API - GET workflow": {
       "main": [
         [
           {
-            "node": "Extrai ID do workflow",
+            "node": "Extrai ID",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Extrai ID do workflow": {
+    "Extrai ID": {
       "main": [
         [
           {
@@ -234,6 +207,24 @@
       "main": [
         [
           {
+            "node": "Está expirada?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignorado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Está expirada?": {
+      "main": [
+        [
+          {
             "node": "n8n API - PATCH active=false",
             "type": "main",
             "index": 0
@@ -241,28 +232,13 @@
         ],
         [
           {
-            "node": "Marca como ignorado",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "n8n API - PATCH active=false": {
-      "main": [
-        [
-          {
-            "node": "Marca como desativado",
+            "node": "n8n API - PATCH active=true",
             "type": "main",
             "index": 0
           }
         ]
       ]
     }
-  ],
-  "active": false,
-  "settings": {},
-  "staticData": null,
-  "pinData": {},
-  "version": 2
+  },
+  "active": false
 }
