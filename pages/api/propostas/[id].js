@@ -6,7 +6,9 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 export default async function handler(req, res) {
   const session = await getServerSession(req, res, authOptions);
-  if (!session) return res.status(401).json({ error: "Não autenticado" });
+  if (!session) {
+    return res.status(401).json({ error: "Não autenticado" });
+  }
 
   const { id } = req.query;
   const client = await pool.connect();
@@ -16,51 +18,76 @@ export default async function handler(req, res) {
       "SELECT empresa_id FROM usuarios WHERE email=$1",
       [session.user.email]
     );
+
     if (userRes.rows.length === 0) {
       return res.status(400).json({ error: "Usuário não encontrado" });
     }
+
     const { empresa_id } = userRes.rows[0];
     if (!empresa_id) {
-      return res.status(400).json({ error: "Usuário não possui empresa vinculada." });
+      return res
+        .status(400)
+        .json({ error: "Usuário não possui empresa vinculada." });
     }
 
     if (req.method === "PUT") {
       const { cliente_id, servicos, validade, observacao, total } = req.body;
 
-      if (!cliente_id || !servicos || !Array.isArray(servicos) || servicos.length === 0 || !validade) {
-        return res.status(400).json({ error: "Campos obrigatórios ausentes ou inválidos" });
+      if (!cliente_id || !Array.isArray(servicos) || servicos.length === 0 || !validade) {
+        return res
+          .status(400)
+          .json({ error: "Campos obrigatórios ausentes ou inválidos" });
       }
 
       await client.query("BEGIN");
 
-      // Atualiza proposta principal
-      const resumoServico = servicos.map(s => s.descricao).join(", ");
+      const resumoServico = servicos.map((s) => s.descricao).join(", ");
 
       await client.query(
-        `UPDATE propostas SET cliente_id=$1, validade=$2, observacao=$3, valor=$4, servico=$5 WHERE id=$6 AND empresa_id=$7`,
+        `UPDATE propostas
+            SET cliente_id=$1,
+                validade=$2,
+                observacao=$3,
+                valor=$4,
+                servico=$5
+          WHERE id=$6 AND empresa_id=$7`,
         [cliente_id, validade, observacao || null, total, resumoServico, id, empresa_id]
       );
 
-      // Remove serviços antigos
-      await client.query(`DELETE FROM proposta_servicos WHERE proposta_id=$1`, [id]);
+      await client.query("DELETE FROM proposta_servicos WHERE proposta_id=$1", [id]);
 
-      // Insere serviços novos
       const insertServicoQuery = `
-        INSERT INTO proposta_servicos (proposta_id, descricao, horas, valor_hora, total)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO proposta_servicos (
+          proposta_id,
+          descricao,
+          horas,
+          valor_hora,
+          total,
+          observacao_servico,
+          observacao
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
       `;
 
       for (const s of servicos) {
-        if (!s.descricao || !s.horas || !s.valorHora || !s.total) {
+        if (!s?.descricao || s.horas == null || s.valorHora == null || s.total == null) {
           await client.query("ROLLBACK");
           return res.status(400).json({ error: "Serviços com campos inválidos" });
         }
+
+        const observacaoServico =
+          typeof s.observacao === "string" && s.observacao.trim() !== ""
+            ? s.observacao.trim()
+            : null;
+
         await client.query(insertServicoQuery, [
           id,
           s.descricao,
           s.horas,
           s.valorHora,
           s.total,
+          observacaoServico,
+          observacaoServico,
         ]);
       }
 
@@ -70,7 +97,6 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "DELETE") {
-      // Deleta proposta e serviços vinculados (cascade)
       const deleteRes = await client.query(
         `DELETE FROM propostas WHERE id=$1 AND empresa_id=$2`,
         [id, empresa_id]
@@ -85,7 +111,11 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ error: "Método não permitido" });
   } catch (err) {
-    await client.query("ROLLBACK");
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackErr) {
+      console.error("Erro ao realizar rollback:", rollbackErr);
+    }
     console.error("Erro API propostas:", err);
     return res.status(500).json({ error: "Erro interno", details: err.message });
   } finally {

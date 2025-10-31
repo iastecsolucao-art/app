@@ -6,7 +6,15 @@ export default function RelatorioVendasVendedorMensalComissao() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Opções para ano, mês e dia
+  // ---------- Helpers ----------
+  const formatDateBr = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    return `${dd}/${mm}`;
+  };
+
   const anosDisponiveis = Array.from({ length: 30 }, (_, i) => {
     const ano = 2000 + i;
     return { value: ano.toString(), label: ano.toString() };
@@ -32,14 +40,19 @@ export default function RelatorioVendasVendedorMensalComissao() {
   const [lojasSelecionadas, setLojasSelecionadas] = useState([]);
   const [vendedoresSelecionados, setVendedoresSelecionados] = useState([]);
 
+  // ---- NOVO: semanas ----
+  const [semanasDisponiveis, setSemanasDisponiveis] = useState([]);
+  const [semanasSelecionadas, setSemanasSelecionadas] = useState([]);
+
   const tableRef = useRef(null);
 
+  // filtros básicos
   useEffect(() => {
     async function fetchFiltros() {
       try {
         const [resLojas, resVendedores] = await Promise.all([
-          fetch("/api/lojas"),
-          fetch("/api/vendedores"),
+          fetch("/api/lojas", { cache: "no-store" }),
+          fetch("/api/vendedores", { cache: "no-store" }),
         ]);
         const lojas = await resLojas.json();
         const vendedores = await resVendedores.json();
@@ -52,6 +65,42 @@ export default function RelatorioVendasVendedorMensalComissao() {
     }
     fetchFiltros();
   }, []);
+
+  // semanas do calendário (padrão: mês atual)
+  useEffect(() => {
+    fetchSemanas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const fetchSemanas = async () => {
+    try {
+      const res = await fetch("/api/semanas_calendario", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const json = await res.json();
+      // Pode vir { weeks: [...] } ou simplesmente [...]
+      const weeks = Array.isArray(json) ? json : Array.isArray(json?.weeks) ? json.weeks : [];
+
+      const opts = weeks.map((s) => {
+        // suporta ambos os contratos: {inicio,fim,semana} ou {dt_inicio_mes,dt_fim_mes,semana_iso}
+        const inicio = s.inicio || s.dt_inicio_mes;
+        const fim = s.fim || s.dt_fim_mes;
+        const semana = s.semana || s.semana_iso;
+
+        return {
+          value: String(semana),
+          label: `S${semana} ${formatDateBr(inicio)} a ${formatDateBr(fim)}`,
+          meta: { ano: s.ano, inicio, fim },
+        };
+      });
+
+      opts.sort((a, b) => Number(a.value) - Number(b.value));
+      setSemanasDisponiveis(opts);
+    } catch (err) {
+      console.error("Erro ao carregar semanas:", err);
+      setSemanasDisponiveis([]);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -70,10 +119,17 @@ export default function RelatorioVendasVendedorMensalComissao() {
       if (vendedoresSelecionados.length > 0)
         params.append("vendedor", vendedoresSelecionados.map((v) => v.value).join(","));
 
-      const res = await fetch(`/api/relatorio_mensal_vendedor_comissao?${params.toString()}`);
+      // envia as semanas para o backend (ex.: "40,41")
+      if (semanasSelecionadas.length > 0)
+        params.append("semana", semanasSelecionadas.map((s) => s.value).join(","));
+
+      const res = await fetch(`/api/relatorio_mensal_vendedor_comissao?${params.toString()}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
       const json = await res.json();
       setData(json.data || []);
-    } catch {
+    } catch (e) {
+      console.error(e);
       alert("Erro ao carregar dados");
     }
     setLoading(false);
@@ -83,10 +139,15 @@ export default function RelatorioVendasVendedorMensalComissao() {
     if (!tableRef.current) return;
     const wb = XLSX.utils.table_to_book(tableRef.current, { sheet: "Relatório" });
 
-    const nomeArquivo = `relatorio_vendas_` +
-      (anosSelecionados.length > 0 ? anosSelecionados.map(a => a.value).join("-") : "todos") + "_" +
-      (mesesSelecionados.length > 0 ? mesesSelecionados.map(m => m.value).join("-") : "todos") + "_" +
-      (diasSelecionados.length > 0 ? diasSelecionados.map(d => d.value).join("-") : "todos") +
+    const nomeArquivo =
+      `relatorio_vendas_` +
+      (anosSelecionados.length > 0 ? anosSelecionados.map((a) => a.value).join("-") : "todos") +
+      "_" +
+      (mesesSelecionados.length > 0 ? mesesSelecionados.map((m) => m.value).join("-") : "todos") +
+      "_" +
+      (diasSelecionados.length > 0 ? diasSelecionados.map((d) => d.value).join("-") : "todos") +
+      "_" +
+      (semanasSelecionadas.length > 0 ? "S" + semanasSelecionadas.map((s) => s.value).join("-S") : "todasSemanas") +
       `.xlsx`;
 
     XLSX.writeFile(wb, nomeArquivo);
@@ -100,13 +161,9 @@ export default function RelatorioVendasVendedorMensalComissao() {
 
   const getArrow = (currentPct) => {
     const meta = 100;
-    if (currentPct > meta) {
-      return <span style={{ color: "#2e7d32", marginLeft: 4 }}>▲</span>;
-    } else if (currentPct < meta) {
-      return <span style={{ color: "#d32f2f", marginLeft: 4 }}>▼</span>;
-    } else {
-      return <span style={{ color: "#999", marginLeft: 4 }}>▶</span>;
-    }
+    if (currentPct > meta) return <span style={{ color: "#2e7d32", marginLeft: 4 }}>▲</span>;
+    if (currentPct < meta) return <span style={{ color: "#d32f2f", marginLeft: 4 }}>▼</span>;
+    return <span style={{ color: "#999", marginLeft: 4 }}>▶</span>;
   };
 
   const agruparPorLoja = (data) => {
@@ -123,9 +180,11 @@ export default function RelatorioVendasVendedorMensalComissao() {
     return valor.toFixed(2).replace(".", ",") + "%";
   };
 
+  // ---------- Tabela ----------
   function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, getArrow, tableRef }) {
     const grupos = agruparPorLoja(data);
 
+    // todas as semanas presentes
     const semanasSet = new Set();
     data.forEach((item) => {
       (item.detalhe_semanal || []).forEach((d) => {
@@ -133,7 +192,13 @@ export default function RelatorioVendasVendedorMensalComissao() {
         if (!isNaN(numSemana)) semanasSet.add(numSemana);
       });
     });
-    const semanas = Array.from(semanasSet).sort((a, b) => a - b);
+    let semanas = Array.from(semanasSet).sort((a, b) => a - b);
+
+    // aplica filtro de semanas selecionadas na UI
+    const semanasFiltro = semanasSelecionadas.length > 0 ? semanasSelecionadas.map((s) => Number(s.value)) : null;
+    if (semanasFiltro && semanasFiltro.length > 0) {
+      semanas = semanas.filter((s) => semanasFiltro.includes(s));
+    }
 
     return (
       <table
@@ -151,63 +216,13 @@ export default function RelatorioVendasVendedorMensalComissao() {
       >
         <thead style={{ backgroundColor: "#1976d2", color: "white" }}>
           <tr>
-            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>
-              Loja
-            </th>
-            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>
-              Vendedor
-            </th>
-
-            <th
-              style={{
-                padding: 12,
-                textAlign: "right",
-                minWidth: 120,
-              }}
-              rowSpan={2}
-            >
-              Total Meta
-            </th>
-            <th
-              style={{
-                padding: 12,
-                textAlign: "right",
-                minWidth: 120,
-              }}
-              rowSpan={2}
-            >
-              Total Real
-            </th>
-            <th
-              style={{
-                padding: 12,
-                textAlign: "right",
-                minWidth: 80,
-              }}
-              rowSpan={2}
-            >
-              %M
-            </th>
-            <th
-              style={{
-                padding: 12,
-                textAlign: "right",
-                minWidth: 120,
-              }}
-              rowSpan={2}
-            >
-              Total Comissão
-            </th>
-
-            <th
-              style={{
-                border: "1px solid #ccc",
-                padding: 8,
-                backgroundColor: "#1565c0",
-                textAlign: "center",
-              }}
-              colSpan={semanas.length * 4}
-            >
+            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>Loja</th>
+            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>Vendedor</th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>Total Meta</th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>Total Real</th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 80 }} rowSpan={2}>%M</th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>Total Comissão</th>
+            <th style={{ border: "1px solid #ccc", padding: 8, backgroundColor: "#1565c0", textAlign: "center" }} colSpan={semanas.length * 4}>
               Semanas
             </th>
           </tr>
@@ -310,7 +325,8 @@ export default function RelatorioVendasVendedorMensalComissao() {
                             {totalRealVendedor >= totalMetaVendedor ? (
                               <>
                                 {totalRealVendedor / totalMetaVendedor <= 1.2 && <>🥉 Cota 4.00%</>}
-                                {totalRealVendedor / totalMetaVendedor > 1.2 && totalRealVendedor / totalMetaVendedor <= 1.4 && <>🥈 Super Cota  4.50%</>}
+                                {totalRealVendedor / totalMetaVendedor > 1.2 &&
+                                  totalRealVendedor / totalMetaVendedor <= 1.4 && <>🥈 Super Cota 4.50%</>}
                                 {totalRealVendedor / totalMetaVendedor > 1.4 && <>🥇 Cota Ouro 5.00%</>}
                               </>
                             ) : (
@@ -321,21 +337,23 @@ export default function RelatorioVendasVendedorMensalComissao() {
                       </td>
 
                       {semanas.map((sem) => {
-                        const d = detalhePorSemana[sem] || { meta: 0, realizado: 0, comissao: 0, cota_vendedor: 0, super_cota: 0, cota_ouro: 0, abaixo_cota: 0 };
+                        const d = detalhePorSemana[sem] || {
+                          meta: 0,
+                          realizado: 0,
+                          comissao: 0,
+                          cota_vendedor: 0,
+                          super_cota: 0,
+                          cota_ouro: 0,
+                          abaixo_cota: 0,
+                        };
                         const pctSemana = d.meta > 0 ? (d.realizado / d.meta) * 100 : 0;
 
                         const ratio = d.meta > 0 ? d.realizado / d.meta : 0;
                         let tipoCota = "";
-
-                        if (ratio < 1) {
-                          tipoCota = "Abaixo";
-                        } else if (ratio <= 1.20) {
-                          tipoCota = "Cota";
-                        } else if (ratio <= 1.40) {
-                          tipoCota = "Super Cota";
-                        } else {
-                          tipoCota = "Cota Ouro";
-                        }
+                        if (ratio < 1) tipoCota = "Abaixo";
+                        else if (ratio <= 1.2) tipoCota = "Cota";
+                        else if (ratio <= 1.4) tipoCota = "Super Cota";
+                        else tipoCota = "Cota Ouro";
 
                         const comissaoCalculada = d.comissao ?? 0;
 
@@ -347,7 +365,6 @@ export default function RelatorioVendasVendedorMensalComissao() {
                             <td style={{ border: "1px solid #ccc", padding: 8 }}>
                               {(d.realizado ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                             </td>
-
                             <td
                               style={{
                                 border: "1px solid #ccc",
@@ -363,7 +380,6 @@ export default function RelatorioVendasVendedorMensalComissao() {
                               {formatarPercentual(pctSemana)}
                               {getArrow(pctSemana)}
                             </td>
-
                             <td
                               style={{
                                 border: "1px solid #ccc",
@@ -397,33 +413,13 @@ export default function RelatorioVendasVendedorMensalComissao() {
                   );
                 })}
                 <tr style={{ fontWeight: "bold", backgroundColor: "#f5f5f5" }}>
-                  <td style={{ padding: 12 }} colSpan={2}>
-                    Subtotal {loja}
-                  </td>
+                  <td style={{ padding: 12 }} colSpan={2}>Subtotal {loja}</td>
 
-                  <td
-                    style={{
-                      padding: 12,
-                      textAlign: "right",
-                      fontWeight: "600",
-                      color: "#d32f2f",
-                      minWidth: 120,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
+                  <td style={{ padding: 12, textAlign: "right", fontWeight: "600", color: "#d32f2f", minWidth: 120, whiteSpace: "nowrap" }}>
                     {subtotalMeta.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                   </td>
 
-                  <td
-                    style={{
-                      padding: 12,
-                      textAlign: "right",
-                      fontWeight: "600",
-                      color: "#d32f2f",
-                      minWidth: 120,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
+                  <td style={{ padding: 12, textAlign: "right", fontWeight: "600", color: "#d32f2f", minWidth: 120, whiteSpace: "nowrap" }}>
                     {subtotalReal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                   </td>
 
@@ -442,27 +438,14 @@ export default function RelatorioVendasVendedorMensalComissao() {
                   >
                     {subtotalMeta > 0 ? (
                       <>
-                        {((subtotalReal / subtotalMeta) * 100).toFixed(2).replace(".", ",")}%
-                        {getArrow((subtotalReal / subtotalMeta) * 100, null)}
-                        {(subtotalReal / subtotalMeta) * 100 >= 100 && (subtotalReal / subtotalMeta) * 100 <= 120 && <span>🥉</span>}
-                        {(subtotalReal / subtotalMeta) * 100 > 120 && (subtotalReal / subtotalMeta) * 100 <= 140 && <span>🥈</span>}
-                        {(subtotalReal / subtotalMeta) * 100 > 140 && <span>🥇</span>}
+                        {((subtotalReal / subtotalMeta) * 100).toFixed(2).replace(".", ",")}%{getArrow((subtotalReal / subtotalMeta) * 100)}
                       </>
                     ) : (
                       "Abaixo"
                     )}
                   </td>
 
-                  <td
-                    style={{
-                      padding: 12,
-                      textAlign: "right",
-                      fontWeight: "600",
-                      color: subtotalReal >= subtotalMeta ? "#2e7d32" : "#d32f2f",
-                      minWidth: 120,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
+                  <td style={{ padding: 12, textAlign: "right", fontWeight: "600", color: subtotalReal >= subtotalMeta ? "#2e7d32" : "#d32f2f", minWidth: 120, whiteSpace: "nowrap" }}>
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                       <span style={{ fontWeight: "600" }}>
                         {subtotalComissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
@@ -492,7 +475,6 @@ export default function RelatorioVendasVendedorMensalComissao() {
                         <td style={{ border: "1px solid #ccc", padding: 8 }}>
                           {s.realizado.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                         </td>
-
                         <td
                           style={{
                             border: "1px solid #ccc",
@@ -507,7 +489,6 @@ export default function RelatorioVendasVendedorMensalComissao() {
                         >
                           {formatarPercentual(pct)}
                         </td>
-
                         <td
                           style={{
                             border: "1px solid #ccc",
@@ -578,7 +559,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
             isMulti
             placeholder="Selecione ano(s)"
             closeMenuOnSelect={false}
-            styles={{ menu: (provided) => ({ ...provided, zIndex: 9999 }) }}
+            styles={{ menu: (p) => ({ ...p, zIndex: 9999 }) }}
           />
         </div>
 
@@ -591,7 +572,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
             isMulti
             placeholder="Selecione mês(es)"
             closeMenuOnSelect={false}
-            styles={{ menu: (provided) => ({ ...provided, zIndex: 9999 }) }}
+            styles={{ menu: (p) => ({ ...p, zIndex: 9999 }) }}
           />
         </div>
 
@@ -604,7 +585,23 @@ export default function RelatorioVendasVendedorMensalComissao() {
             isMulti
             placeholder="Selecione dia(s)"
             closeMenuOnSelect={false}
-            styles={{ menu: (provided) => ({ ...provided, zIndex: 9999 }) }}
+            styles={{ menu: (p) => ({ ...p, zIndex: 9999 }) }}
+          />
+        </div>
+
+        {/* NOVO: Semana (Sxx – intervalo) */}
+        <div style={{ minWidth: 260 }}>
+          <label style={{ fontWeight: "600", fontSize: 14, marginBottom: 4 }}>
+            Semana (Sxx – intervalo)
+          </label>
+          <Select
+            options={semanasDisponiveis}
+            value={semanasSelecionadas}
+            onChange={setSemanasSelecionadas}
+            isMulti
+            placeholder="Ex.: S40 29/09 a 05/10"
+            closeMenuOnSelect={false}
+            styles={{ menu: (p) => ({ ...p, zIndex: 9999 }) }}
           />
         </div>
 
@@ -617,7 +614,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
             isMulti
             placeholder="Selecione loja(s)"
             closeMenuOnSelect={false}
-            styles={{ menu: (provided) => ({ ...provided, zIndex: 9999 }) }}
+            styles={{ menu: (p) => ({ ...p, zIndex: 9999 }) }}
           />
         </div>
 
@@ -630,7 +627,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
             isMulti
             placeholder="Selecione vendedor(es)"
             closeMenuOnSelect={false}
-            styles={{ menu: (provided) => ({ ...provided, zIndex: 9999 }) }}
+            styles={{ menu: (p) => ({ ...p, zIndex: 9999 }) }}
           />
         </div>
 
