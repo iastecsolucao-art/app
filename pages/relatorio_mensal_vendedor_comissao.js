@@ -1,12 +1,53 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Select from "react-select";
 import * as XLSX from "xlsx";
 
+/**
+ * Relatório de Vendas por Vendedor - Mensal com Comissão
+ * - Usa os endpoints:
+ *   /api/lojas, /api/vendedores, /api/semanas_calendario
+ *   /api/relatorio_mensal_vendedor_comissao -> { data, resumo_semanal, subtotais_loja, total_geral }
+ */
 export default function RelatorioVendasVendedorMensalComissao() {
-  const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ---------- Helpers ----------
+  // dados retornados pelo back
+  const [data, setData] = useState([]);                  // linhas por vendedor
+  const [resumo, setResumo] = useState({});              // mapa loja -> semana -> meta (construído de resumo_semanal)
+  const [subtotais, setSubtotais] = useState({});        // mapa loja -> { meta, real, comissao, pct }
+  const [totalGeral, setTotalGeral] = useState(null);    // { meta_total, real_total, comissao_total, pct_meta }
+  const [semanasApi, setSemanasApi] = useState([]);      // semanas que vieram no back (derivadas de resumo_semanal)
+
+  // filtros
+  const [anosSelecionados, setAnosSelecionados] = useState([]);
+  const [mesesSelecionados, setMesesSelecionados] = useState([]);
+  const [diasSelecionados, setDiasSelecionados] = useState([]);
+  const [lojasSelecionadas, setLojasSelecionadas] = useState([]);
+  const [vendedoresSelecionados, setVendedoresSelecionados] = useState([]);
+
+  // opções para selects
+  const [lojasDisponiveis, setLojasDisponiveis] = useState([]);
+  const [vendedoresDisponiveis, setVendedoresDisponiveis] = useState([]);
+  const [semanasDisponiveis, setSemanasDisponiveis] = useState([]);
+  const [semanasSelecionadas, setSemanasSelecionadas] = useState([]);
+
+  const tableRef = useRef(null);
+
+  // listas fixas de anos/meses/dias
+  const anosDisponiveis = Array.from({ length: 30 }, (_, i) => {
+    const ano = 2000 + i;
+    return { value: ano.toString(), label: ano.toString() };
+  });
+  const mesesDisponiveis = Array.from({ length: 12 }, (_, i) => {
+    const mes = i + 1;
+    return { value: mes.toString(), label: mes.toString().padStart(2, "0") };
+  });
+  const diasDisponiveis = Array.from({ length: 31 }, (_, i) => {
+    const dia = i + 1;
+    return { value: dia.toString(), label: dia.toString().padStart(2, "0") };
+  });
+
+  // utils
   const formatDateBr = (iso) => {
     if (!iso) return "";
     const d = new Date(iso);
@@ -14,41 +55,26 @@ export default function RelatorioVendasVendedorMensalComissao() {
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     return `${dd}/${mm}`;
   };
+  const getColor = (pct) => (pct >= 100 ? "#2e7d32" : pct >= 80 ? "#ed6c02" : "#d32f2f");
+  const getArrow = (pct) =>
+    pct > 100 ? (
+      <span style={{ color: "#2e7d32", marginLeft: 4 }}>▲</span>
+    ) : pct < 100 ? (
+      <span style={{ color: "#d32f2f", marginLeft: 4 }}>▼</span>
+    ) : (
+      <span style={{ color: "#999", marginLeft: 4 }}>▶</span>
+    );
+  const formatarPercentual = (v) => (isNaN(v) ? "0,00%" : `${Number(v).toFixed(2).replace(".", ",")}%`);
 
-  const anosDisponiveis = Array.from({ length: 30 }, (_, i) => {
-    const ano = 2000 + i;
-    return { value: ano.toString(), label: ano.toString() };
-  });
+  const agruparPorLoja = (linhas) =>
+    linhas.reduce((acc, it) => {
+      (acc[it.loja] ||= []).push(it);
+      return acc;
+    }, {});
 
-  const mesesDisponiveis = Array.from({ length: 12 }, (_, i) => {
-    const mes = i + 1;
-    return { value: mes.toString(), label: mes.toString().padStart(2, "0") };
-  });
-
-  const diasDisponiveis = Array.from({ length: 31 }, (_, i) => {
-    const dia = i + 1;
-    return { value: dia.toString(), label: dia.toString().padStart(2, "0") };
-  });
-
-  const [anosSelecionados, setAnosSelecionados] = useState([]);
-  const [mesesSelecionados, setMesesSelecionados] = useState([]);
-  const [diasSelecionados, setDiasSelecionados] = useState([]);
-
-  const [lojasDisponiveis, setLojasDisponiveis] = useState([]);
-  const [vendedoresDisponiveis, setVendedoresDisponiveis] = useState([]);
-
-  const [lojasSelecionadas, setLojasSelecionadas] = useState([]);
-  const [vendedoresSelecionados, setVendedoresSelecionados] = useState([]);
-
-  // ---- NOVO: semanas ----
-  const [semanasDisponiveis, setSemanasDisponiveis] = useState([]);
-  const [semanasSelecionadas, setSemanasSelecionadas] = useState([]);
-
-  const tableRef = useRef(null);
-
-  // filtros básicos
+  // filtros iniciais (lojas/vendedores)
   useEffect(() => {
-    async function fetchFiltros() {
+    (async () => {
       try {
         const [resLojas, resVendedores] = await Promise.all([
           fetch("/api/lojas", { cache: "no-store" }),
@@ -56,78 +82,86 @@ export default function RelatorioVendasVendedorMensalComissao() {
         ]);
         const lojas = await resLojas.json();
         const vendedores = await resVendedores.json();
-
         setLojasDisponiveis(lojas.map((l) => ({ value: l, label: l })));
         setVendedoresDisponiveis(vendedores.map((v) => ({ value: v, label: v })));
-      } catch (error) {
-        console.error("Erro ao carregar filtros:", error);
+      } catch (e) {
+        console.error("Erro ao carregar filtros:", e);
       }
-    }
-    fetchFiltros();
+    })();
   }, []);
 
-  // semanas do calendário (padrão: mês atual)
+  // semanas disponíveis
   useEffect(() => {
-    fetchSemanas();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    (async () => {
+      try {
+        const res = await fetch("/api/semanas_calendario", { cache: "no-store" });
+        const json = await res.json();
+        const weeks = Array.isArray(json) ? json : Array.isArray(json?.weeks) ? json.weeks : [];
+        const opts = weeks.map((s) => {
+          const inicio = s.inicio || s.dt_inicio_mes;
+          const fim = s.fim || s.dt_fim_mes;
+          const semana = s.semana || s.semana_iso;
+          return {
+            value: String(semana),
+            label: `S${semana} ${formatDateBr(inicio)} a ${formatDateBr(fim)}`,
+            meta: { ano: s.ano, inicio, fim },
+          };
+        });
+        opts.sort((a, b) => Number(a.value) - Number(b.value));
+        setSemanasDisponiveis(opts);
+      } catch (e) {
+        console.error("Erro ao carregar semanas:", e);
+        setSemanasDisponiveis([]);
+      }
+    })();
   }, []);
 
-  const fetchSemanas = async () => {
-    try {
-      const res = await fetch("/api/semanas_calendario", { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const json = await res.json();
-      // Pode vir { weeks: [...] } ou simplesmente [...]
-      const weeks = Array.isArray(json) ? json : Array.isArray(json?.weeks) ? json.weeks : [];
-
-      const opts = weeks.map((s) => {
-        // suporta ambos os contratos: {inicio,fim,semana} ou {dt_inicio_mes,dt_fim_mes,semana_iso}
-        const inicio = s.inicio || s.dt_inicio_mes;
-        const fim = s.fim || s.dt_fim_mes;
-        const semana = s.semana || s.semana_iso;
-
-        return {
-          value: String(semana),
-          label: `S${semana} ${formatDateBr(inicio)} a ${formatDateBr(fim)}`,
-          meta: { ano: s.ano, inicio, fim },
-        };
-      });
-
-      opts.sort((a, b) => Number(a.value) - Number(b.value));
-      setSemanasDisponiveis(opts);
-    } catch (err) {
-      console.error("Erro ao carregar semanas:", err);
-      setSemanasDisponiveis([]);
-    }
-  };
-
+  // carregar dados do relatório
   const fetchData = async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-
-      if (anosSelecionados.length > 0)
-        params.append("ano", anosSelecionados.map((a) => a.value).join(","));
-      if (mesesSelecionados.length > 0)
-        params.append("mes", mesesSelecionados.map((m) => m.value).join(","));
-      if (diasSelecionados.length > 0)
-        params.append("dia", diasSelecionados.map((d) => d.value).join(","));
-
-      if (lojasSelecionadas.length > 0)
-        params.append("loja", lojasSelecionadas.map((l) => l.value).join(","));
-      if (vendedoresSelecionados.length > 0)
-        params.append("vendedor", vendedoresSelecionados.map((v) => v.value).join(","));
-
-      // envia as semanas para o backend (ex.: "40,41")
-      if (semanasSelecionadas.length > 0)
-        params.append("semana", semanasSelecionadas.map((s) => s.value).join(","));
+      if (anosSelecionados.length) params.append("ano", anosSelecionados.map((a) => a.value).join(","));
+      if (mesesSelecionados.length) params.append("mes", mesesSelecionados.map((m) => m.value).join(","));
+      if (diasSelecionados.length) params.append("dia", diasSelecionados.map((d) => d.value).join(","));
+      if (lojasSelecionadas.length) params.append("loja", lojasSelecionadas.map((l) => l.value).join(","));
+      if (vendedoresSelecionados.length) params.append("vendedor", vendedoresSelecionados.map((v) => v.value).join(","));
+      if (semanasSelecionadas.length) params.append("semana", semanasSelecionadas.map((s) => s.value).join(","));
 
       const res = await fetch(`/api/relatorio_mensal_vendedor_comissao?${params.toString()}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
       const json = await res.json();
+
       setData(json.data || []);
+
+      // resumo -> mapa loja->semana->meta
+      const resumoSemanal = Array.isArray(json.resumo_semanal) ? json.resumo_semanal : [];
+      const resumoMap = resumoSemanal.reduce((acc, r) => {
+        const loja = r.loja;
+        const semana = Number(r.semana);
+        (acc[loja] ||= {})[semana] = Number(r.meta_semana_loja || 0);
+        return acc;
+      }, {});
+      setResumo(resumoMap);
+
+      // subtotais por loja
+      const subtArr = Array.isArray(json.subtotais_loja) ? json.subtotais_loja : [];
+      const subtMap = subtArr.reduce((acc, r) => {
+        acc[r.loja] = {
+          meta: Number(r.meta_total_loja || 0),
+          real: Number(r.realizado_total_loja || 0),
+          comissao: Number(r.comissao_total_loja || 0),
+          pct: Number(r.pct_meta_loja || 0),
+        };
+        return acc;
+      }, {});
+      setSubtotais(subtMap);
+
+      // semanas vinda do back (se quiser usar)
+      const weeksFromBack = [...new Set(resumoSemanal.map((r) => Number(r.semana)))];
+      setSemanasApi(weeksFromBack);
+
+      setTotalGeral(json.total_geral || null);
     } catch (e) {
       console.error(e);
       alert("Erro ao carregar dados");
@@ -135,70 +169,36 @@ export default function RelatorioVendasVendedorMensalComissao() {
     setLoading(false);
   };
 
+  // exportar excel
   const exportarExcel = () => {
     if (!tableRef.current) return;
     const wb = XLSX.utils.table_to_book(tableRef.current, { sheet: "Relatório" });
-
     const nomeArquivo =
       `relatorio_vendas_` +
-      (anosSelecionados.length > 0 ? anosSelecionados.map((a) => a.value).join("-") : "todos") +
+      (anosSelecionados.length ? anosSelecionados.map((a) => a.value).join("-") : "todos") +
       "_" +
-      (mesesSelecionados.length > 0 ? mesesSelecionados.map((m) => m.value).join("-") : "todos") +
+      (mesesSelecionados.length ? mesesSelecionados.map((m) => m.value).join("-") : "todos") +
       "_" +
-      (diasSelecionados.length > 0 ? diasSelecionados.map((d) => d.value).join("-") : "todos") +
+      (diasSelecionados.length ? diasSelecionados.map((d) => d.value).join("-") : "todos") +
       "_" +
-      (semanasSelecionadas.length > 0 ? "S" + semanasSelecionadas.map((s) => s.value).join("-S") : "todasSemanas") +
+      (semanasSelecionadas.length ? "S" + semanasSelecionadas.map((s) => s.value).join("-S") : "todasSemanas") +
       `.xlsx`;
-
     XLSX.writeFile(wb, nomeArquivo);
   };
 
-  const getColor = (pct) => {
-    if (pct >= 100) return "#2e7d32";
-    if (pct >= 80) return "#ed6c02";
-    return "#d32f2f";
-  };
+  // semanas para render (ordem crescente)
+  const semanasRender = useMemo(() => {
+    if (semanasSelecionadas.length) return semanasSelecionadas.map((s) => Number(s.value)).sort((a, b) => a - b);
+    if (semanasApi.length) return [...semanasApi].sort((a, b) => a - b);
+    // derivar das linhas caso não tenha nada
+    const setNum = new Set();
+    data.forEach((row) => (row.detalhe_semanal || []).forEach((d) => setNum.add(Number(d.semana))));
+    return Array.from(setNum).sort((a, b) => a - b);
+  }, [data, semanasSelecionadas, semanasApi]);
 
-  const getArrow = (currentPct) => {
-    const meta = 100;
-    if (currentPct > meta) return <span style={{ color: "#2e7d32", marginLeft: 4 }}>▲</span>;
-    if (currentPct < meta) return <span style={{ color: "#d32f2f", marginLeft: 4 }}>▼</span>;
-    return <span style={{ color: "#999", marginLeft: 4 }}>▶</span>;
-  };
-
-  const agruparPorLoja = (data) => {
-    const grupos = {};
-    data.forEach((item) => {
-      if (!grupos[item.loja]) grupos[item.loja] = [];
-      grupos[item.loja].push(item);
-    });
-    return grupos;
-  };
-
-  const formatarPercentual = (valor) => {
-    if (valor === null || valor === undefined || isNaN(valor)) return "0,00%";
-    return valor.toFixed(2).replace(".", ",") + "%";
-  };
-
-  // ---------- Tabela ----------
-  function TabelaSemana({ data, getColor, agruparPorLoja, formatarPercentual, getArrow, tableRef }) {
+  // tabela
+  function TabelaSemana() {
     const grupos = agruparPorLoja(data);
-
-    // todas as semanas presentes
-    const semanasSet = new Set();
-    data.forEach((item) => {
-      (item.detalhe_semanal || []).forEach((d) => {
-        const numSemana = parseInt(d.semana.replace(/^S/, ""), 10);
-        if (!isNaN(numSemana)) semanasSet.add(numSemana);
-      });
-    });
-    let semanas = Array.from(semanasSet).sort((a, b) => a - b);
-
-    // aplica filtro de semanas selecionadas na UI
-    const semanasFiltro = semanasSelecionadas.length > 0 ? semanasSelecionadas.map((s) => Number(s.value)) : null;
-    if (semanasFiltro && semanasFiltro.length > 0) {
-      semanas = semanas.filter((s) => semanasFiltro.includes(s));
-    }
 
     return (
       <table
@@ -216,18 +216,33 @@ export default function RelatorioVendasVendedorMensalComissao() {
       >
         <thead style={{ backgroundColor: "#1976d2", color: "white" }}>
           <tr>
-            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>Loja</th>
-            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>Vendedor</th>
-            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>Total Meta</th>
-            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>Total Real</th>
-            <th style={{ padding: 12, textAlign: "right", minWidth: 80 }} rowSpan={2}>%M</th>
-            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>Total Comissão</th>
-            <th style={{ border: "1px solid #ccc", padding: 8, backgroundColor: "#1565c0", textAlign: "center" }} colSpan={semanas.length * 4}>
+            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>
+              Loja
+            </th>
+            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>
+              Vendedor
+            </th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>
+              Total Meta
+            </th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>
+              Total Real
+            </th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 80 }} rowSpan={2}>
+              %M
+            </th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>
+              Total Comissão
+            </th>
+            <th
+              style={{ border: "1px solid #ccc", padding: 8, backgroundColor: "#1565c0", textAlign: "center" }}
+              colSpan={semanasRender.length * 4}
+            >
               Semanas
             </th>
           </tr>
           <tr>
-            {semanas.map((sem) => (
+            {semanasRender.map((sem) => (
               <React.Fragment key={sem}>
                 <th style={{ border: "1px solid #ccc", padding: 8, color: "#ffebee" }}>Meta S{sem}</th>
                 <th style={{ border: "1px solid #ccc", padding: 8 }}>Real S{sem}</th>
@@ -239,196 +254,54 @@ export default function RelatorioVendasVendedorMensalComissao() {
         </thead>
         <tbody>
           {Object.entries(grupos).map(([loja, itens]) => {
-            const subtotalSemana = semanas.reduce((acc, s) => {
-              acc[s] = { meta: 0, realizado: 0, comissao: 0 };
+            // base para subtotal semanal (meta da calendar + soma real/comissão dos vendedores)
+            const subtotalSemana = semanasRender.reduce((acc, s) => {
+              acc[s] = { meta: Number(resumo?.[loja]?.[s] || 0), realizado: 0, comissao: 0 };
               return acc;
             }, {});
 
-            let subtotalMeta = 0;
-            let subtotalReal = 0;
-            let subtotalComissao = 0;
+            // render linhas de vendedores
+            const linhasVendedores = itens.map((row) => {
+              const detalhePorSemana = {};
+              (row.detalhe_semanal || []).forEach((d) => {
+                const num = Number(d.semana);
+                detalhePorSemana[num] = {
+                  meta: Number(d.meta || 0),
+                  realizado: Number(d.realizado || 0),
+                  comissao: Number(d.comissao || 0),
+                };
+              });
 
-            return (
-              <React.Fragment key={loja}>
-                {itens.map((row) => {
-                  const detalhePorSemana = {};
-                  (row.detalhe_semanal || []).forEach((d) => {
-                    const numSemana = parseInt(d.semana.replace(/^S/, ""), 10);
-                    if (!isNaN(numSemana)) detalhePorSemana[numSemana] = d;
-                  });
+              // acumula no subtotal semanal
+              semanasRender.forEach((s) => {
+                const d = detalhePorSemana[s] || { meta: 0, realizado: 0, comissao: 0 };
+                subtotalSemana[s].realizado += d.realizado;
+                subtotalSemana[s].comissao += d.comissao;
+              });
 
-                  semanas.forEach((sem) => {
-                    const d = detalhePorSemana[sem] || { meta: 0, realizado: 0, comissao: 0 };
-                    subtotalSemana[sem].meta += d.meta ?? 0;
-                    subtotalSemana[sem].realizado += d.realizado ?? 0;
-                    subtotalSemana[sem].comissao += d.comissao ?? 0;
-                  });
+              const totalMetaV = Number(row.total_meta || 0);
+              const totalRealV = Number(row.total_real || 0);
+              const totalComisV = Number(row.total_comissao || 0);
+              const pctMes = totalMetaV > 0 ? (totalRealV / totalMetaV) * 100 : 0;
 
-                  let totalMetaVendedor = 0;
-                  let totalRealVendedor = 0;
-                  let totalComissaoVendedor = 0;
-                  semanas.forEach((sem) => {
-                    const d = detalhePorSemana[sem] || { meta: 0, realizado: 0, comissao: 0, abaixo_cota: 0 };
-                    totalMetaVendedor += d.meta ?? 0;
-                    totalRealVendedor += d.realizado ?? 0;
-                    totalComissaoVendedor += d.comissao ?? 0;
-                  });
+              return (
+                <tr key={`${row.loja}-${row.seller_name}`} style={{ borderBottom: "1px solid #ddd" }}>
+                  <td style={{ padding: 12, textAlign: "left", fontWeight: 600, color: "#333" }}>{row.loja}</td>
+                  <td style={{ padding: 12, textAlign: "left", color: "#555" }}>{row.seller_name}</td>
 
-                  subtotalMeta += totalMetaVendedor;
-                  subtotalReal += totalRealVendedor;
-                  subtotalComissao += totalComissaoVendedor;
-
-                  const percentualMes = totalMetaVendedor > 0 ? (totalRealVendedor / totalMetaVendedor) * 100 : 0;
-
-                  return (
-                    <tr key={`${row.seller_name}-${row.loja}`} style={{ borderBottom: "1px solid #ddd" }}>
-                      <td style={{ padding: 12, textAlign: "left", fontWeight: "600", color: "#333" }}>{row.loja}</td>
-                      <td style={{ padding: 12, textAlign: "left", color: "#555" }}>{row.seller_name}</td>
-
-                      <td style={{ padding: 12, textAlign: "right", fontWeight: "600", color: "#d32f2f" }}>
-                        {totalMetaVendedor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                      </td>
-                      <td style={{ padding: 12, textAlign: "right", fontWeight: "600", color: "#d32f2f" }}>
-                        {totalRealVendedor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                      </td>
-
-                      <td
-                        style={{
-                          padding: 12,
-                          textAlign: "right",
-                          fontWeight: "600",
-                          color: getColor(percentualMes),
-                          whiteSpace: "nowrap",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "flex-end",
-                          gap: 6,
-                        }}
-                      >
-                        {percentualMes.toFixed(2).replace(".", ",")}%{getArrow(percentualMes)}
-                      </td>
-
-                      <td
-                        style={{
-                          padding: 12,
-                          textAlign: "right",
-                          fontWeight: "600",
-                          color: totalRealVendedor >= totalMetaVendedor ? "#2e7d32" : "#d32f2f",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                          <span style={{ fontWeight: "600" }}>
-                            {totalComissaoVendedor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                          </span>
-                          <span style={{ fontSize: 12, color: "#555" }}>
-                            {totalRealVendedor >= totalMetaVendedor ? (
-                              <>
-                                {totalRealVendedor / totalMetaVendedor <= 1.2 && <>🥉 Cota 4.00%</>}
-                                {totalRealVendedor / totalMetaVendedor > 1.2 &&
-                                  totalRealVendedor / totalMetaVendedor <= 1.4 && <>🥈 Super Cota 4.50%</>}
-                                {totalRealVendedor / totalMetaVendedor > 1.4 && <>🥇 Cota Ouro 5.00%</>}
-                              </>
-                            ) : (
-                              <>Abaixo 3.25%</>
-                            )}
-                          </span>
-                        </div>
-                      </td>
-
-                      {semanas.map((sem) => {
-                        const d = detalhePorSemana[sem] || {
-                          meta: 0,
-                          realizado: 0,
-                          comissao: 0,
-                          cota_vendedor: 0,
-                          super_cota: 0,
-                          cota_ouro: 0,
-                          abaixo_cota: 0,
-                        };
-                        const pctSemana = d.meta > 0 ? (d.realizado / d.meta) * 100 : 0;
-
-                        const ratio = d.meta > 0 ? d.realizado / d.meta : 0;
-                        let tipoCota = "";
-                        if (ratio < 1) tipoCota = "Abaixo";
-                        else if (ratio <= 1.2) tipoCota = "Cota";
-                        else if (ratio <= 1.4) tipoCota = "Super Cota";
-                        else tipoCota = "Cota Ouro";
-
-                        const comissaoCalculada = d.comissao ?? 0;
-
-                        return (
-                          <React.Fragment key={sem}>
-                            <td style={{ border: "1px solid #ccc", padding: 8, color: "#d32f2f" }}>
-                              {(d.meta ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                            </td>
-                            <td style={{ border: "1px solid #ccc", padding: 8 }}>
-                              {(d.realizado ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                            </td>
-                            <td
-                              style={{
-                                border: "1px solid #ccc",
-                                padding: 8,
-                                color: getColor(pctSemana),
-                                fontWeight: "600",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "flex-end",
-                                gap: 6,
-                              }}
-                            >
-                              {formatarPercentual(pctSemana)}
-                              {getArrow(pctSemana)}
-                            </td>
-                            <td
-                              style={{
-                                border: "1px solid #ccc",
-                                padding: 8,
-                                fontWeight: "600",
-                                whiteSpace: "nowrap",
-                                color: d.realizado >= d.meta ? "#2e7d32" : "#d32f2f",
-                              }}
-                            >
-                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                                <span style={{ fontWeight: "600" }}>
-                                  {comissaoCalculada.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                                </span>
-                                <span style={{ fontSize: 12, color: "#555" }}>
-                                  {tipoCota === "Abaixo" ? (
-                                    <>Abaixo 3.25%</>
-                                  ) : tipoCota === "Cota" ? (
-                                    <>🥉 Cota 4.00%</>
-                                  ) : tipoCota === "Super Cota" ? (
-                                    <>🥈 Super Cota 4.5%</>
-                                  ) : (
-                                    <>🥇 Cota Ouro 5.00%</>
-                                  )}
-                                </span>
-                              </div>
-                            </td>
-                          </React.Fragment>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-                <tr style={{ fontWeight: "bold", backgroundColor: "#f5f5f5" }}>
-                  <td style={{ padding: 12 }} colSpan={2}>Subtotal {loja}</td>
-
-                  <td style={{ padding: 12, textAlign: "right", fontWeight: "600", color: "#d32f2f", minWidth: 120, whiteSpace: "nowrap" }}>
-                    {subtotalMeta.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  <td style={{ padding: 12, textAlign: "right", fontWeight: 600, color: "#d32f2f" }}>
+                    {totalMetaV.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                   </td>
-
-                  <td style={{ padding: 12, textAlign: "right", fontWeight: "600", color: "#d32f2f", minWidth: 120, whiteSpace: "nowrap" }}>
-                    {subtotalReal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  <td style={{ padding: 12, textAlign: "right", fontWeight: 600, color: "#d32f2f" }}>
+                    {totalRealV.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                   </td>
 
                   <td
                     style={{
                       padding: 12,
                       textAlign: "right",
-                      fontWeight: "600",
-                      color: getColor(subtotalMeta > 0 ? (subtotalReal / subtotalMeta) * 100 : 0),
+                      fontWeight: 600,
+                      color: getColor(pctMes),
                       whiteSpace: "nowrap",
                       display: "flex",
                       alignItems: "center",
@@ -436,35 +309,103 @@ export default function RelatorioVendasVendedorMensalComissao() {
                       gap: 6,
                     }}
                   >
-                    {subtotalMeta > 0 ? (
-                      <>
-                        {((subtotalReal / subtotalMeta) * 100).toFixed(2).replace(".", ",")}%{getArrow((subtotalReal / subtotalMeta) * 100)}
-                      </>
-                    ) : (
-                      "Abaixo"
-                    )}
+                    {formatarPercentual(pctMes)}
+                    {getArrow(pctMes)}
                   </td>
 
-                  <td style={{ padding: 12, textAlign: "right", fontWeight: "600", color: subtotalReal >= subtotalMeta ? "#2e7d32" : "#d32f2f", minWidth: 120, whiteSpace: "nowrap" }}>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                      <span style={{ fontWeight: "600" }}>
-                        {subtotalComissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                      </span>
-                      <span style={{ fontSize: 12, color: "#555" }}>
-                        {subtotalReal >= subtotalMeta ? (
-                          <>
-                            {subtotalReal / subtotalMeta <= 1.2 && <>🥉 Cota 4.00%</>}
-                            {subtotalReal / subtotalMeta > 1.2 && subtotalReal / subtotalMeta <= 1.4 && <>🥈 Super Cota 4.50%</>}
-                            {subtotalReal / subtotalMeta > 1.4 && <>🥇 Cota Ouro 5.00%</>}
-                          </>
-                        ) : (
-                          <>Abaixo 3.25%</>
-                        )}
-                      </span>
-                    </div>
+                  <td
+                    style={{
+                      padding: 12,
+                      textAlign: "right",
+                      fontWeight: 600,
+                      color: totalRealV >= totalMetaV ? "#2e7d32" : "#d32f2f",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {totalComisV.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                   </td>
 
-                  {semanas.map((sem) => {
+                  {semanasRender.map((sem) => {
+                    const d = detalhePorSemana[sem] || { meta: 0, realizado: 0, comissao: 0 };
+                    const pct = d.meta > 0 ? (d.realizado / d.meta) * 100 : 0;
+                    return (
+                      <React.Fragment key={sem}>
+                        <td style={{ border: "1px solid #ccc", padding: 8, color: "#d32f2f" }}>
+                          {d.meta.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </td>
+                        <td style={{ border: "1px solid #ccc", padding: 8 }}>
+                          {d.realizado.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #ccc",
+                            padding: 8,
+                            color: getColor(pct),
+                            fontWeight: 600,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "flex-end",
+                            gap: 6,
+                          }}
+                        >
+                          {formatarPercentual(pct)}
+                          {getArrow(pct)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #ccc",
+                            padding: 8,
+                            fontWeight: 600,
+                            color: d.realizado >= d.meta ? "#2e7d32" : "#d32f2f",
+                          }}
+                        >
+                          {d.comissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </td>
+                      </React.Fragment>
+                    );
+                  })}
+                </tr>
+              );
+            });
+
+            // linha subtotal (valores do banco)
+            const st = subtotais[loja] || { meta: 0, real: 0, comissao: 0, pct: 0 };
+            return (
+              <React.Fragment key={loja}>
+                {linhasVendedores}
+
+                <tr style={{ fontWeight: "bold", backgroundColor: "#f5f5f5" }}>
+                  <td style={{ padding: 12 }} colSpan={2}>
+                    Subtotal {loja}
+                  </td>
+
+                  <td style={{ padding: 12, textAlign: "right", color: "#d32f2f" }}>
+                    {st.meta.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  </td>
+
+                  <td style={{ padding: 12, textAlign: "right", color: "#d32f2f" }}>
+                    {st.real.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  </td>
+
+                  <td
+                    style={{
+                      padding: 12,
+                      textAlign: "right",
+                      color: getColor(st.pct),
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "flex-end",
+                      gap: 6,
+                    }}
+                  >
+                    {formatarPercentual(st.pct)} {getArrow(st.pct)}
+                  </td>
+
+                  <td style={{ padding: 12, textAlign: "right", color: st.real >= st.meta ? "#2e7d32" : "#d32f2f" }}>
+                    {st.comissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  </td>
+
+                  {semanasRender.map((sem) => {
                     const s = subtotalSemana[sem];
                     const pct = s.meta > 0 ? (s.realizado / s.meta) * 100 : 0;
                     return (
@@ -479,7 +420,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
                           style={{
                             border: "1px solid #ccc",
                             padding: 8,
-                            fontWeight: "600",
+                            fontWeight: 600,
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "flex-end",
@@ -493,26 +434,11 @@ export default function RelatorioVendasVendedorMensalComissao() {
                           style={{
                             border: "1px solid #ccc",
                             padding: 8,
-                            fontWeight: "600",
+                            fontWeight: 600,
                             color: s.realizado >= s.meta ? "#2e7d32" : "#d32f2f",
                           }}
                         >
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                            <span style={{ fontWeight: "600" }}>
-                              {s.comissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                            </span>
-                            <span style={{ fontSize: 12, color: "#555" }}>
-                              {s.realizado >= s.meta ? (
-                                <>
-                                  {s.realizado / s.meta <= 1.2 && <>🥉 Cota 4.00%</>}
-                                  {s.realizado / s.meta > 1.2 && s.realizado / s.meta <= 1.4 && <>🥈 Super Cota 4.50%</>}
-                                  {s.realizado / s.meta > 1.4 && <>🥇 Cota Ouro 5.00%</>}
-                                </>
-                              ) : (
-                                <>Abaixo 3.25%</>
-                              )}
-                            </span>
-                          </div>
+                          {s.comissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                         </td>
                       </React.Fragment>
                     );
@@ -521,6 +447,27 @@ export default function RelatorioVendasVendedorMensalComissao() {
               </React.Fragment>
             );
           })}
+
+          {/* Total Geral (opcional) */}
+          {totalGeral && (
+            <tr style={{ fontWeight: "bold", backgroundColor: "#e3f2fd" }}>
+              <td style={{ padding: 12 }} colSpan={2}>
+                Total Geral
+              </td>
+              <td style={{ padding: 12, textAlign: "right" }}>
+                {Number(totalGeral.meta_total || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+              </td>
+              <td style={{ padding: 12, textAlign: "right" }}>
+                {Number(totalGeral.real_total || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+              </td>
+              <td style={{ padding: 12, textAlign: "right", color: getColor(Number(totalGeral.pct_meta || 0)) }}>
+                {formatarPercentual(Number(totalGeral.pct_meta || 0))}
+              </td>
+              <td style={{ padding: 12, textAlign: "right" }}>
+                {Number(totalGeral.comissao_total || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     );
@@ -551,7 +498,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
         }}
       >
         <div style={{ minWidth: 120 }}>
-          <label style={{ fontWeight: "600", fontSize: 14, marginBottom: 4 }}>Ano</label>
+          <label style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Ano</label>
           <Select
             options={anosDisponiveis}
             value={anosSelecionados}
@@ -564,7 +511,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
         </div>
 
         <div style={{ minWidth: 100 }}>
-          <label style={{ fontWeight: "600", fontSize: 14, marginBottom: 4 }}>Mês</label>
+          <label style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Mês</label>
           <Select
             options={mesesDisponiveis}
             value={mesesSelecionados}
@@ -577,7 +524,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
         </div>
 
         <div style={{ minWidth: 100 }}>
-          <label style={{ fontWeight: "600", fontSize: 14, marginBottom: 4 }}>Dia</label>
+          <label style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Dia</label>
           <Select
             options={diasDisponiveis}
             value={diasSelecionados}
@@ -589,11 +536,8 @@ export default function RelatorioVendasVendedorMensalComissao() {
           />
         </div>
 
-        {/* NOVO: Semana (Sxx – intervalo) */}
         <div style={{ minWidth: 260 }}>
-          <label style={{ fontWeight: "600", fontSize: 14, marginBottom: 4 }}>
-            Semana (Sxx – intervalo)
-          </label>
+          <label style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Semana (Sxx – intervalo)</label>
           <Select
             options={semanasDisponiveis}
             value={semanasSelecionadas}
@@ -606,7 +550,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
         </div>
 
         <div style={{ minWidth: 220 }}>
-          <label style={{ fontWeight: "600", fontSize: 14, marginBottom: 4 }}>Loja</label>
+          <label style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Loja</label>
           <Select
             options={lojasDisponiveis}
             value={lojasSelecionadas}
@@ -619,7 +563,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
         </div>
 
         <div style={{ minWidth: 220 }}>
-          <label style={{ fontWeight: "600", fontSize: 14, marginBottom: 4 }}>Vendedor</label>
+          <label style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Vendedor</label>
           <Select
             options={vendedoresDisponiveis}
             value={vendedoresSelecionados}
@@ -641,7 +585,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
               border: "none",
               borderRadius: 4,
               cursor: "pointer",
-              fontWeight: "600",
+              fontWeight: 600,
               fontSize: 14,
               marginBottom: 8,
             }}
@@ -658,7 +602,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
               border: "none",
               borderRadius: 4,
               cursor: "pointer",
-              fontWeight: "600",
+              fontWeight: 600,
               fontSize: 14,
             }}
           >
@@ -675,14 +619,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
         </p>
       ) : (
         <div style={{ overflowX: "auto", overflowY: "hidden", whiteSpace: "nowrap", maxWidth: "100vw" }}>
-          <TabelaSemana
-            data={data}
-            getColor={getColor}
-            agruparPorLoja={agruparPorLoja}
-            formatarPercentual={formatarPercentual}
-            getArrow={getArrow}
-            tableRef={tableRef}
-          />
+          <TabelaSemana />
         </div>
       )}
     </div>
