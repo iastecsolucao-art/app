@@ -4,19 +4,26 @@ import * as XLSX from "xlsx";
 
 /**
  * Relatório de Vendas por Vendedor - Mensal com Comissão
- * - Usa os endpoints:
- *   /api/lojas, /api/vendedores, /api/semanas_calendario
- *   /api/relatorio_mensal_vendedor_comissao -> { data, resumo_semanal, subtotais_loja, total_geral }
+ * Endpoints esperados:
+ *   - /api/lojas
+ *   - /api/vendedores
+ *   - /api/semanas_calendario
+ *   - /api/relatorio_mensal_vendedor_comissao   -> { data, resumo_semanal, subtotais_loja, total_geral }
+ *   - /api/calendario_loja (NOVO)               -> [{ loja, semana, abaixo, cota, super_cota, cota_ouro, ... }, ...]
  */
 export default function RelatorioVendasVendedorMensalComissao() {
   const [loading, setLoading] = useState(false);
 
   // dados retornados pelo back
-  const [data, setData] = useState([]);                  // linhas por vendedor
-  const [resumo, setResumo] = useState({});              // mapa loja -> semana -> meta (construído de resumo_semanal)
-  const [subtotais, setSubtotais] = useState({});        // mapa loja -> { meta, real, comissao, pct }
-  const [totalGeral, setTotalGeral] = useState(null);    // { meta_total, real_total, comissao_total, pct_meta }
-  const [semanasApi, setSemanasApi] = useState([]);      // semanas que vieram no back (derivadas de resumo_semanal)
+  const [data, setData] = useState([]);               // linhas por vendedor
+  const [resumo, setResumo] = useState({});           // mapa loja -> semana -> meta (resumo_semanal)
+  const [subtotais, setSubtotais] = useState({});     // mapa loja -> { meta, real, comissao, pct }
+  const [totalGeral, setTotalGeral] = useState(null); // { meta_total, real_total, comissao_total, pct_meta }
+  const [semanasApi, setSemanasApi] = useState([]);   // semanas vindas do back
+
+  // percentuais do calendario_loja (NOVO)
+  // shape: { [loja]: { [semana]: { abaixo, cota, super_cota, cota_ouro }, _padrao?: {...} } }
+  const [percentuais, setPercentuais] = useState({});
 
   // filtros
   const [anosSelecionados, setAnosSelecionados] = useState([]);
@@ -116,7 +123,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
     })();
   }, []);
 
-  // carregar dados do relatório
+  // Buscar dados + percentuais do calendario_loja
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -128,10 +135,13 @@ export default function RelatorioVendasVendedorMensalComissao() {
       if (vendedoresSelecionados.length) params.append("vendedor", vendedoresSelecionados.map((v) => v.value).join(","));
       if (semanasSelecionadas.length) params.append("semana", semanasSelecionadas.map((s) => s.value).join(","));
 
-      const res = await fetch(`/api/relatorio_mensal_vendedor_comissao?${params.toString()}`, { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
+      const [resRel, resCal] = await Promise.all([
+        fetch(`/api/relatorio_mensal_vendedor_comissao?${params.toString()}`, { cache: "no-store" }),
+        fetch(`/api/calendario_loja?${params.toString()}`, { cache: "no-store" }), // NOVO
+      ]);
+      if (!resRel.ok) throw new Error(`HTTP ${resRel.status}`);
 
+      const json = await resRel.json();
       setData(json.data || []);
 
       // resumo -> mapa loja->semana->meta
@@ -157,11 +167,34 @@ export default function RelatorioVendasVendedorMensalComissao() {
       }, {});
       setSubtotais(subtMap);
 
-      // semanas vinda do back (se quiser usar)
+      // semanas vindas do back
       const weeksFromBack = [...new Set(resumoSemanal.map((r) => Number(r.semana)))];
       setSemanasApi(weeksFromBack);
 
       setTotalGeral(json.total_geral || null);
+
+      // ===== calendario_loja -> percentuais por loja/semana
+      let mapaPerc = {};
+      if (resCal.ok) {
+        try {
+          const cal = await resCal.json(); // array [{loja, semana, abaixo, cota, super_cota, cota_ouro}]
+          mapaPerc = (Array.isArray(cal) ? cal : []).reduce((acc, r) => {
+            const lj = r.loja;
+            const s = Number(r.semana);
+            (acc[lj] ||= {});
+            acc[lj][s] = {
+              abaixo: Number(r.abaixo ?? 3.25),
+              cota: Number(r.cota ?? 4.0),
+              super_cota: Number(r.super_cota ?? 4.5),
+              cota_ouro: Number(r.cota_ouro ?? 5.0),
+            };
+            return acc;
+          }, {});
+        } catch (e) {
+          console.warn("Falha ao processar calendario_loja, usando defaults.", e);
+        }
+      }
+      setPercentuais(mapaPerc);
     } catch (e) {
       console.error(e);
       alert("Erro ao carregar dados");
@@ -190,13 +223,34 @@ export default function RelatorioVendasVendedorMensalComissao() {
   const semanasRender = useMemo(() => {
     if (semanasSelecionadas.length) return semanasSelecionadas.map((s) => Number(s.value)).sort((a, b) => a - b);
     if (semanasApi.length) return [...semanasApi].sort((a, b) => a - b);
-    // derivar das linhas caso não tenha nada
     const setNum = new Set();
     data.forEach((row) => (row.detalhe_semanal || []).forEach((d) => setNum.add(Number(d.semana))));
     return Array.from(setNum).sort((a, b) => a - b);
   }, [data, semanasSelecionadas, semanasApi]);
 
-  // tabela
+  // ===== Helper: obtém faixa e percentual de comissão a partir do calendario_loja
+  function obterFaixaEPercentual(loja, semanaOuNull, percentualAtingido) {
+    const defaults = { abaixo: 3.25, cota: 4.0, super_cota: 4.5, cota_ouro: 5.0 };
+    const porLoja = percentuais?.[loja] || {};
+    const porSemana = (semanaOuNull != null ? porLoja[Number(semanaOuNull)] : null) || porLoja._padrao || defaults;
+
+    let faixa = "Abaixo";
+    let perc = porSemana.abaixo;
+
+    if (percentualAtingido >= 120) {
+      faixa = "Cota Ouro";
+      perc = porSemana.cota_ouro;
+    } else if (percentualAtingido >= 110) {
+      faixa = "Super Cota";
+      perc = porSemana.super_cota;
+    } else if (percentualAtingido >= 100) {
+      faixa = "Cota";
+      perc = porSemana.cota;
+    }
+    return { faixa, perc };
+  }
+
+  // ===== Tabela =====
   function TabelaSemana() {
     const grupos = agruparPorLoja(data);
 
@@ -216,24 +270,12 @@ export default function RelatorioVendasVendedorMensalComissao() {
       >
         <thead style={{ backgroundColor: "#1976d2", color: "white" }}>
           <tr>
-            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>
-              Loja
-            </th>
-            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>
-              Vendedor
-            </th>
-            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>
-              Total Meta
-            </th>
-            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>
-              Total Real
-            </th>
-            <th style={{ padding: 12, textAlign: "right", minWidth: 80 }} rowSpan={2}>
-              %M
-            </th>
-            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>
-              Total Comissão
-            </th>
+            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>Loja</th>
+            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>Vendedor</th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>Total Meta</th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>Total Real</th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 80 }} rowSpan={2}>%M</th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 140 }} rowSpan={2}>Total Comissão</th>
             <th
               style={{ border: "1px solid #ccc", padding: 8, backgroundColor: "#1565c0", textAlign: "center" }}
               colSpan={semanasRender.length * 4}
@@ -313,6 +355,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
                     {getArrow(pctMes)}
                   </td>
 
+                  {/* TOTAL COMISSÃO com faixa + percentual de calendario_loja */}
                   <td
                     style={{
                       padding: 12,
@@ -323,11 +366,21 @@ export default function RelatorioVendasVendedorMensalComissao() {
                     }}
                   >
                     {totalComisV.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    <div style={{ fontSize: 12, fontWeight: 500, color: "#555" }}>
+                      {(() => {
+                        // usa a 1ª semana selecionada como referência de percentuais (ou default)
+                        const semanaRef = semanasRender?.[0] ?? null;
+                        const { faixa, perc } = obterFaixaEPercentual(row.loja, semanaRef, pctMes);
+                        return `${faixa} ${perc.toFixed(2)}%`;
+                      })()}
+                    </div>
                   </td>
 
                   {semanasRender.map((sem) => {
                     const d = detalhePorSemana[sem] || { meta: 0, realizado: 0, comissao: 0 };
                     const pct = d.meta > 0 ? (d.realizado / d.meta) * 100 : 0;
+                    const { faixa, perc } = obterFaixaEPercentual(row.loja, sem, pct);
+
                     return (
                       <React.Fragment key={sem}>
                         <td style={{ border: "1px solid #ccc", padding: 8, color: "#d32f2f" }}>
@@ -360,6 +413,9 @@ export default function RelatorioVendasVendedorMensalComissao() {
                           }}
                         >
                           {d.comissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                          <div style={{ fontSize: 11, fontWeight: 500, color: "#555" }}>
+                            {`${faixa} ${perc.toFixed(2)}%`}
+                          </div>
                         </td>
                       </React.Fragment>
                     );
@@ -370,14 +426,13 @@ export default function RelatorioVendasVendedorMensalComissao() {
 
             // linha subtotal (valores do banco)
             const st = subtotais[loja] || { meta: 0, real: 0, comissao: 0, pct: 0 };
+
             return (
               <React.Fragment key={loja}>
                 {linhasVendedores}
 
                 <tr style={{ fontWeight: "bold", backgroundColor: "#f5f5f5" }}>
-                  <td style={{ padding: 12 }} colSpan={2}>
-                    Subtotal {loja}
-                  </td>
+                  <td style={{ padding: 12 }} colSpan={2}>Subtotal {loja}</td>
 
                   <td style={{ padding: 12, textAlign: "right", color: "#d32f2f" }}>
                     {st.meta.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
@@ -403,11 +458,21 @@ export default function RelatorioVendasVendedorMensalComissao() {
 
                   <td style={{ padding: 12, textAlign: "right", color: st.real >= st.meta ? "#2e7d32" : "#d32f2f" }}>
                     {st.comissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    {/* Exibe a faixa conforme % mensal do subtotal, usando primeira semana como referência */}
+                    <div style={{ fontSize: 12, fontWeight: 500, color: "#555" }}>
+                      {(() => {
+                        const semanaRef = semanasRender?.[0] ?? null;
+                        const { faixa, perc } = obterFaixaEPercentual(loja, semanaRef, st.pct);
+                        return `${faixa} ${perc.toFixed(2)}%`;
+                      })()}
+                    </div>
                   </td>
 
                   {semanasRender.map((sem) => {
                     const s = subtotalSemana[sem];
                     const pct = s.meta > 0 ? (s.realizado / s.meta) * 100 : 0;
+                    const { faixa, perc } = obterFaixaEPercentual(loja, sem, pct);
+
                     return (
                       <React.Fragment key={sem}>
                         <td style={{ border: "1px solid #ccc", padding: 8, color: "#d32f2f" }}>
@@ -429,6 +494,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
                           }}
                         >
                           {formatarPercentual(pct)}
+                          {getArrow(pct)}
                         </td>
                         <td
                           style={{
@@ -439,6 +505,9 @@ export default function RelatorioVendasVendedorMensalComissao() {
                           }}
                         >
                           {s.comissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                          <div style={{ fontSize: 11, fontWeight: 500, color: "#555" }}>
+                            {`${faixa} ${perc.toFixed(2)}%`}
+                          </div>
                         </td>
                       </React.Fragment>
                     );
@@ -451,9 +520,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
           {/* Total Geral (opcional) */}
           {totalGeral && (
             <tr style={{ fontWeight: "bold", backgroundColor: "#e3f2fd" }}>
-              <td style={{ padding: 12 }} colSpan={2}>
-                Total Geral
-              </td>
+              <td style={{ padding: 12 }} colSpan={2}>Total Geral</td>
               <td style={{ padding: 12, textAlign: "right" }}>
                 {Number(totalGeral.meta_total || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
               </td>
