@@ -18,12 +18,12 @@ export default function Calendario() {
   const gerarCalendario = async () => {
     setLoading(true);
     // Busca semanas via API
-    const res = await fetch(`/api/calendario?ano=${ano}`);
+    const res = await fetch(`/api/calendario/calendario_loja?ano=${ano}`);
     const data = await res.json();
     setSemanas(data.semanas || []);
 
     // Busca datas cadastradas
-    const res2 = await fetch(`/api/calendario/datas?ano=${ano}`);
+    const res2 = await fetch(`/api/calendario/calendario_loja/datas?ano=${ano}`);
     const data2 = await res2.json();
     setDatasCadastradas(data2.datasCadastradas || []);
     setLoading(false);
@@ -33,7 +33,7 @@ export default function Calendario() {
     setLoading(true);
     setPopulacaoMsg("");
     try {
-      const res = await fetch("/api/calendario/popular", {
+      const res = await fetch("/api/calendario/calendario_loja/popular", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ano }),

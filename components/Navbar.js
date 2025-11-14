@@ -50,7 +50,6 @@ export default function Navbar() {
         {/* Logo Buckman - só se tiver acesso */}
         {acessos?.buckman && (
           <div className="ml-4 text-white font-bold text-xl select-none">
-            {/* Pode substituir por <img src="/path/to/logo.png" alt="Buckman" /> */}
             BUCKMAN
           </div>
         )}
@@ -282,8 +281,8 @@ export default function Navbar() {
                 Buckman ▾
               </button>
               {openDropdown === "buckman" && (
-  <div className="absolute top-full right-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[180px] z-50">
-<Link
+                <div className="absolute top-full right-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[200px] z-50">
+                  <Link
                     href="/buckman/vendedores"
                     className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
                   >
@@ -295,6 +294,15 @@ export default function Navbar() {
                   >
                     Metas Loja
                   </Link>
+
+                  {/* NOVO ITEM */}
+                  <Link
+                    href="/calendario_loja"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
+                  >
+                    Calendário Loja
+                  </Link>
+
                   <Link
                     href="/buckman/calendario"
                     className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
@@ -334,8 +342,6 @@ export default function Navbar() {
       {/* --- MOBILE MENU --- */}
       {menuOpen && session && !expirado && acessos && (
         <div className="fixed inset-0 bg-blue-700 text-white z-50 overflow-y-auto flex flex-col pt-20 pb-6">
-          {/* Container com padding top para não ficar atrás da navbar fixa */}
-
           {acessos.dashboard && (
             <Link
               href="/dashboard"
@@ -599,6 +605,16 @@ export default function Navbar() {
                   >
                     Metas Loja
                   </Link>
+
+                  {/* NOVO ITEM MOBILE */}
+                  <Link
+                    href="/calendario_loja"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
+                  >
+                    Calendário Loja
+                  </Link>
+
                   <Link
                     href="/buckman/calendario"
                     onClick={() => setMenuOpen(false)}
@@ -644,5 +660,4 @@ export default function Navbar() {
       )}
     </nav>
   );
-
 }
