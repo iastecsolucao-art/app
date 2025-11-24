@@ -82,7 +82,6 @@ export default function CalendarioLoja() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao salvar registro");
 
-      // limpa form
       setForm({
         id: null,
         ano: new Date().getFullYear(),
@@ -140,9 +139,6 @@ export default function CalendarioLoja() {
     }
   };
 
-  // ---------------------------
-  // 🚀 NOVA FUNÇÃO COPIAR
-  // ---------------------------
   const handleCopy = async (reg) => {
     const texto = `
 ID gerado: ${reg.id}
@@ -165,25 +161,162 @@ Cota Ouro: ${reg.cota_ouro}
     }
   };
 
+  // ------------ IMPORTAÇÃO CSV ------------
+
+  const parseCSV = (text) => {
+    const linhas = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    if (!linhas.length) return [];
+
+    const cabecalho = linhas[0].split(";").map((c) => c.trim().toLowerCase());
+    const registrosImport = [];
+
+    for (let i = 1; i < linhas.length; i++) {
+      const cols = linhas[i].split(";").map((c) => c.trim());
+      const row = {};
+
+      cabecalho.forEach((colName, idx) => {
+        row[colName] = cols[idx] ?? "";
+      });
+
+      registrosImport.push({
+        ano: row.ano ? parseInt(row.ano, 10) : new Date().getFullYear(),
+        semana: row.semana ? parseInt(row.semana, 10) : null,
+        loja: row.loja || "",
+        meta: row.meta ? parseFloat(row.meta) : null,
+        qtd_vendedor: row.qtd_vendedor ? parseInt(row.qtd_vendedor, 10) : null,
+        cota: row.cota ? parseFloat(row.cota) : null,
+        abaixo: row.abaixo ? parseFloat(row.abaixo) : null,
+        super_cota: row.super_cota ? parseFloat(row.super_cota) : null,
+        cota_ouro: row.cota_ouro ? parseFloat(row.cota_ouro) : null,
+        obs: row.obs || null,
+      });
+    }
+
+    return registrosImport;
+  };
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      alert("Envie um arquivo .csv");
+      e.target.value = "";
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const reader = new FileReader();
+
+      reader.onload = async (event) => {
+        try {
+          const text = event.target.result;
+          const itens = parseCSV(text);
+
+          if (!itens.length) {
+            alert("Nenhum registro encontrado no CSV.");
+            setLoading(false);
+            return;
+          }
+
+          await Promise.all(
+            itens.map((item) =>
+              fetch("/api/calendario/calendario_loja", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(item),
+              })
+            )
+          );
+
+          alert(`Importação concluída! Registros inseridos: ${itens.length}`);
+          fetchRegistros();
+        } catch (err) {
+          console.error(err);
+          alert("Erro ao processar o arquivo.");
+        } finally {
+          setLoading(false);
+          e.target.value = "";
+        }
+      };
+
+      reader.onerror = () => {
+        alert("Erro ao ler o arquivo.");
+        setLoading(false);
+        e.target.value = "";
+      };
+
+      reader.readAsText(file, "utf-8");
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao importar arquivo.");
+      setLoading(false);
+      e.target.value = "";
+    }
+  };
+
+  // ------------ NOVO: BAIXAR MODELO CSV ------------
+
+  const handleDownloadModelo = () => {
+    const anoAtual = new Date().getFullYear();
+    const header =
+      "ano;semana;loja;meta;qtd_vendedor;cota;abaixo;super_cota;cota_ouro;obs\n";
+    const exemplo =
+      `${anoAtual};1;NOME LOJA;100000;5;4;3.25;4.5;5;Observação opcional\n`;
+
+    const csv = header + exemplo;
+
+    const blob = new Blob([csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "modelo_calendario_loja.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div style={{ padding: 20 }}>
       <h1>Metas por Semana / Loja</h1>
 
       {/* Pesquisa */}
-      <form onSubmit={handleSearchSubmit} style={{ marginBottom: 20, display: "flex", gap: 10 }}>
+      <form
+        onSubmit={handleSearchSubmit}
+        style={{ marginBottom: 10, display: "flex", gap: 10 }}
+      >
         <input
           type="number"
           placeholder="Ano"
           value={searchAno}
           onChange={(e) => setSearchAno(e.target.value)}
-          style={{ width: 100, padding: "8px 12px", borderRadius: 4, border: "1px solid #ccc" }}
+          style={{
+            width: 100,
+            padding: "8px 12px",
+            borderRadius: 4,
+            border: "1px solid #ccc",
+          }}
         />
         <input
           type="text"
           placeholder="Loja"
           value={searchLoja}
           onChange={(e) => setSearchLoja(e.target.value)}
-          style={{ flexGrow: 1, padding: "8px 12px", borderRadius: 4, border: "1px solid #ccc" }}
+          style={{
+            flexGrow: 1,
+            padding: "8px 12px",
+            borderRadius: 4,
+            border: "1px solid #ccc",
+          }}
         />
         <button
           type="submit"
@@ -200,6 +333,57 @@ Cota Ouro: ${reg.cota_ouro}
         </button>
       </form>
 
+      {/* Importar / Baixar modelo */}
+      <div
+        style={{
+          marginBottom: 20,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          flexWrap: "wrap",
+        }}
+      >
+        <label
+          style={{
+            padding: "8px 16px",
+            backgroundColor: "#16a085",
+            color: "white",
+            borderRadius: 4,
+            cursor: "pointer",
+            fontWeight: "bold",
+            display: "inline-block",
+          }}
+        >
+          Importar CSV
+          <input
+            type="file"
+            accept=".csv"
+            onChange={handleImportFile}
+            style={{ display: "none" }}
+          />
+        </label>
+
+        <button
+          type="button"
+          onClick={handleDownloadModelo}
+          style={{
+            padding: "8px 16px",
+            backgroundColor: "#8e44ad",
+            color: "white",
+            border: "none",
+            borderRadius: 4,
+            cursor: "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          Baixar modelo
+        </button>
+
+        <span style={{ fontSize: 12, color: "#555" }}>
+          Formato esperado: ano;semana;loja;meta;qtd_vendedor;cota;abaixo;super_cota;cota_ouro;obs
+        </span>
+      </div>
+
       {/* Formulário */}
       <form
         onSubmit={handleSubmit}
@@ -213,16 +397,77 @@ Cota Ouro: ${reg.cota_ouro}
           borderRadius: 8,
         }}
       >
-        <input name="ano" type="number" placeholder="Ano" value={form.ano} onChange={handleChange} required />
-        <input name="semana" type="number" placeholder="Semana" value={form.semana} onChange={handleChange} required />
-        <input name="loja" placeholder="Loja" value={form.loja} onChange={handleChange} required />
+        <input
+          name="ano"
+          type="number"
+          placeholder="Ano"
+          value={form.ano}
+          onChange={handleChange}
+          required
+        />
+        <input
+          name="semana"
+          type="number"
+          placeholder="Semana"
+          value={form.semana}
+          onChange={handleChange}
+          required
+        />
+        <input
+          name="loja"
+          placeholder="Loja"
+          value={form.loja}
+          onChange={handleChange}
+          required
+        />
 
-        <input name="meta" type="number" step="0.01" placeholder="Meta" value={form.meta} onChange={handleChange} />
-        <input name="qtd_vendedor" type="number" placeholder="Qtd Vendedor" value={form.qtd_vendedor} onChange={handleChange} />
-        <input name="cota" type="number" step="0.01" placeholder="Cota" value={form.cota} onChange={handleChange} />
-        <input name="abaixo" type="number" step="0.01" placeholder="Abaixo" value={form.abaixo} onChange={handleChange} />
-        <input name="super_cota" type="number" step="0.01" placeholder="Super Cota" value={form.super_cota} onChange={handleChange} />
-        <input name="cota_ouro" type="number" step="0.01" placeholder="Cota Ouro" value={form.cota_ouro} onChange={handleChange} />
+        <input
+          name="meta"
+          type="number"
+          step="0.01"
+          placeholder="Meta"
+          value={form.meta}
+          onChange={handleChange}
+        />
+        <input
+          name="qtd_vendedor"
+          type="number"
+          placeholder="Qtd Vendedor"
+          value={form.qtd_vendedor}
+          onChange={handleChange}
+        />
+        <input
+          name="cota"
+          type="number"
+          step="0.01"
+          placeholder="Cota"
+          value={form.cota}
+          onChange={handleChange}
+        />
+        <input
+          name="abaixo"
+          type="number"
+          step="0.01"
+          placeholder="Abaixo"
+          value={form.abaixo}
+          onChange={handleChange}
+        />
+        <input
+          name="super_cota"
+          type="number"
+          step="0.01"
+          placeholder="Super Cota"
+          value={form.super_cota}
+          onChange={handleChange}
+        />
+        <input
+          name="cota_ouro"
+          type="number"
+          step="0.01"
+          placeholder="Cota Ouro"
+          value={form.cota_ouro}
+          onChange={handleChange}
+        />
 
         <input
           name="obs"

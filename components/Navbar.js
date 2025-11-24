@@ -287,12 +287,7 @@ export default function Navbar() {
                     className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
                   >
                     Vendedores
-                  </Link>
-                  <Link
-                    href="/buckman/meta_loja"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
-                  >
-                    Metas Loja
+                
                   </Link>
 
                   {/* NOVO ITEM */}
