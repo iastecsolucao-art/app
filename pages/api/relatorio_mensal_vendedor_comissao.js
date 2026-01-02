@@ -17,7 +17,8 @@ const pool = new Pool({
 const ALLOWED_DATE_COLS = new Set(["invoicedate", "issuedate"]);
 const sanitizeDateCol = (v) => (ALLOWED_DATE_COLS.has(v) ? v : "invoicedate");
 
-const parseCsv = (v) => (!v ? [] : String(v).split(",").map((s) => s.trim()).filter(Boolean));
+const parseCsv = (v) =>
+  !v ? [] : String(v).split(",").map((s) => s.trim()).filter(Boolean);
 
 export default async function handler(req, res) {
   try {
@@ -54,7 +55,8 @@ export default async function handler(req, res) {
         SELECT c.data::date, c.ano, c.semana
         FROM calendario c
         JOIN sem s ON s.semana = c.semana
-        WHERE ($2::int[] IS NULL OR c.ano = ANY($2::int[]))
+        -- CORREÇÃO: filtrar por ANO ISO (e não c.ano)
+        WHERE ($2::int[] IS NULL OR EXTRACT(ISOYEAR FROM c.data)::int = ANY($2::int[]))
       ),
       periodo AS (
         SELECT MIN(data)::date AS dt_ini, MAX(data)::date AS dt_fim FROM dias_calendario
@@ -92,7 +94,8 @@ export default async function handler(req, res) {
         JOIN d_loja dl          ON dl.branch_code    = vv.branchcode
         LEFT JOIN vendedores vd ON vd.seller_code    = vv.dealercode::int
         WHERE c.semana = ANY($1::int[])
-          AND ($2::int[] IS NULL OR c.ano = ANY($2::int[]))
+          -- CORREÇÃO: filtrar por ANO ISO (e não c.ano)
+          AND ($2::int[] IS NULL OR EXTRACT(ISOYEAR FROM c.data)::int = ANY($2::int[]))
           AND ($3::text[] IS NULL OR dl.loja        = ANY($3::text[]))
           AND ($4::text[] IS NULL OR vd.seller_name = ANY($4::text[]))
         GROUP BY 1,2,3
@@ -128,7 +131,8 @@ export default async function handler(req, res) {
         SELECT c.data::date, c.ano, c.semana
         FROM calendario c
         JOIN sem s ON s.semana = c.semana
-        WHERE ($2::int[] IS NULL OR c.ano = ANY($2::int[]))
+        -- CORREÇÃO: filtrar por ANO ISO (e não c.ano)
+        WHERE ($2::int[] IS NULL OR EXTRACT(ISOYEAR FROM c.data)::int = ANY($2::int[]))
       ),
       periodo AS (SELECT MIN(data)::date AS dt_ini, MAX(data)::date AS dt_fim FROM dias_calendario),
       metas AS (
@@ -145,7 +149,8 @@ export default async function handler(req, res) {
         JOIN calendario c ON c.data::date = vv.${VV_DATE_COL}::date
         JOIN d_loja dl ON dl.branch_code = vv.branchcode
         WHERE c.semana = ANY($1::int[])
-          AND ($2::int[] IS NULL OR c.ano = ANY($2::int[]))
+          -- CORREÇÃO: filtrar por ANO ISO (e não c.ano)
+          AND ($2::int[] IS NULL OR EXTRACT(ISOYEAR FROM c.data)::int = ANY($2::int[]))
           AND ($3::text[] IS NULL OR dl.loja = ANY($3::text[]))
         GROUP BY 1,2
       )
@@ -163,7 +168,8 @@ export default async function handler(req, res) {
         SELECT c.data::date, c.ano, c.semana
         FROM calendario c
         JOIN sem s ON s.semana = c.semana
-        WHERE ($2::int[] IS NULL OR c.ano = ANY($2::int[]))
+        -- CORREÇÃO: filtrar por ANO ISO (e não c.ano)
+        WHERE ($2::int[] IS NULL OR EXTRACT(ISOYEAR FROM c.data)::int = ANY($2::int[]))
       ),
       periodo AS (SELECT MIN(data)::date AS dt_ini, MAX(data)::date AS dt_fim FROM dias_calendario),
       metas AS (
@@ -187,7 +193,8 @@ export default async function handler(req, res) {
         JOIN calendario c ON c.data::date = vv.${VV_DATE_COL}::date
         JOIN d_loja dl ON dl.branch_code = vv.branchcode
         WHERE c.semana = ANY($1::int[])
-          AND ($2::int[] IS NULL OR c.ano = ANY($2::int[]))
+          -- CORREÇÃO: filtrar por ANO ISO (e não c.ano)
+          AND ($2::int[] IS NULL OR EXTRACT(ISOYEAR FROM c.data)::int = ANY($2::int[]))
           AND ($3::text[] IS NULL OR dl.loja = ANY($3::text[]))
         GROUP BY 1,2
       ),
@@ -220,7 +227,8 @@ export default async function handler(req, res) {
         JOIN d_loja dl           ON dl.branch_code   = vv.branchcode
         LEFT JOIN vendedores vd  ON vd.seller_code   = vv.dealercode::int
         WHERE c.semana = ANY($1::int[])
-          AND ($2::int[] IS NULL OR c.ano = ANY($2::int[]))
+          -- CORREÇÃO: filtrar por ANO ISO (e não c.ano)
+          AND ($2::int[] IS NULL OR EXTRACT(ISOYEAR FROM c.data)::int = ANY($2::int[]))
           AND ($3::text[] IS NULL OR dl.loja        = ANY($3::text[]))
           AND ($4::text[] IS NULL OR vd.seller_name = ANY($4::text[]))
         GROUP BY 1,2,3
@@ -274,11 +282,14 @@ export default async function handler(req, res) {
       { meta_total: 0, real_total: 0, comissao_total: 0 }
     );
 
-    total_geral.pct_meta = total_geral.meta_total > 0
-      ? Number(((total_geral.real_total / total_geral.meta_total) * 100).toFixed(2))
-      : 0;
+    total_geral.pct_meta =
+      total_geral.meta_total > 0
+        ? Number(((total_geral.real_total / total_geral.meta_total) * 100).toFixed(2))
+        : 0;
 
-    return res.status(200).json({ data, resumo_semanal, subtotais_loja, total_geral, datecol: VV_DATE_COL });
+    return res
+      .status(200)
+      .json({ data, resumo_semanal, subtotais_loja, total_geral, datecol: VV_DATE_COL });
   } catch (err) {
     console.error("Erro API relatorio_mensal_vendedor_comissao:", err);
     return res.status(500).json({ error: "Erro interno do servidor" });
