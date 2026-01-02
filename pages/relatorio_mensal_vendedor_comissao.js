@@ -7,22 +7,21 @@ import * as XLSX from "xlsx";
  * Endpoints esperados:
  *   - /api/lojas
  *   - /api/vendedores
- *   - /api/semanas_calendario
+ *   - /api/semanas_calendario?ano=&mes=
  *   - /api/relatorio_mensal_vendedor_comissao   -> { data, resumo_semanal, subtotais_loja, total_geral }
- *   - /api/calendario_loja (NOVO)               -> [{ loja, semana, abaixo, cota, super_cota, cota_ouro, ... }, ...]
+ *   - /api/calendario_loja                      -> [{ loja, semana, abaixo, cota, super_cota, cota_ouro, ... }, ...]
  */
 export default function RelatorioVendasVendedorMensalComissao() {
   const [loading, setLoading] = useState(false);
 
   // dados retornados pelo back
   const [data, setData] = useState([]);               // linhas por vendedor
-  const [resumo, setResumo] = useState({});           // mapa loja -> semana -> meta (resumo_semanal)
+  const [resumo, setResumo] = useState({});           // mapa loja -> semana -> meta
   const [subtotais, setSubtotais] = useState({});     // mapa loja -> { meta, real, comissao, pct }
   const [totalGeral, setTotalGeral] = useState(null); // { meta_total, real_total, comissao_total, pct_meta }
   const [semanasApi, setSemanasApi] = useState([]);   // semanas vindas do back
 
-  // percentuais do calendario_loja (NOVO)
-  // shape: { [loja]: { [semana]: { abaixo, cota, super_cota, cota_ouro }, _padrao?: {...} } }
+  // percentuais do calendario_loja
   const [percentuais, setPercentuais] = useState({});
 
   // filtros
@@ -79,6 +78,35 @@ export default function RelatorioVendasVendedorMensalComissao() {
       return acc;
     }, {});
 
+  // ===== Semana: value único "ANO-SEMANA" e meta.semana = número (1..53)
+  const normalizarSemanasSelecionadas = (selected) => {
+    const arr = Array.isArray(selected) ? selected : selected ? [selected] : [];
+    const norm = arr
+      .map((opt) => {
+        const raw = String(opt?.value ?? "");
+        // aceita "2025-1" ou "1"
+        const parts = raw.includes("-") ? raw.split("-") : [null, raw];
+        const weekStr = parts[1] ?? raw;
+        const week = parseInt(String(weekStr).match(/\d+/)?.[0] ?? "", 10);
+        if (!Number.isFinite(week) || week < 1 || week > 53) return null;
+
+        const isoyear =
+          opt?.meta?.isoyear ??
+          (raw.includes("-") ? parseInt(parts[0], 10) : null) ??
+          (anosSelecionados[0]?.value ? parseInt(anosSelecionados[0].value, 10) : null);
+
+        return {
+          ...opt,
+          value: isoyear ? `${isoyear}-${week}` : String(week),
+          label: opt?.label ?? `S${String(week).padStart(2, "0")}`,
+          meta: { ...(opt?.meta || {}), isoyear, semana: week },
+        };
+      })
+      .filter(Boolean);
+
+    setSemanasSelecionadas(norm);
+  };
+
   // filtros iniciais (lojas/vendedores)
   useEffect(() => {
     (async () => {
@@ -97,31 +125,61 @@ export default function RelatorioVendasVendedorMensalComissao() {
     })();
   }, []);
 
-  // semanas disponíveis
+  // ===== semanas disponíveis: RECARREGA quando ano/mês mudar e PASSA querystring para a API
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/semanas_calendario", { cache: "no-store" });
+        const params = new URLSearchParams();
+
+        if (anosSelecionados.length) {
+          params.append("ano", anosSelecionados.map((a) => a.value).join(","));
+        }
+        if (mesesSelecionados.length) {
+          params.append("mes", mesesSelecionados.map((m) => m.value).join(","));
+        }
+
+        const url = `/api/semanas_calendario${params.toString() ? `?${params.toString()}` : ""}`;
+        const res = await fetch(url, { cache: "no-store" });
         const json = await res.json();
-        const weeks = Array.isArray(json) ? json : Array.isArray(json?.weeks) ? json.weeks : [];
+
+        const weeks = Array.isArray(json?.weeks) ? json.weeks : Array.isArray(json) ? json : [];
+
         const opts = weeks.map((s) => {
-          const inicio = s.inicio || s.dt_inicio_mes;
+          const inicio = s.ini || s.inicio || s.dt_inicio_mes;
           const fim = s.fim || s.dt_fim_mes;
-          const semana = s.semana || s.semana_iso;
+          const semana = s.semana_iso ?? s.semana;
+          const isoyear = s.isoyear ?? s.ano ?? (anosSelecionados[0]?.value ? Number(anosSelecionados[0].value) : null);
+
           return {
-            value: String(semana),
-            label: `S${semana} ${formatDateBr(inicio)} a ${formatDateBr(fim)}`,
-            meta: { ano: s.ano, inicio, fim },
+            value: `${isoyear}-${semana}`, // chave única
+            label: `S${String(semana).padStart(2, "0")} ${formatDateBr(inicio)} a ${formatDateBr(fim)}`,
+            meta: { isoyear, semana: Number(semana), inicio, fim },
           };
         });
-        opts.sort((a, b) => Number(a.value) - Number(b.value));
+
+        opts.sort((a, b) => {
+          const [ya, wa] = String(a.value).split("-").map(Number);
+          const [yb, wb] = String(b.value).split("-").map(Number);
+          return ya !== yb ? ya - yb : wa - wb;
+        });
+
         setSemanasDisponiveis(opts);
+
+        // se mudou o ano, limpa semanas que não pertencem ao ano atual (evita seleção "fantasma")
+        if (anosSelecionados.length) {
+          const anoAtual = Number(anosSelecionados[0].value);
+          const filtradas = (semanasSelecionadas || []).filter(
+            (s) => Number(String(s.value).split("-")[0]) === anoAtual
+          );
+          if (filtradas.length !== (semanasSelecionadas || []).length) setSemanasSelecionadas(filtradas);
+        }
       } catch (e) {
         console.error("Erro ao carregar semanas:", e);
         setSemanasDisponiveis([]);
       }
     })();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anosSelecionados, mesesSelecionados]);
 
   // Buscar dados + percentuais do calendario_loja
   const fetchData = async () => {
@@ -133,11 +191,17 @@ export default function RelatorioVendasVendedorMensalComissao() {
       if (diasSelecionados.length) params.append("dia", diasSelecionados.map((d) => d.value).join(","));
       if (lojasSelecionadas.length) params.append("loja", lojasSelecionadas.map((l) => l.value).join(","));
       if (vendedoresSelecionados.length) params.append("vendedor", vendedoresSelecionados.map((v) => v.value).join(","));
-      if (semanasSelecionadas.length) params.append("semana", semanasSelecionadas.map((s) => s.value).join(","));
+
+      // envia apenas os números (1..53) para o backend (compatível com seu endpoint atual)
+      const semanasNums = (semanasSelecionadas || [])
+        .map((s) => s?.meta?.semana ?? Number(String(s.value).split("-")[1]))
+        .filter((n) => Number.isFinite(n));
+
+      if (semanasNums.length) params.append("semana", semanasNums.join(","));
 
       const [resRel, resCal] = await Promise.all([
         fetch(`/api/relatorio_mensal_vendedor_comissao?${params.toString()}`, { cache: "no-store" }),
-        fetch(`/api/calendario_loja?${params.toString()}`, { cache: "no-store" }), // NOVO
+        fetch(`/api/calendario_loja?${params.toString()}`, { cache: "no-store" }),
       ]);
       if (!resRel.ok) throw new Error(`HTTP ${resRel.status}`);
 
@@ -173,11 +237,11 @@ export default function RelatorioVendasVendedorMensalComissao() {
 
       setTotalGeral(json.total_geral || null);
 
-      // ===== calendario_loja -> percentuais por loja/semana
+      // calendario_loja -> percentuais por loja/semana
       let mapaPerc = {};
       if (resCal.ok) {
         try {
-          const cal = await resCal.json(); // array [{loja, semana, abaixo, cota, super_cota, cota_ouro}]
+          const cal = await resCal.json();
           mapaPerc = (Array.isArray(cal) ? cal : []).reduce((acc, r) => {
             const lj = r.loja;
             const s = Number(r.semana);
@@ -214,21 +278,29 @@ export default function RelatorioVendasVendedorMensalComissao() {
       "_" +
       (diasSelecionados.length ? diasSelecionados.map((d) => d.value).join("-") : "todos") +
       "_" +
-      (semanasSelecionadas.length ? "S" + semanasSelecionadas.map((s) => s.value).join("-S") : "todasSemanas") +
+      (semanasSelecionadas.length
+        ? "S" + semanasSelecionadas.map((s) => String(s?.meta?.semana ?? String(s.value).split("-")[1])).join("-S")
+        : "todasSemanas") +
       `.xlsx`;
     XLSX.writeFile(wb, nomeArquivo);
   };
 
   // semanas para render (ordem crescente)
   const semanasRender = useMemo(() => {
-    if (semanasSelecionadas.length) return semanasSelecionadas.map((s) => Number(s.value)).sort((a, b) => a - b);
+    if (semanasSelecionadas.length)
+      return semanasSelecionadas
+        .map((s) => Number(s?.meta?.semana ?? String(s.value).split("-")[1]))
+        .filter((n) => Number.isFinite(n))
+        .sort((a, b) => a - b);
+
     if (semanasApi.length) return [...semanasApi].sort((a, b) => a - b);
+
     const setNum = new Set();
     data.forEach((row) => (row.detalhe_semanal || []).forEach((d) => setNum.add(Number(d.semana))));
     return Array.from(setNum).sort((a, b) => a - b);
   }, [data, semanasSelecionadas, semanasApi]);
 
-  // ===== Helper: obtém faixa e percentual de comissão a partir do calendario_loja
+  // Helper: obtém faixa e percentual de comissão
   function obterFaixaEPercentual(loja, semanaOuNull, percentualAtingido) {
     const defaults = { abaixo: 3.25, cota: 4.0, super_cota: 4.5, cota_ouro: 5.0 };
     const porLoja = percentuais?.[loja] || {};
@@ -270,12 +342,24 @@ export default function RelatorioVendasVendedorMensalComissao() {
       >
         <thead style={{ backgroundColor: "#1976d2", color: "white" }}>
           <tr>
-            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>Loja</th>
-            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>Vendedor</th>
-            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>Total Meta</th>
-            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>Total Real</th>
-            <th style={{ padding: 12, textAlign: "right", minWidth: 80 }} rowSpan={2}>%M</th>
-            <th style={{ padding: 12, textAlign: "right", minWidth: 140 }} rowSpan={2}>Total Comissão</th>
+            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>
+              Loja
+            </th>
+            <th style={{ padding: 12, textAlign: "left" }} rowSpan={2}>
+              Vendedor
+            </th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>
+              Total Meta
+            </th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 120 }} rowSpan={2}>
+              Total Real
+            </th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 80 }} rowSpan={2}>
+              %M
+            </th>
+            <th style={{ padding: 12, textAlign: "right", minWidth: 140 }} rowSpan={2}>
+              Total Comissão
+            </th>
             <th
               style={{ border: "1px solid #ccc", padding: 8, backgroundColor: "#1565c0", textAlign: "center" }}
               colSpan={semanasRender.length * 4}
@@ -296,13 +380,11 @@ export default function RelatorioVendasVendedorMensalComissao() {
         </thead>
         <tbody>
           {Object.entries(grupos).map(([loja, itens]) => {
-            // base para subtotal semanal (meta da calendar + soma real/comissão dos vendedores)
             const subtotalSemana = semanasRender.reduce((acc, s) => {
               acc[s] = { meta: Number(resumo?.[loja]?.[s] || 0), realizado: 0, comissao: 0 };
               return acc;
             }, {});
 
-            // render linhas de vendedores
             const linhasVendedores = itens.map((row) => {
               const detalhePorSemana = {};
               (row.detalhe_semanal || []).forEach((d) => {
@@ -314,7 +396,6 @@ export default function RelatorioVendasVendedorMensalComissao() {
                 };
               });
 
-              // acumula no subtotal semanal
               semanasRender.forEach((s) => {
                 const d = detalhePorSemana[s] || { meta: 0, realizado: 0, comissao: 0 };
                 subtotalSemana[s].realizado += d.realizado;
@@ -355,7 +436,6 @@ export default function RelatorioVendasVendedorMensalComissao() {
                     {getArrow(pctMes)}
                   </td>
 
-                  {/* TOTAL COMISSÃO com faixa + percentual de calendario_loja */}
                   <td
                     style={{
                       padding: 12,
@@ -368,7 +448,6 @@ export default function RelatorioVendasVendedorMensalComissao() {
                     {totalComisV.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                     <div style={{ fontSize: 12, fontWeight: 500, color: "#555" }}>
                       {(() => {
-                        // usa a 1ª semana selecionada como referência de percentuais (ou default)
                         const semanaRef = semanasRender?.[0] ?? null;
                         const { faixa, perc } = obterFaixaEPercentual(row.loja, semanaRef, pctMes);
                         return `${faixa} ${perc.toFixed(2)}%`;
@@ -424,7 +503,6 @@ export default function RelatorioVendasVendedorMensalComissao() {
               );
             });
 
-            // linha subtotal (valores do banco)
             const st = subtotais[loja] || { meta: 0, real: 0, comissao: 0, pct: 0 };
 
             return (
@@ -432,7 +510,9 @@ export default function RelatorioVendasVendedorMensalComissao() {
                 {linhasVendedores}
 
                 <tr style={{ fontWeight: "bold", backgroundColor: "#f5f5f5" }}>
-                  <td style={{ padding: 12 }} colSpan={2}>Subtotal {loja}</td>
+                  <td style={{ padding: 12 }} colSpan={2}>
+                    Subtotal {loja}
+                  </td>
 
                   <td style={{ padding: 12, textAlign: "right", color: "#d32f2f" }}>
                     {st.meta.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
@@ -458,7 +538,6 @@ export default function RelatorioVendasVendedorMensalComissao() {
 
                   <td style={{ padding: 12, textAlign: "right", color: st.real >= st.meta ? "#2e7d32" : "#d32f2f" }}>
                     {st.comissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                    {/* Exibe a faixa conforme % mensal do subtotal, usando primeira semana como referência */}
                     <div style={{ fontSize: 12, fontWeight: 500, color: "#555" }}>
                       {(() => {
                         const semanaRef = semanasRender?.[0] ?? null;
@@ -517,10 +596,11 @@ export default function RelatorioVendasVendedorMensalComissao() {
             );
           })}
 
-          {/* Total Geral (opcional) */}
           {totalGeral && (
             <tr style={{ fontWeight: "bold", backgroundColor: "#e3f2fd" }}>
-              <td style={{ padding: 12 }} colSpan={2}>Total Geral</td>
+              <td style={{ padding: 12 }} colSpan={2}>
+                Total Geral
+              </td>
               <td style={{ padding: 12, textAlign: "right" }}>
                 {Number(totalGeral.meta_total || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
               </td>
@@ -608,7 +688,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
           <Select
             options={semanasDisponiveis}
             value={semanasSelecionadas}
-            onChange={setSemanasSelecionadas}
+            onChange={normalizarSemanasSelecionadas}
             isMulti
             placeholder="Ex.: S40 29/09 a 05/10"
             closeMenuOnSelect={false}
