@@ -33,10 +33,9 @@ function gerarSemanasISO(ano) {
   for (let w = 1; w <= 53; w++) {
     const info = getWeekInfo(ano, w);
 
-    // se a segunda-feira já passou muito do ano seguinte, pode parar
     const y = info.monday.getFullYear();
     const m = info.monday.getMonth();
-    if (y > ano + 1 || (y === ano + 1 && m >= 2)) break; // margem de segurança
+    if (y > ano + 1 || (y === ano + 1 && m >= 2)) break;
 
     semanas.push({ semana: w, segunda: info.segunda, datas: info.datas });
   }
@@ -53,6 +52,11 @@ export default function Calendario() {
   const [loading, setLoading] = useState(false);
   const [mutatingDate, setMutatingDate] = useState(null);
 
+  // UI do "Mover"
+  const [showMover, setShowMover] = useState(false);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
   const pad2 = (n) => String(n).padStart(2, "0");
   const ymPrefix = `${ano}-${pad2(mes)}-`;
 
@@ -64,10 +68,17 @@ export default function Calendario() {
     setLoading(true);
     setMsg("");
     try {
-      const res = await fetch(`/api/calendario/calendario_loja/datas?ano=${ano}&mes=${mes}`);
+      const res = await fetch(
+        `/api/calendario/calendario_loja/datas?ano=${ano}&mes=${mes}`
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `Erro HTTP: ${res.status}`);
-      setDatasCadastradas(Array.isArray(data?.datasCadastradas) ? data.datasCadastradas : []);
+
+      const list = Array.isArray(data?.datasCadastradas) ? data.datasCadastradas : [];
+      setDatasCadastradas(list);
+
+      // Ajusta "from" se necessário (mantém selecionado se ainda existir)
+      if (fromDate && !list.includes(fromDate)) setFromDate("");
     } catch (e) {
       setDatasCadastradas([]);
       setMsg("Erro ao carregar datas: " + e.message);
@@ -106,15 +117,16 @@ export default function Calendario() {
         });
       } else {
         res = await fetch(
-          `/api/calendario/calendario_loja/datas?ano=${encodeURIComponent(ano)}&data=${encodeURIComponent(
-            dataISO
-          )}`,
+          `/api/calendario/calendario_loja/datas?ano=${encodeURIComponent(
+            ano
+          )}&data=${encodeURIComponent(dataISO)}`,
           { method: "DELETE" }
         );
       }
 
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload?.error || payload?.details || `Falha (${res.status})`);
+      if (!res.ok)
+        throw new Error(payload?.error || payload?.details || `Falha (${res.status})`);
 
       setMsg(payload?.message || "Alteração salva!");
     } catch (e) {
@@ -130,6 +142,58 @@ export default function Calendario() {
       setMutatingDate(null);
     }
   };
+
+  // PATCH para mover cadastro
+  const moverData = async () => {
+    if (loading || mutatingDate) return;
+    if (!fromDate || !toDate) {
+      setMsg("Erro: selecione a data de origem e a data de destino.");
+      return;
+    }
+    if (fromDate === toDate) {
+      setMsg("Erro: origem e destino não podem ser iguais.");
+      return;
+    }
+
+    setMutatingDate("MOVE");
+    setMsg("");
+
+    try {
+      const res = await fetch("/api/calendario/calendario_loja/datas", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ano, from: fromDate, to: toDate }),
+      });
+
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok)
+        throw new Error(payload?.error || payload?.details || `Falha (${res.status})`);
+
+      setMsg(payload?.message || `Movido de ${fromDate} para ${toDate}`);
+      setShowMover(false);
+      setFromDate("");
+      setToDate("");
+
+      // recarrega lista do mês atual
+      await carregarDatas();
+    } catch (e) {
+      setMsg("Erro ao mover: " + e.message);
+    } finally {
+      setMutatingDate(null);
+    }
+  };
+
+  // Datas do mês atual (para dropdown destino)
+  const datasDoMesAtual = useMemo(() => {
+    const list = [];
+    for (const w of semanas) {
+      for (const d of w.datas) {
+        if (d.startsWith(ymPrefix)) list.push(d);
+      }
+    }
+    // remove duplicados (só por segurança)
+    return Array.from(new Set(list)).sort();
+  }, [semanas, ymPrefix]);
 
   // Filtra semanas para mostrar só as que têm datas do mês escolhido
   const semanasDoMes = useMemo(() => {
@@ -177,16 +241,88 @@ export default function Calendario() {
         <button onClick={carregarDatas} disabled={loading || !!mutatingDate}>
           Recarregar
         </button>
+
+        <button
+          onClick={() => setShowMover((v) => !v)}
+          disabled={loading || !!mutatingDate}
+          style={{ marginLeft: 6 }}
+        >
+          {showMover ? "Fechar mover" : "Mover"}
+        </button>
       </div>
 
+      {showMover && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: 12,
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            maxWidth: 520,
+          }}
+        >
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <label>
+              Origem (cadastrada):{" "}
+              <select
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                disabled={loading || !!mutatingDate}
+              >
+                <option value="">-- selecione --</option>
+                {datasCadastradas
+                  .slice()
+                  .sort()
+                  .map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+              </select>
+            </label>
+
+            <label>
+              Destino (mês atual):{" "}
+              <select
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                disabled={loading || !!mutatingDate}
+              >
+                <option value="">-- selecione --</option>
+                {datasDoMesAtual.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button onClick={moverData} disabled={loading || !!mutatingDate}>
+              Confirmar mover
+            </button>
+          </div>
+
+          <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: "#444" }}>
+            Dica: para “mover 26/01 para semana 6”, escolha como destino uma data da semana 6 (ex.: 2026-02-02).
+          </p>
+        </div>
+      )}
+
       {msg && (
-        <p style={{ marginTop: 10, fontWeight: "bold", color: msg.includes("Erro") ? "red" : "green" }}>
+        <p
+          style={{
+            marginTop: 10,
+            fontWeight: "bold",
+            color: msg.includes("Erro") ? "red" : "green",
+          }}
+        >
           {msg}
         </p>
       )}
 
       {loading && <p>Carregando...</p>}
-      {mutatingDate && <p>Salvando {mutatingDate}...</p>}
+      {mutatingDate && mutatingDate !== "MOVE" && <p>Salvando {mutatingDate}...</p>}
+      {mutatingDate === "MOVE" && <p>Movendo...</p>}
 
       {!loading && semanasDoMes.length > 0 && (
         <div style={{ marginTop: 20 }}>
@@ -223,7 +359,9 @@ export default function Calendario() {
       )}
 
       {!loading && semanasDoMes.length === 0 && (
-        <p style={{ marginTop: 20 }}>Nenhuma semana encontrada para {ano}-{pad2(mes)}.</p>
+        <p style={{ marginTop: 20 }}>
+          Nenhuma semana encontrada para {ano}-{pad2(mes)}.
+        </p>
       )}
     </div>
   );
