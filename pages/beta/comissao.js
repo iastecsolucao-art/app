@@ -8,7 +8,7 @@ import * as XLSX from "xlsx";
  *   - /api/lojas
  *   - /api/vendedores
  *   - /api/semanas_calendario?ano=&mes=
- *   - /api/relatorio_mensal_vendedor_comissao   -> { data, resumo_semanal, subtotais_loja, total_geral }
+ *   - /api/beta/comissao   -> { data, resumo_semanal, subtotais_loja, total_geral }
  *   - /api/calendario_loja                      -> [{ loja, semana, abaixo, cota, super_cota, cota_ouro, ... }, ...]
  */
 export default function RelatorioVendasVendedorMensalComissao() {
@@ -200,7 +200,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
       if (semanasNums.length) params.append("semana", semanasNums.join(","));
 
       const [resRel, resCal] = await Promise.all([
-        fetch(`/api/relatorio_mensal_vendedor_comissao?${params.toString()}`, { cache: "no-store" }),
+        fetch(`/api/comissao?${params.toString()}`, { cache: "no-store" }),
         fetch(`/api/calendario_loja?${params.toString()}`, { cache: "no-store" }),
       ]);
       if (!resRel.ok) throw new Error(`HTTP ${resRel.status}`);

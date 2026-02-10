@@ -1,21 +1,19 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 // devolve a segunda-feira da semana da data passada
 function getMonday(d) {
   const date = new Date(d);
   const day = date.getDay();
-  const diff = (day === 0 ? -6 : 1) - day; // domingo (0) vira -6, segunda (1) vira 0 etc.
+  const diff = (day === 0 ? -6 : 1) - day;
   date.setDate(date.getDate() + diff);
   return date;
 }
 
 // calcula segunda e os 7 dias da semana ISO (semana começa na segunda)
 function getWeekInfo(ano, semana) {
-  // regra ISO: a semana 1 é a que contém o dia 4 de janeiro
   const base = new Date(ano, 0, 4); // 4 de janeiro
   const mondayWeek1 = getMonday(base);
 
-  // segunda da semana desejada = segunda da semana 1 + (semana-1)*7 dias
   const monday = new Date(mondayWeek1);
   monday.setDate(mondayWeek1.getDate() + (semana - 1) * 7);
 
@@ -23,14 +21,10 @@ function getWeekInfo(ano, semana) {
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    // formato YYYY-MM-DD (igual banco normalmente retorna date)
     datas.push(d.toISOString().slice(0, 10));
   }
 
-  return {
-    segunda: datas[0],
-    datas,
-  };
+  return { segunda: datas[0], datas };
 }
 
 export default function Calendario() {
@@ -40,33 +34,29 @@ export default function Calendario() {
   const [populacaoMsg, setPopulacaoMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // loading por data (evita travar a tela inteira só porque clicou em 1 data)
+  const [mutatingDate, setMutatingDate] = useState(null);
+
+  // lookup rápido
+  const datasSet = useMemo(() => new Set(datasCadastradas), [datasCadastradas]);
+  const isCadastrada = (data) => datasSet.has(data);
+
   const gerarCalendario = async () => {
     setLoading(true);
     setPopulacaoMsg("");
 
     try {
-      // Faz as duas chamadas em paralelo
       const [resSemanas, resDatas] = await Promise.all([
         fetch(`/api/calendario/calendario_loja?ano=${ano}`),
         fetch(`/api/calendario/calendario_loja/datas?ano=${ano}`),
       ]);
 
-      if (!resSemanas.ok) {
-        throw new Error(`Erro HTTP semanas: ${resSemanas.status}`);
-      }
-      if (!resDatas.ok) {
-        throw new Error(`Erro HTTP datas: ${resDatas.status}`);
-      }
+      if (!resSemanas.ok) throw new Error(`Erro HTTP semanas: ${resSemanas.status}`);
+      if (!resDatas.ok) throw new Error(`Erro HTTP datas: ${resDatas.status}`);
 
       const dataSemanas = await resSemanas.json();
       const dataDatas = await resDatas.json();
 
-      // -----------------------
-      // 1) Montar lista de semanas
-      // -----------------------
-      // backend pode retornar:
-      // a) { semanas: [...] }
-      // b) [ ... ] (result.rows)
       let registros =
         Array.isArray(dataSemanas?.semanas) && dataSemanas.semanas.length
           ? dataSemanas.semanas
@@ -74,12 +64,10 @@ export default function Calendario() {
           ? dataSemanas
           : [];
 
-      // pega só os números de semana e remove duplicados
       const semanasUnicas = Array.from(
         new Set(registros.map((r) => r.semana).filter((s) => s != null))
       ).sort((a, b) => a - b);
 
-      // para cada semana, calcula segunda e os 7 dias
       const semanasFormatadas = semanasUnicas.map((numSemana) => {
         const { segunda, datas } = getWeekInfo(ano, numSemana);
         return { semana: numSemana, segunda, datas };
@@ -87,9 +75,6 @@ export default function Calendario() {
 
       setSemanas(semanasFormatadas);
 
-      // -----------------------
-      // 2) Datas cadastradas
-      // -----------------------
       const datasCad = Array.isArray(dataDatas?.datasCadastradas)
         ? dataDatas.datasCadastradas
         : Array.isArray(dataDatas)
@@ -122,7 +107,7 @@ export default function Calendario() {
 
       if (res.ok) {
         setPopulacaoMsg(data.message || "Calendário populado com sucesso!");
-        await gerarCalendario(); // recarrega para já mostrar as datas
+        await gerarCalendario();
       } else {
         setPopulacaoMsg(data.error || "Erro ao popular calendário.");
       }
@@ -133,7 +118,64 @@ export default function Calendario() {
     }
   };
 
-  const isCadastrada = (data) => datasCadastradas.includes(data);
+  // ✅ ALTERAR (toggle) a data ao clicar
+  // Sugestão de contrato:
+  // - Se NÃO cadastrada: PUT /api/calendario/calendario_loja/datas  { ano, data }
+  // - Se JÁ cadastrada:  DELETE /api/calendario/calendario_loja/datas?ano=YYYY&data=YYYY-MM-DD
+  const toggleData = async (data) => {
+    if (mutatingDate || loading) return;
+
+    const jaCadastrada = isCadastrada(data);
+    setMutatingDate(data);
+    setPopulacaoMsg("");
+
+    // otimista
+    setDatasCadastradas((prev) => {
+      const s = new Set(prev);
+      if (jaCadastrada) s.delete(data);
+      else s.add(data);
+      return Array.from(s).sort();
+    });
+
+    try {
+      let res;
+
+      if (!jaCadastrada) {
+        res = await fetch("/api/calendario/calendario_loja/datas", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ano, data }),
+        });
+      } else {
+        res = await fetch(
+          `/api/calendario/calendario_loja/datas?ano=${encodeURIComponent(ano)}&data=${encodeURIComponent(data)}`,
+          { method: "DELETE" }
+        );
+      }
+
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(payload?.error || `Falha ao alterar (${res.status})`);
+      }
+
+      setPopulacaoMsg(payload?.message || "Alteração salva!");
+    } catch (err) {
+      console.error(err);
+
+      // desfaz otimista
+      setDatasCadastradas((prev) => {
+        const s = new Set(prev);
+        if (jaCadastrada) s.add(data);
+        else s.delete(data);
+        return Array.from(s).sort();
+      });
+
+      setPopulacaoMsg("Erro ao alterar: " + err.message);
+    } finally {
+      setMutatingDate(null);
+    }
+  };
 
   return (
     <div style={{ padding: 20 }}>
@@ -147,14 +189,14 @@ export default function Calendario() {
           onChange={(e) => setAno(parseInt(e.target.value, 10))}
           min="1900"
           max="2100"
-          disabled={loading}
+          disabled={loading || !!mutatingDate}
         />
       </label>
 
       <button
         onClick={gerarCalendario}
         style={{ marginLeft: 10 }}
-        disabled={loading}
+        disabled={loading || !!mutatingDate}
       >
         Gerar e Verificar
       </button>
@@ -162,7 +204,7 @@ export default function Calendario() {
       <button
         onClick={popularCalendario}
         style={{ marginLeft: 10, backgroundColor: "#4caf50", color: "white" }}
-        disabled={loading}
+        disabled={loading || !!mutatingDate}
       >
         Popular Calendário
       </button>
@@ -180,6 +222,7 @@ export default function Calendario() {
       )}
 
       {loading && <p>Carregando...</p>}
+      {mutatingDate && <p>Salvando {mutatingDate}...</p>}
 
       {semanas.length > 0 && !loading && (
         <div style={{ marginTop: 20 }}>
@@ -189,27 +232,32 @@ export default function Calendario() {
                 Semana {semana} {segunda && `(Segunda: ${segunda})`}
               </strong>
               :{" "}
-              {datas.map((d) => (
-                <span
-                  key={d}
-                  style={{
-                    marginRight: 5,
-                    padding: "2px 6px",
-                    borderRadius: 4,
-                    backgroundColor: isCadastrada(d)
-                      ? "lightgreen"
-                      : "lightcoral",
-                    color: "#000",
-                  }}
-                  title={
-                    isCadastrada(d)
-                      ? "Data cadastrada"
-                      : "Data não cadastrada"
-                  }
-                >
-                  {d}
-                </span>
-              ))}
+              {datas.map((d) => {
+                const cadas = isCadastrada(d);
+                const disabled = mutatingDate === d;
+
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => toggleData(d)}
+                    disabled={!!mutatingDate && mutatingDate !== d}
+                    title={cadas ? "Clique para descadastrar" : "Clique para cadastrar"}
+                    style={{
+                      cursor: disabled ? "wait" : "pointer",
+                      border: "1px solid #ddd",
+                      marginRight: 6,
+                      padding: "2px 8px",
+                      borderRadius: 6,
+                      backgroundColor: cadas ? "lightgreen" : "lightcoral",
+                      color: "#000",
+                      opacity: disabled ? 0.6 : 1,
+                    }}
+                  >
+                    {d}
+                  </button>
+                );
+              })}
             </div>
           ))}
         </div>
