@@ -281,16 +281,14 @@ export default function Navbar() {
                 Buckman ▾
               </button>
               {openDropdown === "buckman" && (
-                <div className="absolute top-full right-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[200px] z-50">
+                <div className="absolute top-full right-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[220px] z-50">
                   <Link
                     href="/buckman/vendedores"
                     className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
                   >
                     Vendedores
-                
                   </Link>
 
-                  {/* NOVO ITEM */}
                   <Link
                     href="/calendario_loja"
                     className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
@@ -304,6 +302,15 @@ export default function Navbar() {
                   >
                     Calendário
                   </Link>
+
+                  {/* ✅ NOVO ITEM: NFe */}
+                  <Link
+                    href="/buckman/nfe"
+                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
+                  >
+                    NFe (Importar XML)
+                  </Link>
+
                   <Link
                     href="/relatorio_semanal_dinamico"
                     className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
@@ -593,6 +600,7 @@ export default function Navbar() {
                   >
                     Vendedores
                   </Link>
+
                   <Link
                     href="/buckman/meta_loja"
                     onClick={() => setMenuOpen(false)}
@@ -601,7 +609,6 @@ export default function Navbar() {
                     Metas Loja
                   </Link>
 
-                  {/* NOVO ITEM MOBILE */}
                   <Link
                     href="/calendario_loja"
                     onClick={() => setMenuOpen(false)}
@@ -617,6 +624,16 @@ export default function Navbar() {
                   >
                     Calendário
                   </Link>
+
+                  {/* ✅ NOVO ITEM MOBILE: NFe */}
+                  <Link
+                    href="/buckman/nfe"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
+                  >
+                    NFe (Importar XML)
+                  </Link>
+
                   <Link
                     href="/relatorio_semanal_dinamico"
                     onClick={() => setMenuOpen(false)}
