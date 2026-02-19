@@ -12,19 +12,69 @@ export default async function handler(req, res) {
 
   try {
     const { id } = req.query;
-    const idInt = parseInt(id, 10);
-    if (Number.isNaN(idInt)) return res.status(400).json({ error: "ID inválido" });
+    const idInt = Number.parseInt(id, 10);
+    if (!Number.isFinite(idInt)) return res.status(400).json({ error: "ID inválido" });
 
-    const docRes = await pool.query(`SELECT * FROM nfe_document WHERE id = $1`, [idInt]);
-    if (docRes.rowCount === 0) return res.status(404).json({ error: "Documento não encontrado" });
+    // Seleciona explicitamente os campos (melhor que SELECT *)
+    const docRes = await pool.query(
+      `
+      SELECT
+        id,
+        chave_nfe,
+        n_nf,
+        serie,
+        dh_emi,
+        vnf,
+        cnpj_emit,
+        xnome_emit,
+        cnpj_dest,
+        xnome_dest,
+        created_at,
+        COALESCE(status_erp, 2) AS status_erp
+      FROM nfe_document
+      WHERE id = $1
+      `,
+      [idInt]
+    );
+
+    if (docRes.rowCount === 0) {
+      return res.status(404).json({ error: "Documento não encontrado" });
+    }
 
     const itemRes = await pool.query(
-      `SELECT * FROM nfe_item WHERE nfe_id = $1 ORDER BY n_item`,
+      `
+      SELECT
+        id,
+        nfe_id,
+        n_item,
+        cprod,
+        xprod,
+        ncm,
+        cfop,
+        ucom,
+        qcom,
+        vuncom,
+        vprod
+      FROM nfe_item
+      WHERE nfe_id = $1
+      ORDER BY n_item
+      `,
       [idInt]
     );
 
     const payRes = await pool.query(
-      `SELECT * FROM nfe_payment WHERE nfe_id = $1`,
+      `
+      SELECT
+        id,
+        nfe_id,
+        tpag,
+        vpag,
+        card_cnpj,
+        card_tband
+      FROM nfe_payment
+      WHERE nfe_id = $1
+      ORDER BY id
+      `,
       [idInt]
     );
 
@@ -34,6 +84,6 @@ export default async function handler(req, res) {
       payments: payRes.rows,
     });
   } catch (e) {
-    return res.status(500).json({ error: "Erro interno", details: e.message });
+    return res.status(500).json({ error: "Erro interno", details: e?.message || String(e) });
   }
 }

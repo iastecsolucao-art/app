@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
+import { useRouter } from "next/router";
 
 export default function Navbar() {
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [acessos, setAcessos] = useState(null);
@@ -12,10 +14,7 @@ export default function Navbar() {
     if (session) {
       fetch("/api/usuarios/acessos")
         .then((res) => res.json())
-        .then((data) => {
-          console.log("Acessos do usuário:", data);
-          setAcessos(data);
-        })
+        .then((data) => setAcessos(data))
         .catch((err) => console.error("Erro ao carregar acessos", err));
     }
   }, [session]);
@@ -33,21 +32,43 @@ export default function Navbar() {
     setOpenDropdown(openDropdown === menu ? null : menu);
   };
 
+  // fecha dropdown ao trocar de rota
+  useEffect(() => {
+    setOpenDropdown(null);
+    setMenuOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.asPath]);
+
   if (!session) return null;
+
+  const isActive = (path) => router.pathname === path || router.asPath === path;
+  const isBuckmanSection = router.asPath.startsWith("/buckman");
+
+  const navLinkClass = (active = false) =>
+    `hover:underline ${active ? "text-yellow-300 font-semibold" : "text-white"}`;
+
+  const dropItemClass = (active = false) =>
+    `block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap ${
+      active ? "bg-yellow-400 text-black font-semibold" : ""
+    }`;
+
+  const mobileItemClass = (active = false) =>
+    `block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap ${
+      active ? "bg-yellow-400 text-black font-semibold" : ""
+    }`;
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-blue-600 p-4 flex items-center justify-between shadow-lg">
-      {/* Botão Home */}
+      {/* Botão Home + Logo */}
       <div className="flex items-center space-x-4">
         <Link
           href="/"
           onClick={() => setMenuOpen(false)}
-          className="text-white font-bold text-lg hover:underline"
+          className={navLinkClass(isActive("/")) + " font-bold text-lg"}
         >
           🏠 Home
         </Link>
 
-        {/* Logo Buckman - só se tiver acesso */}
         {acessos?.buckman && (
           <div className="ml-4 text-white font-bold text-xl select-none">
             BUCKMAN
@@ -55,49 +76,35 @@ export default function Navbar() {
         )}
       </div>
 
-      {/* --- DESKTOP --- */}
+      {/* DESKTOP */}
       {!expirado && acessos && (
         <div className="hidden md:flex space-x-6 text-white items-center relative">
-          {/* Dashboard */}
           {acessos.dashboard && (
-            <Link href="/dashboard" className="hover:underline">
+            <Link href="/dashboard" className={navLinkClass(isActive("/dashboard"))}>
               Dashboard
             </Link>
           )}
 
-          {/* Inventário */}
           {acessos.inventario && (
             <div className="relative">
               <button
                 onClick={() => toggleDropdown("inventario")}
-                className="hover:underline focus:outline-none"
+                className={navLinkClass(openDropdown === "inventario")}
               >
                 Inventário ▾
               </button>
               {openDropdown === "inventario" && (
                 <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[150px] z-50">
-                  <Link
-                    href="/contagem"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/contagem" className={dropItemClass(isActive("/contagem"))}>
                     Contagem
                   </Link>
-                  <Link
-                    href="/upload"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/upload" className={dropItemClass(isActive("/upload"))}>
                     Upload
                   </Link>
-                  <Link
-                    href="/download"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/download" className={dropItemClass(isActive("/download"))}>
                     Download
                   </Link>
-                  <Link
-                    href="/relatorios"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/relatorios" className={dropItemClass(isActive("/relatorios"))}>
                     Relatórios
                   </Link>
                 </div>
@@ -105,26 +112,22 @@ export default function Navbar() {
             </div>
           )}
 
-          {/* Produtos */}
           {acessos.produtos && (
             <div className="relative">
               <button
                 onClick={() => toggleDropdown("produtos")}
-                className="hover:underline focus:outline-none"
+                className={navLinkClass(openDropdown === "produtos")}
               >
                 Produtos ▾
               </button>
               {openDropdown === "produtos" && (
                 <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[150px] z-50">
-                  <Link
-                    href="/produtos"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/produtos" className={dropItemClass(isActive("/produtos"))}>
                     Cadastro Produto
                   </Link>
                   <Link
                     href="/listar_produtos"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                    className={dropItemClass(isActive("/listar_produtos"))}
                   >
                     Lista de Produtos
                   </Link>
@@ -133,39 +136,29 @@ export default function Navbar() {
             </div>
           )}
 
-          {/* Compras */}
           {acessos.compras && (
             <div className="relative">
               <button
                 onClick={() => toggleDropdown("compras")}
-                className="hover:underline focus:outline-none"
+                className={navLinkClass(openDropdown === "compras")}
               >
                 Compras ▾
               </button>
               {openDropdown === "compras" && (
                 <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[150px] z-50">
-                  <Link
-                    href="/compras"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/compras" className={dropItemClass(isActive("/compras"))}>
                     Nova Compra
                   </Link>
                   <Link
                     href="/listar_compras"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                    className={dropItemClass(isActive("/listar_compras"))}
                   >
                     Lista de Compras
                   </Link>
-                  <Link
-                    href="/entradas"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/entradas" className={dropItemClass(isActive("/entradas"))}>
                     Entradas
                   </Link>
-                  <Link
-                    href="/estoque"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/estoque" className={dropItemClass(isActive("/estoque"))}>
                     Estoque
                   </Link>
                 </div>
@@ -173,27 +166,20 @@ export default function Navbar() {
             </div>
           )}
 
-          {/* Comercial */}
           {acessos.comercial && (
             <div className="relative">
               <button
                 onClick={() => toggleDropdown("comercial")}
-                className="hover:underline focus:outline-none"
+                className={navLinkClass(openDropdown === "comercial")}
               >
                 Comercial ▾
               </button>
               {openDropdown === "comercial" && (
                 <div className="absolute top-full left-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[150px] z-50">
-                  <Link
-                    href="/orcamento"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/orcamento" className={dropItemClass(isActive("/orcamento"))}>
                     Orçamentos
                   </Link>
-                  <Link
-                    href="/vendas"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/vendas" className={dropItemClass(isActive("/vendas"))}>
                     Vendas
                   </Link>
                 </div>
@@ -201,68 +187,49 @@ export default function Navbar() {
             </div>
           )}
 
-          {/* Serviços */}
           {acessos.servicos && (
             <div className="relative">
               <button
                 onClick={() => toggleDropdown("servicos")}
-                className="hover:underline focus:outline-none"
+                className={navLinkClass(openDropdown === "servicos")}
               >
                 Serviços ▾
               </button>
               {openDropdown === "servicos" && (
                 <div className="absolute top-full right-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[180px] z-50">
-                  <Link
-                    href="/agendamento"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/agendamento" className={dropItemClass(isActive("/agendamento"))}>
                     📅 Agendamento
                   </Link>
-                  <Link
-                    href="/servicos"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/servicos" className={dropItemClass(isActive("/servicos"))}>
                     ⚙️ Serviços
                   </Link>
-                  <Link
-                    href="/produtos"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/produtos" className={dropItemClass(isActive("/produtos"))}>
                     ⚙️ Produtos
                   </Link>
-                  <Link
-                    href="/profissionais"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/profissionais" className={dropItemClass(isActive("/profissionais"))}>
                     👩‍⚕️ Profissionais
                   </Link>
                   <Link
                     href="/profissionais-horarios"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                    className={dropItemClass(isActive("/profissionais-horarios"))}
                   >
                     🕒 Horários dos Profissionais
                   </Link>
-                  <Link
-                    href="/clientes"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/clientes" className={dropItemClass(isActive("/clientes"))}>
                     👤 Clientes
                   </Link>
-                  <Link
-                    href="/faturas"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
-                  >
+                  <Link href="/faturas" className={dropItemClass(isActive("/faturas"))}>
                     💳 Faturas
                   </Link>
                   <Link
                     href="/dashboard_servico"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                    className={dropItemClass(isActive("/dashboard_servico"))}
                   >
                     📊 Dashboard
                   </Link>
                   <Link
                     href="/agendamentos/completar"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black"
+                    className={dropItemClass(isActive("/agendamentos/completar"))}
                   >
                     📝 Completar Agendamentos
                   </Link>
@@ -271,55 +238,57 @@ export default function Navbar() {
             </div>
           )}
 
-          {/* Buckman - só se tiver acesso */}
+          {/* Buckman */}
           {acessos.buckman && (
             <div className="relative">
               <button
                 onClick={() => toggleDropdown("buckman")}
-                className="hover:underline focus:outline-none whitespace-nowrap"
+                className={navLinkClass(isBuckmanSection || openDropdown === "buckman") + " whitespace-nowrap"}
               >
                 Buckman ▾
               </button>
+
               {openDropdown === "buckman" && (
                 <div className="absolute top-full right-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[220px] z-50">
                   <Link
                     href="/buckman/vendedores"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
+                    className={dropItemClass(isActive("/buckman/vendedores"))}
                   >
                     Vendedores
                   </Link>
 
                   <Link
                     href="/calendario_loja"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
+                    className={dropItemClass(isActive("/calendario_loja"))}
                   >
                     Calendário Loja
                   </Link>
 
                   <Link
                     href="/buckman/calendario"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
+                    className={dropItemClass(isActive("/buckman/calendario"))}
                   >
                     Calendário
                   </Link>
 
-                  {/* ✅ NOVO ITEM: NFe */}
+                  {/* ✅ NFe destacado */}
                   <Link
                     href="/buckman/nfe"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
+                    className={dropItemClass(isActive("/buckman/nfe"))}
                   >
-                    NFe (Importar XML)
+                    🧾 NF-e (Importar XML)
                   </Link>
 
                   <Link
                     href="/relatorio_semanal_dinamico"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
+                    className={dropItemClass(isActive("/relatorio_semanal_dinamico"))}
                   >
                     Relatório Semanal
                   </Link>
+
                   <Link
                     href="/relatorio_mensal_vendedor_comissao"
-                    className="block px-4 py-2 hover:bg-yellow-400 hover:text-black whitespace-nowrap"
+                    className={dropItemClass(isActive("/relatorio_mensal_vendedor_comissao"))}
                   >
                     Relatório Mensal por Vendedor
                   </Link>
@@ -330,7 +299,7 @@ export default function Navbar() {
         </div>
       )}
 
-      {/* --- BOTÃO MOBILE ☰ --- */}
+      {/* BOTÃO MOBILE */}
       {session && !expirado && acessos && (
         <button
           className="md:hidden text-white focus:outline-none text-3xl"
@@ -341,14 +310,16 @@ export default function Navbar() {
         </button>
       )}
 
-      {/* --- MOBILE MENU --- */}
+      {/* MOBILE MENU */}
       {menuOpen && session && !expirado && acessos && (
         <div className="fixed inset-0 bg-blue-700 text-white z-50 overflow-y-auto flex flex-col pt-20 pb-6">
           {acessos.dashboard && (
             <Link
               href="/dashboard"
               onClick={() => setMenuOpen(false)}
-              className="px-6 py-3 border-b font-semibold text-yellow-300"
+              className={`px-6 py-3 border-b font-semibold ${
+                isActive("/dashboard") ? "bg-yellow-400 text-black" : "text-yellow-300"
+              }`}
             >
               Dashboard
             </Link>
@@ -360,37 +331,20 @@ export default function Navbar() {
                 onClick={() => toggleDropdown("inventario")}
                 className="w-full text-left px-6 py-3 border-b flex justify-between items-center"
               >
-                Inventário ▾
-                <span>{openDropdown === "inventario" ? "▲" : "▼"}</span>
+                Inventário ▾ <span>{openDropdown === "inventario" ? "▲" : "▼"}</span>
               </button>
               {openDropdown === "inventario" && (
                 <div className="bg-blue-800">
-                  <Link
-                    href="/contagem"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/contagem" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/contagem"))}>
                     Contagem
                   </Link>
-                  <Link
-                    href="/upload"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/upload" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/upload"))}>
                     Upload
                   </Link>
-                  <Link
-                    href="/download"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/download" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/download"))}>
                     Download
                   </Link>
-                  <Link
-                    href="/relatorios"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/relatorios" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/relatorios"))}>
                     Relatórios
                   </Link>
                 </div>
@@ -404,22 +358,17 @@ export default function Navbar() {
                 onClick={() => toggleDropdown("produtos")}
                 className="w-full text-left px-6 py-3 border-b flex justify-between items-center"
               >
-                Produtos ▾
-                <span>{openDropdown === "produtos" ? "▲" : "▼"}</span>
+                Produtos ▾ <span>{openDropdown === "produtos" ? "▲" : "▼"}</span>
               </button>
               {openDropdown === "produtos" && (
                 <div className="bg-blue-800">
-                  <Link
-                    href="/produtos"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/produtos" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/produtos"))}>
                     Cadastro Produto
                   </Link>
                   <Link
                     href="/listar_produtos"
                     onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                    className={mobileItemClass(isActive("/listar_produtos"))}
                   >
                     Lista de Produtos
                   </Link>
@@ -434,37 +383,24 @@ export default function Navbar() {
                 onClick={() => toggleDropdown("compras")}
                 className="w-full text-left px-6 py-3 border-b flex justify-between items-center"
               >
-                Compras ▾
-                <span>{openDropdown === "compras" ? "▲" : "▼"}</span>
+                Compras ▾ <span>{openDropdown === "compras" ? "▲" : "▼"}</span>
               </button>
               {openDropdown === "compras" && (
                 <div className="bg-blue-800">
-                  <Link
-                    href="/compras"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/compras" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/compras"))}>
                     Nova Compra
                   </Link>
                   <Link
                     href="/listar_compras"
                     onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                    className={mobileItemClass(isActive("/listar_compras"))}
                   >
                     Lista de Compras
                   </Link>
-                  <Link
-                    href="/entradas"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/entradas" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/entradas"))}>
                     Entradas
                   </Link>
-                  <Link
-                    href="/estoque"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/estoque" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/estoque"))}>
                     Estoque
                   </Link>
                 </div>
@@ -478,23 +414,14 @@ export default function Navbar() {
                 onClick={() => toggleDropdown("comercial")}
                 className="w-full text-left px-6 py-3 border-b flex justify-between items-center"
               >
-                Comercial ▾
-                <span>{openDropdown === "comercial" ? "▲" : "▼"}</span>
+                Comercial ▾ <span>{openDropdown === "comercial" ? "▲" : "▼"}</span>
               </button>
               {openDropdown === "comercial" && (
                 <div className="bg-blue-800">
-                  <Link
-                    href="/orcamento"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/orcamento" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/orcamento"))}>
                     Orçamentos
                   </Link>
-                  <Link
-                    href="/vendas"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/vendas" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/vendas"))}>
                     Vendas
                   </Link>
                 </div>
@@ -508,71 +435,46 @@ export default function Navbar() {
                 onClick={() => toggleDropdown("servicos")}
                 className="w-full text-left px-6 py-3 border-b flex justify-between items-center"
               >
-                Serviços ▾
-                <span>{openDropdown === "servicos" ? "▲" : "▼"}</span>
+                Serviços ▾ <span>{openDropdown === "servicos" ? "▲" : "▼"}</span>
               </button>
               {openDropdown === "servicos" && (
                 <div className="bg-blue-800">
-                  <Link
-                    href="/agendamento"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/agendamento" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/agendamento"))}>
                     📅 Agendamento
                   </Link>
-                  <Link
-                    href="/servicos"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/servicos" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/servicos"))}>
                     ⚙️ Serviços
                   </Link>
-                  <Link
-                    href="/produtos"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/produtos" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/produtos"))}>
                     ⚙️ Produtos
                   </Link>
-                  <Link
-                    href="/profissionais"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/profissionais" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/profissionais"))}>
                     👩‍⚕️ Profissionais
                   </Link>
                   <Link
                     href="/profissionais-horarios"
                     onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                    className={mobileItemClass(isActive("/profissionais-horarios"))}
                   >
                     🕒 Horários dos Profissionais
                   </Link>
-                  <Link
-                    href="/clientes"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/clientes" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/clientes"))}>
                     👤 Clientes
                   </Link>
-                  <Link
-                    href="/faturas"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
-                  >
+                  <Link href="/faturas" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/faturas"))}>
                     💳 Faturas
                   </Link>
                   <Link
                     href="/dashboard_servico"
                     onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                    className={mobileItemClass(isActive("/dashboard_servico"))}
                   >
                     📊 Dashboard
                   </Link>
                   <Link
                     href="/agendamentos/completar"
                     onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition"
+                    className={mobileItemClass(isActive("/agendamentos/completar"))}
                   >
                     📝 Completar Agendamentos
                   </Link>
@@ -586,17 +488,19 @@ export default function Navbar() {
             <>
               <button
                 onClick={() => toggleDropdown("buckman")}
-                className="w-full text-left px-6 py-3 border-b flex justify-between items-center"
+                className={`w-full text-left px-6 py-3 border-b flex justify-between items-center ${
+                  isBuckmanSection ? "text-yellow-300 font-semibold" : ""
+                }`}
               >
-                Buckman ▾
-                <span>{openDropdown === "buckman" ? "▲" : "▼"}</span>
+                Buckman ▾ <span>{openDropdown === "buckman" ? "▲" : "▼"}</span>
               </button>
+
               {openDropdown === "buckman" && (
                 <div className="bg-blue-800">
                   <Link
                     href="/buckman/vendedores"
                     onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
+                    className={mobileItemClass(isActive("/buckman/vendedores"))}
                   >
                     Vendedores
                   </Link>
@@ -604,7 +508,7 @@ export default function Navbar() {
                   <Link
                     href="/buckman/meta_loja"
                     onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
+                    className={mobileItemClass(isActive("/buckman/meta_loja"))}
                   >
                     Metas Loja
                   </Link>
@@ -612,7 +516,7 @@ export default function Navbar() {
                   <Link
                     href="/calendario_loja"
                     onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
+                    className={mobileItemClass(isActive("/calendario_loja"))}
                   >
                     Calendário Loja
                   </Link>
@@ -620,31 +524,32 @@ export default function Navbar() {
                   <Link
                     href="/buckman/calendario"
                     onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
+                    className={mobileItemClass(isActive("/buckman/calendario"))}
                   >
                     Calendário
                   </Link>
 
-                  {/* ✅ NOVO ITEM MOBILE: NFe */}
+                  {/* ✅ NFe destacado no mobile */}
                   <Link
                     href="/buckman/nfe"
                     onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
+                    className={mobileItemClass(isActive("/buckman/nfe"))}
                   >
-                    NFe (Importar XML)
+                    🧾 NF-e (Importar XML)
                   </Link>
 
                   <Link
                     href="/relatorio_semanal_dinamico"
                     onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
+                    className={mobileItemClass(isActive("/relatorio_semanal_dinamico"))}
                   >
                     Relatório Semanal
                   </Link>
+
                   <Link
                     href="/relatorio_mensal_vendedor_comissao"
                     onClick={() => setMenuOpen(false)}
-                    className="block px-8 py-2 border-b hover:bg-yellow-400 hover:text-black transition whitespace-nowrap"
+                    className={mobileItemClass(isActive("/relatorio_mensal_vendedor_comissao"))}
                   >
                     Relatório Mensal por Vendedor
                   </Link>
