@@ -23,6 +23,10 @@ if (!pool) {
   global._nfePgPool = pool;
 }
 
+function firstValue(v) {
+  return Array.isArray(v) ? v[0] : v;
+}
+
 function normalizeBody(body = {}) {
   return {
     tipo: String(body.tipo || "").trim().toUpperCase(),
@@ -46,11 +50,13 @@ function normalizeBody(body = {}) {
 export default async function handler(req, res) {
   if (req.method === "GET") {
     try {
-      const q = String(req.query.q || "").trim();
-      const tipo = String(req.query.tipo || "").trim();
-      const uf = String(req.query.uf || "").trim();
+      const q = String(firstValue(req.query.q) || "").trim();
+      const tipo = String(firstValue(req.query.tipo) || "").trim().toUpperCase();
+      const uf = String(firstValue(req.query.uf) || "").trim().toUpperCase();
+
+      const rawLimit = firstValue(req.query.limit);
       const limit = Math.min(
-        Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1),
+        Math.max(parseInt(String(rawLimit || "50"), 10) || 50, 1),
         200
       );
 
@@ -59,14 +65,22 @@ export default async function handler(req, res) {
 
       if (q) {
         params.push(`%${q}%`);
+        const p = `$${params.length}`;
+
         where.push(`(
-          cnpj ILIKE $${params.length}
-          OR xnome ILIKE $${params.length}
-          OR COALESCE(ie, '') ILIKE $${params.length}
-          OR COALESCE(municipio, '') ILIKE $${params.length}
-          OR COALESCE(xlgr, '') ILIKE $${params.length}
-          OR COALESCE(xbair, '') ILIKE $${params.length}
-          OR COALESCE(fone, '') ILIKE $${params.length}
+          cnpj ILIKE ${p}
+          OR xnome ILIKE ${p}
+          OR COALESCE(ie, '') ILIKE ${p}
+          OR COALESCE(municipio, '') ILIKE ${p}
+          OR COALESCE(xlgr, '') ILIKE ${p}
+          OR COALESCE(nro, '') ILIKE ${p}
+          OR COALESCE(xcpl, '') ILIKE ${p}
+          OR COALESCE(xbair, '') ILIKE ${p}
+          OR COALESCE(cmun, '') ILIKE ${p}
+          OR COALESCE(cep, '') ILIKE ${p}
+          OR COALESCE(cpais, '') ILIKE ${p}
+          OR COALESCE(xpais, '') ILIKE ${p}
+          OR COALESCE(fone, '') ILIKE ${p}
         )`);
       }
 
@@ -74,16 +88,18 @@ export default async function handler(req, res) {
         if (!["EMITENTE", "DESTINATARIO"].includes(tipo)) {
           return res.status(400).json({ error: "tipo inválido" });
         }
+
         params.push(tipo);
         where.push(`tipo = $${params.length}`);
       }
 
       if (uf) {
-        params.push(uf.toUpperCase());
+        params.push(uf);
         where.push(`uf = $${params.length}`);
       }
 
       params.push(limit);
+      const limitParam = `$${params.length}`;
 
       const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
@@ -111,12 +127,14 @@ export default async function handler(req, res) {
         FROM public.nfe_participante
         ${whereSql}
         ORDER BY xnome ASC, id DESC
-        LIMIT $${params.length}
+        LIMIT ${limitParam}
         `,
         params
       );
 
-      return res.status(200).json({ rows: result.rows });
+      return res.status(200).json({
+        rows: Array.isArray(result.rows) ? result.rows : [],
+      });
     } catch (e) {
       console.error("Erro em GET /api/participantes:", {
         message: e?.message,
@@ -222,6 +240,13 @@ export default async function handler(req, res) {
         table: e?.table,
       });
 
+      if (e?.code === "23505") {
+        return res.status(409).json({
+          error: "Já existe um participante com esse tipo e CNPJ",
+          details: e?.detail || e?.message,
+        });
+      }
+
       return res.status(500).json({
         error: "Erro ao cadastrar participante",
         details: e?.message || String(e),
@@ -230,5 +255,7 @@ export default async function handler(req, res) {
   }
 
   res.setHeader("Allow", ["GET", "POST"]);
-  return res.status(405).json({ error: `Método ${req.method} não permitido` });
+  return res.status(405).json({
+    error: `Método ${req.method} não permitido`,
+  });
 }
