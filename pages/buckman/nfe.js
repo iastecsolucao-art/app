@@ -84,6 +84,8 @@ function DanfePreview({ detail, onClose, onDownloadXml, onCopyKey }) {
             position: "sticky",
             top: 0,
             zIndex: 2,
+            gap: 12,
+            flexWrap: "wrap",
           }}
         >
           <strong>Pré-visualização DANFE</strong>
@@ -254,8 +256,15 @@ export default function NfeImport() {
   const [importMsg, setImportMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [q, setQ] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [filters, setFilters] = useState({
+    chave_nfe: "",
+    n_nf: "",
+    serie: "",
+    emitente: "",
+    destinatario: "",
+    status_erp: "",
+  });
+
   const [docs, setDocs] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -264,11 +273,17 @@ export default function NfeImport() {
 
   const chavePreview = useMemo(() => extractChaveQuick(xmlText), [xmlText]);
 
-  async function loadDocs() {
+  async function loadDocs(customFilters) {
     try {
+      const f = customFilters || filters;
       const params = new URLSearchParams();
-      if (q) params.set("q", q);
-      if (statusFilter) params.set("status_erp", statusFilter);
+
+      if (f.chave_nfe) params.set("chave_nfe", f.chave_nfe);
+      if (f.n_nf) params.set("n_nf", f.n_nf);
+      if (f.serie) params.set("serie", f.serie);
+      if (f.emitente) params.set("emitente", f.emitente);
+      if (f.destinatario) params.set("destinatario", f.destinatario);
+      if (f.status_erp) params.set("status_erp", f.status_erp);
 
       const res = await fetch(`/api/nfe?${params.toString()}`);
       const data = await res.json().catch(() => ({}));
@@ -403,6 +418,20 @@ export default function NfeImport() {
     }
   }
 
+  function limparFiltros() {
+    const cleared = {
+      chave_nfe: "",
+      n_nf: "",
+      serie: "",
+      emitente: "",
+      destinatario: "",
+      status_erp: "",
+    };
+
+    setFilters(cleared);
+    loadDocs(cleared);
+  }
+
   return (
     <div style={{ padding: 20 }}>
       <h1>NFe - Importar XML</h1>
@@ -466,26 +495,87 @@ export default function NfeImport() {
 
       <h2>Documentos importados</h2>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar por chave, número, emitente, destinatário..."
-          style={{ width: 420, maxWidth: "100%", padding: 6 }}
-        />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: 8,
+          alignItems: "end",
+          marginBottom: 12,
+        }}
+      >
+        <div>
+          <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Chave NFe</label>
+          <input
+            value={filters.chave_nfe}
+            onChange={(e) => setFilters((prev) => ({ ...prev, chave_nfe: e.target.value }))}
+            placeholder="Digite a chave"
+            style={{ width: "100%", padding: 6 }}
+          />
+        </div>
 
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ padding: 6 }}
-        >
-          <option value="">Status: todos</option>
-          <option value="1">1 - {STATUS[1]}</option>
-          <option value="2">2 - {STATUS[2]}</option>
-          <option value="3">3 - {STATUS[3]}</option>
-        </select>
+        <div>
+          <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Número</label>
+          <input
+            value={filters.n_nf}
+            onChange={(e) => setFilters((prev) => ({ ...prev, n_nf: e.target.value }))}
+            placeholder="Ex: 2540"
+            style={{ width: "100%", padding: 6 }}
+          />
+        </div>
 
-        <button onClick={loadDocs}>Buscar</button>
+        <div>
+          <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Série</label>
+          <input
+            value={filters.serie}
+            onChange={(e) => setFilters((prev) => ({ ...prev, serie: e.target.value }))}
+            placeholder="Ex: 1"
+            style={{ width: "100%", padding: 6 }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Emitente</label>
+          <input
+            value={filters.emitente}
+            onChange={(e) => setFilters((prev) => ({ ...prev, emitente: e.target.value }))}
+            placeholder="Nome ou CNPJ do emitente"
+            style={{ width: "100%", padding: 6 }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Destinatário</label>
+          <input
+            value={filters.destinatario}
+            onChange={(e) =>
+              setFilters((prev) => ({ ...prev, destinatario: e.target.value }))
+            }
+            placeholder="Nome ou CNPJ do destinatário"
+            style={{ width: "100%", padding: 6 }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Status ERP</label>
+          <select
+            value={filters.status_erp}
+            onChange={(e) => setFilters((prev) => ({ ...prev, status_erp: e.target.value }))}
+            style={{ width: "100%", padding: 6 }}
+          >
+            <option value="">Todos</option>
+            <option value="1">1 - {STATUS[1]}</option>
+            <option value="2">2 - {STATUS[2]}</option>
+            <option value="3">3 - {STATUS[3]}</option>
+          </select>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={() => loadDocs()}>Buscar</button>
+          <button type="button" onClick={limparFiltros}>
+            Limpar
+          </button>
+        </div>
       </div>
 
       <div
@@ -700,8 +790,8 @@ export default function NfeImport() {
                         cProd: {it.cprod || "-"} | NCM: {it.ncm || "-"} | CFOP: {it.cfop || "-"}
                       </div>
                       <div style={{ fontSize: 12, color: "#555" }}>
-                        Qtd: {it.qcom ?? "-"} {it.ucom || ""} | Unit: {moneyBR(it.vuncom)} |
-                        Total: {moneyBR(it.vprod)}
+                        Qtd: {it.qcom ?? "-"} {it.ucom || ""} | Unit: {moneyBR(it.vuncom)} | Total:{" "}
+                        {moneyBR(it.vprod)}
                       </div>
                     </div>
                   ))
