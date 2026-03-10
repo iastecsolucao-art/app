@@ -26,17 +26,16 @@ export default function Navbar() {
     const diff = Math.ceil((expDate - hoje) / (1000 * 60 * 60 * 24));
     diasRestantes = diff;
   }
+
   const expirado = diasRestantes !== null && diasRestantes < 0;
 
   const toggleDropdown = (menu) => {
     setOpenDropdown(openDropdown === menu ? null : menu);
   };
 
-  // fecha dropdown ao trocar de rota
   useEffect(() => {
     setOpenDropdown(null);
     setMenuOpen(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router.asPath]);
 
   if (!session) return null;
@@ -59,7 +58,6 @@ export default function Navbar() {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-blue-600 p-4 flex items-center justify-between shadow-lg">
-      {/* Botão Home + Logo */}
       <div className="flex items-center space-x-4">
         <Link
           href="/"
@@ -76,7 +74,6 @@ export default function Navbar() {
         )}
       </div>
 
-      {/* DESKTOP */}
       {!expirado && acessos && (
         <div className="hidden md:flex space-x-6 text-white items-center relative">
           {acessos.dashboard && (
@@ -238,18 +235,20 @@ export default function Navbar() {
             </div>
           )}
 
-          {/* Buckman */}
           {acessos.buckman && (
             <div className="relative">
               <button
                 onClick={() => toggleDropdown("buckman")}
-                className={navLinkClass(isBuckmanSection || openDropdown === "buckman") + " whitespace-nowrap"}
+                className={
+                  navLinkClass(isBuckmanSection || openDropdown === "buckman") +
+                  " whitespace-nowrap"
+                }
               >
                 Buckman ▾
               </button>
 
               {openDropdown === "buckman" && (
-                <div className="absolute top-full right-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[220px] z-50">
+                <div className="absolute top-full right-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[240px] z-50">
                   <Link
                     href="/buckman/vendedores"
                     className={dropItemClass(isActive("/buckman/vendedores"))}
@@ -271,12 +270,18 @@ export default function Navbar() {
                     Calendário
                   </Link>
 
-                  {/* ✅ NFe destacado */}
                   <Link
                     href="/buckman/nfe"
                     className={dropItemClass(isActive("/buckman/nfe"))}
                   >
                     🧾 NF-e (Importar XML)
+                  </Link>
+
+                  <Link
+                    href="/buckman/participantes"
+                    className={dropItemClass(isActive("/buckman/participantes"))}
+                  >
+                    👥 Participantes
                   </Link>
 
                   <Link
@@ -299,7 +304,6 @@ export default function Navbar() {
         </div>
       )}
 
-      {/* BOTÃO MOBILE */}
       {session && !expirado && acessos && (
         <button
           className="md:hidden text-white focus:outline-none text-3xl"
@@ -310,7 +314,6 @@ export default function Navbar() {
         </button>
       )}
 
-      {/* MOBILE MENU */}
       {menuOpen && session && !expirado && acessos && (
         <div className="fixed inset-0 bg-blue-700 text-white z-50 overflow-y-auto flex flex-col pt-20 pb-6">
           {acessos.dashboard && (
@@ -335,16 +338,32 @@ export default function Navbar() {
               </button>
               {openDropdown === "inventario" && (
                 <div className="bg-blue-800">
-                  <Link href="/contagem" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/contagem"))}>
+                  <Link
+                    href="/contagem"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/contagem"))}
+                  >
                     Contagem
                   </Link>
-                  <Link href="/upload" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/upload"))}>
+                  <Link
+                    href="/upload"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/upload"))}
+                  >
                     Upload
                   </Link>
-                  <Link href="/download" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/download"))}>
+                  <Link
+                    href="/download"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/download"))}
+                  >
                     Download
                   </Link>
-                  <Link href="/relatorios" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/relatorios"))}>
+                  <Link
+                    href="/relatorios"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/relatorios"))}
+                  >
                     Relatórios
                   </Link>
                 </div>
@@ -362,7 +381,11 @@ export default function Navbar() {
               </button>
               {openDropdown === "produtos" && (
                 <div className="bg-blue-800">
-                  <Link href="/produtos" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/produtos"))}>
+                  <Link
+                    href="/produtos"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/produtos"))}
+                  >
                     Cadastro Produto
                   </Link>
                   <Link
@@ -387,7 +410,11 @@ export default function Navbar() {
               </button>
               {openDropdown === "compras" && (
                 <div className="bg-blue-800">
-                  <Link href="/compras" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/compras"))}>
+                  <Link
+                    href="/compras"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/compras"))}
+                  >
                     Nova Compra
                   </Link>
                   <Link
@@ -397,10 +424,18 @@ export default function Navbar() {
                   >
                     Lista de Compras
                   </Link>
-                  <Link href="/entradas" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/entradas"))}>
+                  <Link
+                    href="/entradas"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/entradas"))}
+                  >
                     Entradas
                   </Link>
-                  <Link href="/estoque" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/estoque"))}>
+                  <Link
+                    href="/estoque"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/estoque"))}
+                  >
                     Estoque
                   </Link>
                 </div>
@@ -418,10 +453,18 @@ export default function Navbar() {
               </button>
               {openDropdown === "comercial" && (
                 <div className="bg-blue-800">
-                  <Link href="/orcamento" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/orcamento"))}>
+                  <Link
+                    href="/orcamento"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/orcamento"))}
+                  >
                     Orçamentos
                   </Link>
-                  <Link href="/vendas" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/vendas"))}>
+                  <Link
+                    href="/vendas"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/vendas"))}
+                  >
                     Vendas
                   </Link>
                 </div>
@@ -439,16 +482,32 @@ export default function Navbar() {
               </button>
               {openDropdown === "servicos" && (
                 <div className="bg-blue-800">
-                  <Link href="/agendamento" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/agendamento"))}>
+                  <Link
+                    href="/agendamento"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/agendamento"))}
+                  >
                     📅 Agendamento
                   </Link>
-                  <Link href="/servicos" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/servicos"))}>
+                  <Link
+                    href="/servicos"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/servicos"))}
+                  >
                     ⚙️ Serviços
                   </Link>
-                  <Link href="/produtos" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/produtos"))}>
+                  <Link
+                    href="/produtos"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/produtos"))}
+                  >
                     ⚙️ Produtos
                   </Link>
-                  <Link href="/profissionais" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/profissionais"))}>
+                  <Link
+                    href="/profissionais"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/profissionais"))}
+                  >
                     👩‍⚕️ Profissionais
                   </Link>
                   <Link
@@ -458,10 +517,18 @@ export default function Navbar() {
                   >
                     🕒 Horários dos Profissionais
                   </Link>
-                  <Link href="/clientes" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/clientes"))}>
+                  <Link
+                    href="/clientes"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/clientes"))}
+                  >
                     👤 Clientes
                   </Link>
-                  <Link href="/faturas" onClick={() => setMenuOpen(false)} className={mobileItemClass(isActive("/faturas"))}>
+                  <Link
+                    href="/faturas"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/faturas"))}
+                  >
                     💳 Faturas
                   </Link>
                   <Link
@@ -483,7 +550,6 @@ export default function Navbar() {
             </>
           )}
 
-          {/* Buckman Mobile */}
           {acessos.buckman && (
             <>
               <button
@@ -529,13 +595,20 @@ export default function Navbar() {
                     Calendário
                   </Link>
 
-                  {/* ✅ NFe destacado no mobile */}
                   <Link
                     href="/buckman/nfe"
                     onClick={() => setMenuOpen(false)}
                     className={mobileItemClass(isActive("/buckman/nfe"))}
                   >
                     🧾 NF-e (Importar XML)
+                  </Link>
+
+                  <Link
+                    href="/buckman/participantes"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/buckman/participantes"))}
+                  >
+                    👥 Participantes
                   </Link>
 
                   <Link
@@ -558,7 +631,6 @@ export default function Navbar() {
             </>
           )}
 
-          {/* Infos usuário */}
           <div className="px-6 py-4 text-sm border-t border-blue-600">
             👤 {session.user?.name} <br />
             🏢 {session.user?.empresa_nome}
