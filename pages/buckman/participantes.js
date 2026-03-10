@@ -18,6 +18,15 @@ const initialForm = {
   ie: "",
   uf: "",
   municipio: "",
+  xlgr: "",
+  nro: "",
+  xcpl: "",
+  xbair: "",
+  cmun: "",
+  cep: "",
+  cpais: "",
+  xpais: "",
+  fone: "",
 };
 
 export default function ParticipantesPage() {
@@ -92,6 +101,15 @@ export default function ParticipantesPage() {
       ie: data.ie || "",
       uf: data.uf || "",
       municipio: data.municipio || "",
+      xlgr: data.xlgr || "",
+      nro: data.nro || "",
+      xcpl: data.xcpl || "",
+      xbair: data.xbair || "",
+      cmun: data.cmun || "",
+      cep: data.cep || "",
+      cpais: data.cpais || "",
+      xpais: data.xpais || "",
+      fone: data.fone || "",
     });
   }
 
@@ -123,6 +141,15 @@ export default function ParticipantesPage() {
         ie: form.ie,
         uf: form.uf,
         municipio: form.municipio,
+        xlgr: form.xlgr,
+        nro: form.nro,
+        xcpl: form.xcpl,
+        xbair: form.xbair,
+        cmun: form.cmun,
+        cep: onlyDigits(form.cep),
+        cpais: form.cpais,
+        xpais: form.xpais,
+        fone: onlyDigits(form.fone),
       };
 
       const isEdit = !!form.id;
@@ -142,13 +169,7 @@ export default function ParticipantesPage() {
       }
 
       setMsg(isEdit ? "Cadastro atualizado com sucesso." : "Cadastro criado com sucesso.");
-
-      if (isEdit) {
-        preencherFormulario(data);
-      } else {
-        preencherFormulario(data);
-      }
-
+      preencherFormulario(data);
       await loadRows();
     } catch (e) {
       setMsg(`Erro ao salvar: ${e instanceof Error ? e.message : String(e)}`);
@@ -223,7 +244,7 @@ export default function ParticipantesPage() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1.1fr 430px",
+          gridTemplateColumns: "1.3fr 520px",
           gap: 18,
           alignItems: "start",
         }}
@@ -318,6 +339,8 @@ export default function ParticipantesPage() {
                       <th style={th}>Nome</th>
                       <th style={th}>UF</th>
                       <th style={th}>Município</th>
+                      <th style={th}>Logradouro</th>
+                      <th style={th}>Fone</th>
                       <th style={th}>Ações</th>
                     </tr>
                   </thead>
@@ -335,6 +358,8 @@ export default function ParticipantesPage() {
                         <td style={td}>{r.xnome}</td>
                         <td style={td}>{r.uf || "-"}</td>
                         <td style={td}>{r.municipio || "-"}</td>
+                        <td style={td}>{r.xlgr || "-"}</td>
+                        <td style={td}>{r.fone || "-"}</td>
                         <td style={td}>
                           <div style={{ display: "flex", gap: 6 }}>
                             <button onClick={() => editar(r.id)} style={miniBtn}>
@@ -371,28 +396,37 @@ export default function ParticipantesPage() {
             <input value={form.id || ""} readOnly style={{ ...inputStyle, background: "#f1f1f1" }} />
           </div>
 
-          <div style={{ marginBottom: 12 }}>
-            <label style={labelStyle}>Tipo</label>
-            <select
-              value={form.tipo}
-              onChange={(e) => setForm((prev) => ({ ...prev, tipo: e.target.value }))}
-              style={inputStyle}
-            >
-              <option value="EMITENTE">Emitente</option>
-              <option value="DESTINATARIO">Destinatário</option>
-            </select>
-          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 12,
+              marginBottom: 12,
+            }}
+          >
+            <div>
+              <label style={labelStyle}>Tipo</label>
+              <select
+                value={form.tipo}
+                onChange={(e) => setForm((prev) => ({ ...prev, tipo: e.target.value }))}
+                style={inputStyle}
+              >
+                <option value="EMITENTE">Emitente</option>
+                <option value="DESTINATARIO">Destinatário</option>
+              </select>
+            </div>
 
-          <div style={{ marginBottom: 12 }}>
-            <label style={labelStyle}>CNPJ</label>
-            <input
-              value={form.cnpj}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, cnpj: onlyDigits(e.target.value) }))
-              }
-              maxLength={14}
-              style={inputStyle}
-            />
+            <div>
+              <label style={labelStyle}>CNPJ</label>
+              <input
+                value={form.cnpj}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, cnpj: onlyDigits(e.target.value) }))
+                }
+                maxLength={14}
+                style={inputStyle}
+              />
+            </div>
           </div>
 
           <div style={{ marginBottom: 12 }}>
@@ -404,34 +438,156 @@ export default function ParticipantesPage() {
             />
           </div>
 
-          <div style={{ marginBottom: 12 }}>
-            <label style={labelStyle}>IE</label>
-            <input
-              value={form.ie}
-              onChange={(e) => setForm((prev) => ({ ...prev, ie: e.target.value }))}
-              style={inputStyle}
-            />
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.2fr 0.8fr 0.8fr",
+              gap: 12,
+              marginBottom: 12,
+            }}
+          >
+            <div>
+              <label style={labelStyle}>IE</label>
+              <input
+                value={form.ie}
+                onChange={(e) => setForm((prev) => ({ ...prev, ie: e.target.value }))}
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>UF</label>
+              <input
+                value={form.uf}
+                maxLength={2}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, uf: e.target.value.toUpperCase() }))
+                }
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Cód. Município</label>
+              <input
+                value={form.cmun}
+                onChange={(e) => setForm((prev) => ({ ...prev, cmun: e.target.value }))}
+                style={inputStyle}
+              />
+            </div>
           </div>
 
           <div style={{ marginBottom: 12 }}>
-            <label style={labelStyle}>UF</label>
-            <input
-              value={form.uf}
-              maxLength={2}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, uf: e.target.value.toUpperCase() }))
-              }
-              style={inputStyle}
-            />
-          </div>
-
-          <div style={{ marginBottom: 16 }}>
             <label style={labelStyle}>Município</label>
             <input
               value={form.municipio}
               onChange={(e) => setForm((prev) => ({ ...prev, municipio: e.target.value }))}
               style={inputStyle}
             />
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle}>Logradouro</label>
+            <input
+              value={form.xlgr}
+              onChange={(e) => setForm((prev) => ({ ...prev, xlgr: e.target.value }))}
+              style={inputStyle}
+            />
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "0.7fr 1fr 1fr",
+              gap: 12,
+              marginBottom: 12,
+            }}
+          >
+            <div>
+              <label style={labelStyle}>Número</label>
+              <input
+                value={form.nro}
+                onChange={(e) => setForm((prev) => ({ ...prev, nro: e.target.value }))}
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Complemento</label>
+              <input
+                value={form.xcpl}
+                onChange={(e) => setForm((prev) => ({ ...prev, xcpl: e.target.value }))}
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Bairro</label>
+              <input
+                value={form.xbair}
+                onChange={(e) => setForm((prev) => ({ ...prev, xbair: e.target.value }))}
+                style={inputStyle}
+              />
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 12,
+              marginBottom: 12,
+            }}
+          >
+            <div>
+              <label style={labelStyle}>CEP</label>
+              <input
+                value={form.cep}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, cep: onlyDigits(e.target.value) }))
+                }
+                maxLength={8}
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Fone</label>
+              <input
+                value={form.fone}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, fone: onlyDigits(e.target.value) }))
+                }
+                style={inputStyle}
+              />
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 12,
+              marginBottom: 16,
+            }}
+          >
+            <div>
+              <label style={labelStyle}>Cód. País</label>
+              <input
+                value={form.cpais}
+                onChange={(e) => setForm((prev) => ({ ...prev, cpais: e.target.value }))}
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>País</label>
+              <input
+                value={form.xpais}
+                onChange={(e) => setForm((prev) => ({ ...prev, xpais: e.target.value }))}
+                style={inputStyle}
+              />
+            </div>
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
