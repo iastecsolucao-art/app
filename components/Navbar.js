@@ -248,7 +248,7 @@ export default function Navbar() {
               </button>
 
               {openDropdown === "buckman" && (
-                <div className="absolute top-full right-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[240px] z-50">
+                <div className="absolute top-full right-0 mt-1 bg-blue-700 rounded shadow-lg min-w-[250px] z-50">
                   <Link
                     href="/buckman/vendedores"
                     className={dropItemClass(isActive("/buckman/vendedores"))}
@@ -282,6 +282,13 @@ export default function Navbar() {
                     className={dropItemClass(isActive("/buckman/participantes"))}
                   >
                     👥 Participantes
+                  </Link>
+
+                  <Link
+                    href="/buckman/participantes-erp-map"
+                    className={dropItemClass(isActive("/buckman/participantes-erp-map"))}
+                  >
+                    🔄 De / Para ERP
                   </Link>
 
                   <Link
@@ -609,6 +616,14 @@ export default function Navbar() {
                     className={mobileItemClass(isActive("/buckman/participantes"))}
                   >
                     👥 Participantes
+                  </Link>
+
+                  <Link
+                    href="/buckman/participantes-erp-map"
+                    onClick={() => setMenuOpen(false)}
+                    className={mobileItemClass(isActive("/buckman/participantes-erp-map"))}
+                  >
+                    🔄 De / Para ERP
                   </Link>
 
                   <Link
