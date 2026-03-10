@@ -6,10 +6,10 @@ if (!connectionString) {
   throw new Error("DATABASE_URL_VENDEDORES não está definida");
 }
 
-let pool;
+let pool = global._nfePgPool;
 
-if (!global._nfePgPool) {
-  global._nfePgPool = new Pool({
+if (!pool) {
+  pool = new Pool({
     connectionString,
     ssl:
       process.env.NODE_ENV === "production"
@@ -19,9 +19,9 @@ if (!global._nfePgPool) {
     idleTimeoutMillis: 10000,
     connectionTimeoutMillis: 10000,
   });
-}
 
-pool = global._nfePgPool;
+  global._nfePgPool = pool;
+}
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {
@@ -73,14 +73,14 @@ export default async function handler(req, res) {
         id,
         nfe_id,
         n_item,
-        cprod,
-        xprod,
+        c_prod    AS cprod,
+        x_prod    AS xprod,
         ncm,
         cfop,
-        ucom,
-        qcom,
-        vuncom,
-        vprod
+        u_com     AS ucom,
+        q_com     AS qcom,
+        v_un_com  AS vuncom,
+        v_prod    AS vprod
       FROM nfe_item
       WHERE nfe_id = $1
       ORDER BY n_item ASC, id ASC
