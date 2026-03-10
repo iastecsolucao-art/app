@@ -10,14 +10,48 @@ function extractChaveQuick(xmlText) {
 }
 
 const STATUS = {
-  1: "Enviado ao ERP",
-  2: "Aguardando processamento",
-  3: "Processado no ERP",
+  2: "Importada / Aguardando envio ao ERP",
+  1: "Enviada ao ERP / Aguardando retorno",
+  3: "Processada no ERP",
 };
 
 function statusLabel(v) {
   const n = Number(v);
   return STATUS[n] || "-";
+}
+
+function statusColor(v) {
+  const n = Number(v);
+
+  if (n === 2) {
+    return {
+      background: "#fff7d6",
+      color: "#8a6700",
+      border: "1px solid #f3d46b",
+    };
+  }
+
+  if (n === 1) {
+    return {
+      background: "#dff1ff",
+      color: "#0b5cab",
+      border: "1px solid #8ec5ff",
+    };
+  }
+
+  if (n === 3) {
+    return {
+      background: "#e6f7e8",
+      color: "#166534",
+      border: "1px solid #9ed8a6",
+    };
+  }
+
+  return {
+    background: "#f3f4f6",
+    color: "#374151",
+    border: "1px solid #d1d5db",
+  };
 }
 
 function moneyBR(v) {
@@ -28,6 +62,96 @@ function moneyBR(v) {
     style: "currency",
     currency: "BRL",
   });
+}
+
+function mapStatusInfo(rowOrDetail) {
+  const obj = rowOrDetail || {};
+  const fornecedorOk = obj.map_fornecedor_ok;
+  const itensOk = obj.map_itens_ok;
+  const pendencias = Array.isArray(obj.map_pendencias) ? obj.map_pendencias : [];
+  const mapStatus = obj.map_status || null;
+
+  if (mapStatus) {
+    if (mapStatus === "OK") {
+      return {
+        label: "De/Para OK",
+        style: {
+          background: "#e6f7e8",
+          color: "#166534",
+          border: "1px solid #9ed8a6",
+        },
+      };
+    }
+
+    if (
+      mapStatus === "PENDENTE_FORNECEDOR" ||
+      mapStatus === "PENDENTE_ITEM" ||
+      mapStatus === "PENDENTE"
+    ) {
+      return {
+        label: "De/Para pendente",
+        style: {
+          background: "#fff7d6",
+          color: "#8a6700",
+          border: "1px solid #f3d46b",
+        },
+      };
+    }
+
+    if (mapStatus === "ERRO") {
+      return {
+        label: "Erro no de/para",
+        style: {
+          background: "#ffe5e5",
+          color: "#b00020",
+          border: "1px solid #f2b8b5",
+        },
+      };
+    }
+  }
+
+  if (fornecedorOk === true && itensOk === true) {
+    return {
+      label: "De/Para OK",
+      style: {
+        background: "#e6f7e8",
+        color: "#166534",
+        border: "1px solid #9ed8a6",
+      },
+    };
+  }
+
+  if (fornecedorOk === false || itensOk === false || pendencias.length > 0) {
+    return {
+      label: "De/Para pendente",
+      style: {
+        background: "#fff7d6",
+        color: "#8a6700",
+        border: "1px solid #f3d46b",
+      },
+    };
+  }
+
+  return {
+    label: "Não validado",
+    style: {
+      background: "#f3f4f6",
+      color: "#374151",
+      border: "1px solid #d1d5db",
+    },
+  };
+}
+
+function canChangeStatus(currentStatus, nextStatus) {
+  const current = Number(currentStatus);
+  const next = Number(nextStatus);
+
+  if (current === next) return true;
+  if (current === 2 && next === 1) return true;
+  if (current === 1 && next === 2) return true;
+  if (current === 1 && next === 3) return true;
+
+  return false;
 }
 
 const thStyle = {
@@ -383,10 +507,21 @@ export default function NfeImport() {
   }
 
   async function atualizarStatus(id, novoStatus) {
+    const atual =
+      detail?.document?.id === id
+        ? Number(detail.document?.status_erp ?? 2)
+        : Number(docs.find((x) => x.id === id)?.status_erp ?? 2);
+
+    const next = Number(novoStatus);
+
+    if (!canChangeStatus(atual, next)) {
+      throw new Error("Transição de status não permitida. Fluxo esperado: 2 → 1 → 3.");
+    }
+
     const res = await fetch(`/api/nfe/${id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status_erp: Number(novoStatus) }),
+      body: JSON.stringify({ status_erp: next }),
     });
 
     const data = await res.json().catch(() => ({}));
@@ -564,8 +699,8 @@ export default function NfeImport() {
             style={{ width: "100%", padding: 6 }}
           >
             <option value="">Todos</option>
-            <option value="1">1 - {STATUS[1]}</option>
             <option value="2">2 - {STATUS[2]}</option>
+            <option value="1">1 - {STATUS[1]}</option>
             <option value="3">3 - {STATUS[3]}</option>
           </select>
         </div>
@@ -587,7 +722,7 @@ export default function NfeImport() {
           flexWrap: "wrap",
         }}
       >
-        <div style={{ flex: "1 1 720px" }}>
+        <div style={{ flex: "1 1 760px" }}>
           {docs.length === 0 ? (
             <p>Nenhum documento encontrado.</p>
           ) : (
@@ -613,6 +748,9 @@ export default function NfeImport() {
                     <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>
                       Status ERP
                     </th>
+                    <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>
+                      De/Para
+                    </th>
                     <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>
                       Criado em
                     </th>
@@ -625,6 +763,7 @@ export default function NfeImport() {
                 <tbody>
                   {docs.map((d) => {
                     const st = Number(d.status_erp ?? 2);
+                    const mapInfo = mapStatusInfo(d);
 
                     return (
                       <tr
@@ -683,16 +822,52 @@ export default function NfeImport() {
                                 alert(err.message)
                               )
                             }
-                            style={{ padding: 4 }}
+                            style={{ padding: 4, minWidth: 240 }}
                           >
-                            <option value={1}>1 - {STATUS[1]}</option>
                             <option value={2}>2 - {STATUS[2]}</option>
+                            <option value={1}>1 - {STATUS[1]}</option>
                             <option value={3}>3 - {STATUS[3]}</option>
                           </select>
 
-                          <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              marginTop: 6,
+                              display: "inline-block",
+                              padding: "4px 8px",
+                              borderRadius: 999,
+                              fontWeight: 600,
+                              ...statusColor(st),
+                            }}
+                          >
                             {statusLabel(st)}
                           </div>
+                        </td>
+
+                        <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>
+                          <div
+                            style={{
+                              display: "inline-block",
+                              padding: "4px 8px",
+                              borderRadius: 999,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              ...mapInfo.style,
+                            }}
+                            title={
+                              Array.isArray(d.map_pendencias) && d.map_pendencias.length
+                                ? d.map_pendencias.join(" | ")
+                                : mapInfo.label
+                            }
+                          >
+                            {mapInfo.label}
+                          </div>
+
+                          {Array.isArray(d.map_pendencias) && d.map_pendencias.length > 0 ? (
+                            <div style={{ marginTop: 4, fontSize: 11, color: "#7c2d12" }}>
+                              {d.map_pendencias[0]}
+                            </div>
+                          ) : null}
                         </td>
 
                         <td
@@ -763,10 +938,62 @@ export default function NfeImport() {
                 <div>
                   <strong>VNF:</strong> {moneyBR(detail.document?.vnf)}
                 </div>
-                <div style={{ marginTop: 6 }}>
-                  <strong>Status ERP:</strong> {Number(detail.document?.status_erp ?? 2)} -{" "}
-                  {statusLabel(detail.document?.status_erp ?? 2)}
+
+                <div style={{ marginTop: 8 }}>
+                  <strong>Status ERP:</strong>{" "}
+                  <span
+                    style={{
+                      display: "inline-block",
+                      padding: "4px 8px",
+                      borderRadius: 999,
+                      fontWeight: 600,
+                      ...statusColor(detail.document?.status_erp ?? 2),
+                    }}
+                  >
+                    {Number(detail.document?.status_erp ?? 2)} -{" "}
+                    {statusLabel(detail.document?.status_erp ?? 2)}
+                  </span>
                 </div>
+
+                <div style={{ marginTop: 8 }}>
+                  {(() => {
+                    const mapInfo = mapStatusInfo(detail.document);
+                    return (
+                      <span
+                        style={{
+                          display: "inline-block",
+                          padding: "4px 8px",
+                          borderRadius: 999,
+                          fontWeight: 600,
+                          ...mapInfo.style,
+                        }}
+                      >
+                        {mapInfo.label}
+                      </span>
+                    );
+                  })()}
+                </div>
+
+                {Array.isArray(detail.document?.map_pendencias) &&
+                detail.document.map_pendencias.length > 0 ? (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: 10,
+                      borderRadius: 8,
+                      background: "#fff7d6",
+                      border: "1px solid #f3d46b",
+                      color: "#8a6700",
+                    }}
+                  >
+                    <strong>Pendências de de/para:</strong>
+                    <ul style={{ margin: "8px 0 0 18px" }}>
+                      {detail.document.map_pendencias.map((p, idx) => (
+                        <li key={idx}>{p}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
 
               <h4 style={{ marginBottom: 8 }}>Itens ({detail.items?.length || 0})</h4>
