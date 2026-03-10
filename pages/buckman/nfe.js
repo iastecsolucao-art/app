@@ -4,9 +4,8 @@ function onlyDigits(s) {
   return (s ?? "").toString().replace(/\D/g, "");
 }
 
-// preview simples no front: tenta extrair a chave do atributo Id
 function extractChaveQuick(xmlText) {
-  const m = xmlText.match(/Id="NFe(\d{44})"/);
+  const m = (xmlText || "").match(/Id=['"]NFe(\d{44})['"]/i);
   return m ? m[1] : null;
 }
 
@@ -21,6 +20,16 @@ function statusLabel(v) {
   return STATUS[n] || "-";
 }
 
+function moneyBR(v) {
+  if (v == null || v === "") return "-";
+  const n = Number(v);
+  if (Number.isNaN(n)) return String(v);
+  return n.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
 export default function NfeImport() {
   const [xmlText, setXmlText] = useState("");
   const [fileName, setFileName] = useState("");
@@ -28,27 +37,37 @@ export default function NfeImport() {
   const [loading, setLoading] = useState(false);
 
   const [q, setQ] = useState("");
-  const [statusFilter, setStatusFilter] = useState(""); // "" = todos
+  const [statusFilter, setStatusFilter] = useState("");
   const [docs, setDocs] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
   const chavePreview = useMemo(() => extractChaveQuick(xmlText), [xmlText]);
 
   async function loadDocs() {
-    const params = new URLSearchParams();
-    if (q) params.set("q", q);
-    // se seu backend ainda não filtra por status_erp, isso não quebra; só será ignorado
-    if (statusFilter) params.set("status_erp", statusFilter);
+    try {
+      const params = new URLSearchParams();
+      if (q) params.set("q", q);
+      if (statusFilter) params.set("status_erp", statusFilter);
 
-    const res = await fetch(`/api/nfe?${params.toString()}`);
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) setDocs(Array.isArray(data.rows) ? data.rows : []);
+      const res = await fetch(`/api/nfe?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data?.error || data?.details || `Falha ao carregar (${res.status})`);
+      }
+
+      setDocs(Array.isArray(data.rows) ? data.rows : []);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setImportMsg("Erro ao carregar documentos: " + msg);
+      setDocs([]);
+    }
   }
 
   useEffect(() => {
     loadDocs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function onPickFile(e) {
@@ -81,30 +100,55 @@ export default function NfeImport() {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || data?.details || `Falha (${res.status})`);
+      if (!res.ok) {
+        throw new Error(data?.error || data?.details || `Falha (${res.status})`);
+      }
 
       setImportMsg(
-        `${data.message} | Chave: ${data.chave_nfe} | Itens: ${data.itens} | Pag: ${data.pagamentos}`
+        `${data.message || "Importado com sucesso"} | Chave: ${data.chave_nfe || "-"} | Itens: ${
+          data.itens ?? 0
+        } | Pag: ${data.pagamentos ?? 0}`
       );
+
+      setXmlText("");
+      setFileName("");
       await loadDocs();
     } catch (e) {
-      setImportMsg("Erro ao importar: " + e.message);
+      const msg = e instanceof Error ? e.message : String(e);
+      setImportMsg("Erro ao importar: " + msg);
     } finally {
       setLoading(false);
     }
   }
 
   async function verDetalhe(id) {
-    setSelectedId(id);
-    setDetail(null);
+    try {
+      setSelectedId(id);
+      setDetail(null);
+      setLoadingDetail(true);
+      setImportMsg("");
 
-    const res = await fetch(`/api/nfe/${id}`);
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) setDetail(data);
+      const res = await fetch(`/api/nfe/${id}`);
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data?.details || data?.error || `Falha ao buscar detalhe (${res.status})`);
+      }
+
+      setDetail({
+        document: data.document || {},
+        items: Array.isArray(data.items) ? data.items : [],
+        payments: Array.isArray(data.payments) ? data.payments : [],
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setImportMsg("Erro ao buscar detalhes: " + msg);
+    } finally {
+      setLoadingDetail(false);
+    }
   }
 
   async function atualizarStatus(id, novoStatus) {
-    // depende do endpoint PATCH /api/nfe/:id/status (como no exemplo anterior)
     const res = await fetch(`/api/nfe/${id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -112,7 +156,7 @@ export default function NfeImport() {
     });
 
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error || `Falha (${res.status})`);
+    if (!res.ok) throw new Error(data?.error || data?.details || `Falha (${res.status})`);
 
     setDocs((prev) =>
       prev.map((d) => (d.id === id ? { ...d, status_erp: data.status_erp } : d))
@@ -125,12 +169,29 @@ export default function NfeImport() {
     );
   }
 
+  function baixarXml(id) {
+    window.open(`/api/nfe/${id}/xml`, "_blank");
+  }
+
+  function visualizarDanfe(id) {
+    window.open(`/api/nfe/${id}/danfe`, "_blank");
+  }
+
+  async function copiarChave(chave) {
+    try {
+      await navigator.clipboard.writeText(chave || "");
+      setImportMsg("Chave copiada para a área de transferência.");
+    } catch {
+      setImportMsg("Não foi possível copiar a chave.");
+    }
+  }
+
   return (
     <div style={{ padding: 20 }}>
       <h1>NFe - Importar XML</h1>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <input type="file" accept=".xml,text/xml" onChange={onPickFile} disabled={loading} />
+        <input type="file" accept=".xml,text/xml,application/xml" onChange={onPickFile} disabled={loading} />
         <button onClick={importar} disabled={loading || !xmlText}>
           {loading ? "Importando..." : "Importar"}
         </button>
@@ -154,7 +215,7 @@ export default function NfeImport() {
           style={{
             marginTop: 10,
             fontWeight: "bold",
-            color: importMsg.includes("Erro") ? "red" : "green",
+            color: importMsg.toLowerCase().includes("erro") ? "red" : "green",
           }}
         >
           {importMsg}
@@ -164,7 +225,15 @@ export default function NfeImport() {
       {xmlText && (
         <details style={{ marginTop: 12 }}>
           <summary>Ver XML (raw)</summary>
-          <pre style={{ whiteSpace: "pre-wrap", background: "#f7f7f7", padding: 10, borderRadius: 8 }}>
+          <pre
+            style={{
+              whiteSpace: "pre-wrap",
+              background: "#f7f7f7",
+              padding: 10,
+              borderRadius: 8,
+              overflowX: "auto",
+            }}
+          >
             {xmlText.slice(0, 20000)}
             {xmlText.length > 20000 ? "\n\n... (cortado)" : ""}
           </pre>
@@ -194,7 +263,6 @@ export default function NfeImport() {
       </div>
 
       <div style={{ marginTop: 12, display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-        {/* LISTA / TABELA */}
         <div style={{ flex: "1 1 720px" }}>
           {docs.length === 0 ? (
             <p>Nenhum documento encontrado.</p>
@@ -237,14 +305,16 @@ export default function NfeImport() {
                         </td>
 
                         <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0", textAlign: "right" }}>
-                          {d.vnf ?? "-"}
+                          {moneyBR(d.vnf)}
                         </td>
 
                         <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>
                           <select
                             value={st}
                             onChange={(e) =>
-                              atualizarStatus(d.id, e.target.value).catch((err) => alert(err.message))
+                              atualizarStatus(d.id, e.target.value).catch((err) => {
+                                alert(err.message);
+                              })
                             }
                             style={{ padding: 4 }}
                           >
@@ -253,13 +323,11 @@ export default function NfeImport() {
                             <option value={3}>3 - {STATUS[3]}</option>
                           </select>
 
-                          <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
-                            {statusLabel(st)}
-                          </div>
+                          <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>{statusLabel(st)}</div>
                         </td>
 
                         <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0", textAlign: "right" }}>
-                          {d.created_at ? new Date(d.created_at).toLocaleString() : ""}
+                          {d.created_at ? new Date(d.created_at).toLocaleString("pt-BR") : ""}
                         </td>
 
                         <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0", textAlign: "right" }}>
@@ -274,61 +342,87 @@ export default function NfeImport() {
           )}
         </div>
 
-        {/* DETALHE */}
         <div style={{ flex: "1 1 520px" }}>
-          {detail ? (
+          {loadingDetail ? (
+            <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+              <p>Carregando detalhes...</p>
+            </div>
+          ) : detail ? (
             <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
               <h3 style={{ marginTop: 0 }}>Detalhes</h3>
 
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                <button onClick={() => visualizarDanfe(detail.document?.id)}>Visualizar DANFE</button>
+                <button onClick={() => baixarXml(detail.document?.id)}>Baixar XML</button>
+                <button onClick={() => copiarChave(detail.document?.chave_nfe)}>Copiar chave</button>
+              </div>
+
               <div style={{ fontSize: 14 }}>
                 <div>
-                  <strong>Chave:</strong> {detail.document.chave_nfe}
+                  <strong>Chave:</strong> {detail.document?.chave_nfe || "-"}
                 </div>
                 <div>
-                  <strong>Número:</strong> {detail.document.n_nf} <strong>Série:</strong> {detail.document.serie}
+                  <strong>Número:</strong> {detail.document?.n_nf || "-"} <strong>Série:</strong>{" "}
+                  {detail.document?.serie || "-"}
+                </div>
+                <div>
+                  <strong>Emitente:</strong> {detail.document?.xnome_emit || "-"}
+                </div>
+                <div>
+                  <strong>Destinatário:</strong> {detail.document?.xnome_dest || "-"}
                 </div>
                 <div>
                   <strong>Emissão:</strong>{" "}
-                  {detail.document.dh_emi ? new Date(detail.document.dh_emi).toLocaleString() : "-"}
+                  {detail.document?.dh_emi ? new Date(detail.document.dh_emi).toLocaleString("pt-BR") : "-"}
                 </div>
                 <div>
-                  <strong>VNF:</strong> {detail.document.vnf ?? "-"}
+                  <strong>VNF:</strong> {moneyBR(detail.document?.vnf)}
                 </div>
                 <div style={{ marginTop: 6 }}>
-                  <strong>Status ERP:</strong>{" "}
-                  {Number(detail.document.status_erp ?? 2)} - {statusLabel(detail.document.status_erp ?? 2)}
+                  <strong>Status ERP:</strong> {Number(detail.document?.status_erp ?? 2)} -{" "}
+                  {statusLabel(detail.document?.status_erp ?? 2)}
                 </div>
               </div>
 
-              <h4>Itens ({detail.items.length})</h4>
+              <h4 style={{ marginBottom: 8 }}>Itens ({detail.items?.length || 0})</h4>
               <div style={{ maxHeight: 260, overflow: "auto", border: "1px solid #eee", borderRadius: 6 }}>
-                {detail.items.map((it) => (
-                  <div key={it.id} style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>
-                    <div>
-                      <strong>{it.n_item}.</strong> {it.xprod}
+                {(detail.items || []).length === 0 ? (
+                  <div style={{ padding: 8, color: "#666" }}>Nenhum item encontrado.</div>
+                ) : (
+                  (detail.items || []).map((it) => (
+                    <div key={it.id} style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>
+                      <div>
+                        <strong>{it.n_item}.</strong> {it.xprod || "-"}
+                      </div>
+                      <div style={{ fontSize: 12, color: "#555" }}>
+                        cProd: {it.cprod || "-"} | NCM: {it.ncm || "-"} | CFOP: {it.cfop || "-"}
+                      </div>
+                      <div style={{ fontSize: 12, color: "#555" }}>
+                        Qtd: {it.qcom ?? "-"} {it.ucom || ""} | Unit: {moneyBR(it.vuncom)} | Total:{" "}
+                        {moneyBR(it.vprod)}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 12, color: "#555" }}>
-                      cProd: {it.cprod || "-"} | NCM: {it.ncm || "-"} | CFOP: {it.cfop || "-"}
-                    </div>
-                    <div style={{ fontSize: 12, color: "#555" }}>
-                      Qtd: {it.qcom ?? "-"} {it.ucom || ""} | Unit: {it.vuncom ?? "-"} | Total: {it.vprod ?? "-"}
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
 
-              <h4>Pagamentos ({detail.payments.length})</h4>
+              <h4 style={{ marginBottom: 8, marginTop: 16 }}>Pagamentos ({detail.payments?.length || 0})</h4>
               <div style={{ maxHeight: 180, overflow: "auto", border: "1px solid #eee", borderRadius: 6 }}>
-                {detail.payments.map((p) => (
-                  <div key={p.id} style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>
-                    <div>
-                      <strong>tPag:</strong> {p.tpag || "-"} | <strong>vPag:</strong> {p.vpag ?? "-"}
+                {(detail.payments || []).length === 0 ? (
+                  <div style={{ padding: 8, color: "#666" }}>Nenhum pagamento encontrado.</div>
+                ) : (
+                  (detail.payments || []).map((p) => (
+                    <div key={p.id} style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>
+                      <div>
+                        <strong>tPag:</strong> {p.tpag || "-"} | <strong>vPag:</strong> {moneyBR(p.vpag)}
+                      </div>
+                      <div style={{ fontSize: 12, color: "#555" }}>
+                        Card CNPJ: {onlyDigits(p.card_cnpj) || "-"} | Bandeira: {p.card_tband || "-"} | Integração:{" "}
+                        {p.card_tpintegra || "-"}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 12, color: "#555" }}>
-                      Card CNPJ: {onlyDigits(p.card_cnpj) || "-"} | Bandeira: {p.card_tband || "-"}
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           ) : (
