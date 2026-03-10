@@ -23,6 +23,10 @@ if (!pool) {
   global._nfePgPool = pool;
 }
 
+function normalizeCnpj(v) {
+  return String(v || "").replace(/\D/g, "");
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]);
@@ -109,6 +113,8 @@ export default async function handler(req, res) {
       });
     }
 
+    const document = docRes.rows[0];
+
     const itemRes = await pool.query(
       `
       SELECT
@@ -172,6 +178,8 @@ export default async function handler(req, res) {
       [idInt]
     );
 
+    const items = Array.isArray(itemRes.rows) ? itemRes.rows : [];
+
     const payRes = await pool.query(
       `
       SELECT
@@ -191,10 +199,135 @@ export default async function handler(req, res) {
       [idInt]
     );
 
+    const payments = Array.isArray(payRes.rows) ? payRes.rows : [];
+
+    // =========================
+    // VALIDAÇÃO DE/PARA
+    // =========================
+    const mapPendencias = [];
+    const cnpjEmit = normalizeCnpj(document.cnpj_emit);
+    const cnpjDest = normalizeCnpj(document.cnpj_dest);
+
+    // Busca participante base por CNPJ emitente / destinatário
+    const partRes = await pool.query(
+      `
+      SELECT
+        id,
+        tipo,
+        cnpj,
+        xnome,
+        ie,
+        uf,
+        municipio
+      FROM public.nfe_participante
+      WHERE cnpj IN ($1, $2)
+      `,
+      [cnpjEmit || "", cnpjDest || ""]
+    );
+
+    const participantes = Array.isArray(partRes.rows) ? partRes.rows : [];
+    const participanteEmit = participantes.find((p) => normalizeCnpj(p.cnpj) === cnpjEmit) || null;
+    const participanteDest = participantes.find((p) => normalizeCnpj(p.cnpj) === cnpjDest) || null;
+
+    // Regra:
+    // - se participante existe, consideramos fornecedor/destinatário base ok
+    // - de/para ERP é opcional para participante, pois pode usar dados originais
+    const mapFornecedorOk = !!participanteEmit;
+    const mapDestinatarioOk = !!participanteDest || !cnpjDest;
+
+    if (!mapFornecedorOk) {
+      mapPendencias.push(
+        `Fornecedor ${document.xnome_emit || "-"} (${cnpjEmit || "-"}) não cadastrado em participantes`
+      );
+    }
+
+    if (!mapDestinatarioOk) {
+      mapPendencias.push(
+        `Destinatário ${document.xnome_dest || "-"} (${cnpjDest || "-"}) não cadastrado em participantes`
+      );
+    }
+
+    // Validação de itens no mapa ERP
+    let mapItensOk = true;
+
+    if (items.length > 0 && cnpjEmit) {
+      const itemCodes = items
+        .map((it) => String(it.cprod || "").trim())
+        .filter(Boolean);
+
+      if (itemCodes.length > 0) {
+        const itemMapRes = await pool.query(
+          `
+          SELECT
+            id,
+            cnpj_fornecedor,
+            cprod_origem,
+            codigo_produto_erp,
+            status_map,
+            ativo
+          FROM public.nfe_item_erp_map
+          WHERE cnpj_fornecedor = $1
+            AND cprod_origem = ANY($2::text[])
+          `,
+          [cnpjEmit, itemCodes]
+        );
+
+        const itemMaps = Array.isArray(itemMapRes.rows) ? itemMapRes.rows : [];
+
+        for (const item of items) {
+          const cprod = String(item.cprod || "").trim();
+          if (!cprod) {
+            mapItensOk = false;
+            mapPendencias.push(
+              `Item ${item.n_item || "-"} sem código de origem (cProd)`
+            );
+            continue;
+          }
+
+          const found = itemMaps.find(
+            (m) =>
+              normalizeCnpj(m.cnpj_fornecedor) === cnpjEmit &&
+              String(m.cprod_origem || "").trim() === cprod &&
+              m.ativo === true &&
+              String(m.status_map || "").toUpperCase() !== "IGNORADO"
+          );
+
+          if (!found || !found.codigo_produto_erp) {
+            mapItensOk = false;
+            mapPendencias.push(
+              `Item ${cprod} - ${item.xprod || "-"} sem de/para ERP`
+            );
+          }
+        }
+      } else {
+        mapItensOk = false;
+        mapPendencias.push("Nenhum item possui cProd para validação de de/para");
+      }
+    }
+
+    let mapStatus = "OK";
+
+    if (!mapFornecedorOk) {
+      mapStatus = "PENDENTE_FORNECEDOR";
+    } else if (!mapItensOk) {
+      mapStatus = "PENDENTE_ITEM";
+    } else if (!mapDestinatarioOk) {
+      mapStatus = "PENDENTE_DESTINATARIO";
+    }
+
     return res.status(200).json({
-      document: docRes.rows[0] || {},
-      items: Array.isArray(itemRes.rows) ? itemRes.rows : [],
-      payments: Array.isArray(payRes.rows) ? payRes.rows : [],
+      document: {
+        ...document,
+        map_fornecedor_ok: mapFornecedorOk,
+        map_destinatario_ok: mapDestinatarioOk,
+        map_itens_ok: mapItensOk,
+        map_status: mapStatus,
+        map_pendencias: mapPendencias,
+        participante_emit_id: participanteEmit?.id || null,
+        participante_dest_id: participanteDest?.id || null,
+      },
+      items,
+      payments,
     });
   } catch (e) {
     console.error("Erro em GET /api/nfe/[id]:", {
