@@ -1,8 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 function onlyDigits(s) {
   return (s ?? "").toString().replace(/\D/g, "");
 }
+
+function formatCnpj(cnpj) {
+  const v = onlyDigits(cnpj);
+  if (v.length !== 14) return cnpj || "";
+  return v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+}
+
+const initialForm = {
+  id: null,
+  tipo: "EMITENTE",
+  cnpj: "",
+  xnome: "",
+  ie: "",
+  uf: "",
+  municipio: "",
+};
 
 export default function ParticipantesPage() {
   const [rows, setRows] = useState([]);
@@ -15,15 +31,12 @@ export default function ParticipantesPage() {
     uf: "",
   });
 
-  const [form, setForm] = useState({
-    id: null,
-    tipo: "EMITENTE",
-    cnpj: "",
-    xnome: "",
-    ie: "",
-    uf: "",
-    municipio: "",
-  });
+  const [form, setForm] = useState(initialForm);
+
+  const selectedIndex = useMemo(() => {
+    if (!form.id) return -1;
+    return rows.findIndex((r) => r.id === form.id);
+  }, [rows, form.id]);
 
   async function loadRows(customFilters) {
     try {
@@ -40,9 +53,19 @@ export default function ParticipantesPage() {
       const res = await fetch(`/api/participantes?${params.toString()}`);
       const data = await res.json().catch(() => ({}));
 
-      if (!res.ok) throw new Error(data?.error || data?.details || `Falha (${res.status})`);
+      if (!res.ok) {
+        throw new Error(data?.error || data?.details || `Falha (${res.status})`);
+      }
 
-      setRows(Array.isArray(data.rows) ? data.rows : []);
+      const nextRows = Array.isArray(data.rows) ? data.rows : [];
+      setRows(nextRows);
+
+      if (form.id) {
+        const updated = nextRows.find((r) => r.id === form.id);
+        if (!updated) {
+          setForm(initialForm);
+        }
+      }
     } catch (e) {
       setMsg(`Erro ao carregar: ${e instanceof Error ? e.message : String(e)}`);
       setRows([]);
@@ -56,15 +79,37 @@ export default function ParticipantesPage() {
   }, []);
 
   function limparFormulario() {
+    setForm(initialForm);
+    setMsg("");
+  }
+
+  function preencherFormulario(data) {
     setForm({
-      id: null,
-      tipo: "EMITENTE",
-      cnpj: "",
-      xnome: "",
-      ie: "",
-      uf: "",
-      municipio: "",
+      id: data.id ?? null,
+      tipo: data.tipo || "EMITENTE",
+      cnpj: data.cnpj || "",
+      xnome: data.xnome || "",
+      ie: data.ie || "",
+      uf: data.uf || "",
+      municipio: data.municipio || "",
     });
+  }
+
+  async function editar(id) {
+    try {
+      setMsg("");
+
+      const res = await fetch(`/api/participantes/${id}`);
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data?.error || data?.details || `Falha (${res.status})`);
+      }
+
+      preencherFormulario(data);
+    } catch (e) {
+      setMsg(`Erro ao carregar cadastro: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   async function salvar() {
@@ -91,40 +136,28 @@ export default function ParticipantesPage() {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || data?.details || `Falha (${res.status})`);
+
+      if (!res.ok) {
+        throw new Error(data?.error || data?.details || `Falha (${res.status})`);
+      }
 
       setMsg(isEdit ? "Cadastro atualizado com sucesso." : "Cadastro criado com sucesso.");
-      limparFormulario();
+
+      if (isEdit) {
+        preencherFormulario(data);
+      } else {
+        preencherFormulario(data);
+      }
+
       await loadRows();
     } catch (e) {
       setMsg(`Erro ao salvar: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
-  async function editar(id) {
-    try {
-      setMsg("");
-
-      const res = await fetch(`/api/participantes/${id}`);
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) throw new Error(data?.error || data?.details || `Falha (${res.status})`);
-
-      setForm({
-        id: data.id,
-        tipo: data.tipo || "EMITENTE",
-        cnpj: data.cnpj || "",
-        xnome: data.xnome || "",
-        ie: data.ie || "",
-        uf: data.uf || "",
-        municipio: data.municipio || "",
-      });
-    } catch (e) {
-      setMsg(`Erro ao carregar cadastro: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-
   async function excluir(id) {
+    if (!id) return;
+
     const ok = window.confirm("Deseja realmente excluir este cadastro?");
     if (!ok) return;
 
@@ -136,10 +169,13 @@ export default function ParticipantesPage() {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || data?.details || `Falha (${res.status})`);
+
+      if (!res.ok) {
+        throw new Error(data?.error || data?.details || `Falha (${res.status})`);
+      }
 
       setMsg("Cadastro excluído com sucesso.");
-      if (form.id === id) limparFormulario();
+      limparFormulario();
       await loadRows();
     } catch (e) {
       setMsg(`Erro ao excluir: ${e instanceof Error ? e.message : String(e)}`);
@@ -152,175 +188,301 @@ export default function ParticipantesPage() {
     loadRows(cleared);
   }
 
+  function irAnterior() {
+    if (selectedIndex <= 0) return;
+    editar(rows[selectedIndex - 1].id);
+  }
+
+  function irProximo() {
+    if (selectedIndex < 0 || selectedIndex >= rows.length - 1) return;
+    editar(rows[selectedIndex + 1].id);
+  }
+
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Participantes da NF-e</h1>
+    <div style={{ padding: 16 }}>
+      <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 14 }}>
+        📦 Cadastro de Participantes
+      </div>
 
       {msg && (
-        <p style={{ color: msg.toLowerCase().includes("erro") ? "red" : "green", fontWeight: "bold" }}>
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "10px 12px",
+            borderRadius: 6,
+            background: msg.toLowerCase().includes("erro") ? "#ffe5e5" : "#e8f7e8",
+            color: msg.toLowerCase().includes("erro") ? "#b00020" : "#146c2e",
+            border: `1px solid ${msg.toLowerCase().includes("erro") ? "#f2b8b5" : "#b7e1c0"}`,
+            fontWeight: 600,
+          }}
+        >
           {msg}
-        </p>
+        </div>
       )}
 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "2fr 1fr 1fr auto",
-          gap: 8,
-          marginBottom: 16,
-          alignItems: "end",
+          gridTemplateColumns: "1.1fr 430px",
+          gap: 18,
+          alignItems: "start",
         }}
       >
         <div>
-          <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Busca</label>
-          <input
-            value={filters.q}
-            onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value }))}
-            placeholder="CNPJ, nome, IE, município..."
-            style={{ width: "100%", padding: 6 }}
-          />
-        </div>
-
-        <div>
-          <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Tipo</label>
-          <select
-            value={filters.tipo}
-            onChange={(e) => setFilters((prev) => ({ ...prev, tipo: e.target.value }))}
-            style={{ width: "100%", padding: 6 }}
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #d9d9d9",
+              borderRadius: 4,
+              padding: 14,
+              marginBottom: 14,
+            }}
           >
-            <option value="">Todos</option>
-            <option value="EMITENTE">Emitente</option>
-            <option value="DESTINATARIO">Destinatário</option>
-          </select>
-        </div>
+            <div style={{ display: "flex", gap: 6, alignItems: "end", flexWrap: "wrap" }}>
+              <div style={{ flex: "1 1 260px" }}>
+                <label style={labelStyle}>Pesquisar</label>
+                <input
+                  value={filters.q}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value }))}
+                  placeholder="Pesquisar por CNPJ, nome, IE, município..."
+                  style={inputStyle}
+                />
+              </div>
 
-        <div>
-          <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>UF</label>
-          <input
-            value={filters.uf}
-            onChange={(e) => setFilters((prev) => ({ ...prev, uf: e.target.value.toUpperCase() }))}
-            placeholder="SP"
-            maxLength={2}
-            style={{ width: "100%", padding: 6 }}
-          />
-        </div>
+              <div style={{ width: 150 }}>
+                <label style={labelStyle}>Tipo</label>
+                <select
+                  value={filters.tipo}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, tipo: e.target.value }))}
+                  style={inputStyle}
+                >
+                  <option value="">Todos</option>
+                  <option value="EMITENTE">Emitente</option>
+                  <option value="DESTINATARIO">Destinatário</option>
+                </select>
+              </div>
 
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => loadRows()}>Buscar</button>
-          <button onClick={limparFiltros}>Limpar</button>
-        </div>
-      </div>
+              <div style={{ width: 90 }}>
+                <label style={labelStyle}>UF</label>
+                <input
+                  value={filters.uf}
+                  onChange={(e) =>
+                    setFilters((prev) => ({ ...prev, uf: e.target.value.toUpperCase() }))
+                  }
+                  maxLength={2}
+                  placeholder="SP"
+                  style={inputStyle}
+                />
+              </div>
 
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
-        <div style={{ flex: "1 1 700px" }}>
-          {loading ? (
-            <p>Carregando...</p>
-          ) : rows.length === 0 ? (
-            <p>Nenhum cadastro encontrado.</p>
-          ) : (
-            <div style={{ overflowX: "auto", border: "1px solid #ddd", borderRadius: 8 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ background: "#f7f7f7" }}>
-                    <th style={th}>Tipo</th>
-                    <th style={th}>CNPJ</th>
-                    <th style={th}>Nome</th>
-                    <th style={th}>IE</th>
-                    <th style={th}>UF</th>
-                    <th style={th}>Município</th>
-                    <th style={th}>Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.id}>
-                      <td style={td}>{r.tipo}</td>
-                      <td style={td}>{r.cnpj}</td>
-                      <td style={td}>{r.xnome}</td>
-                      <td style={td}>{r.ie || "-"}</td>
-                      <td style={td}>{r.uf || "-"}</td>
-                      <td style={td}>{r.municipio || "-"}</td>
-                      <td style={td}>
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <button onClick={() => editar(r.id)}>Editar</button>
-                          <button onClick={() => excluir(r.id)}>Excluir</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+              <button onClick={() => loadRows()} style={btnGray}>
+                Pesquisar
+              </button>
 
-        <div style={{ flex: "1 1 360px", border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>{form.id ? "Editar participante" : "Novo participante"}</h3>
-
-          <div style={{ display: "grid", gap: 10 }}>
-            <div>
-              <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Tipo</label>
-              <select
-                value={form.tipo}
-                onChange={(e) => setForm((prev) => ({ ...prev, tipo: e.target.value }))}
-                style={{ width: "100%", padding: 6 }}
+              <button
+                onClick={() => {
+                  limparFormulario();
+                  setMsg("");
+                }}
+                style={btnGreen}
               >
-                <option value="EMITENTE">Emitente</option>
-                <option value="DESTINATARIO">Destinatário</option>
-              </select>
-            </div>
+                Novo
+              </button>
 
-            <div>
-              <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>CNPJ</label>
-              <input
-                value={form.cnpj}
-                onChange={(e) => setForm((prev) => ({ ...prev, cnpj: onlyDigits(e.target.value) }))}
-                maxLength={14}
-                style={{ width: "100%", padding: 6 }}
-              />
+              <button onClick={limparFiltros} style={btnLight}>
+                Limpar
+              </button>
             </div>
+          </div>
 
-            <div>
-              <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Nome</label>
-              <input
-                value={form.xnome}
-                onChange={(e) => setForm((prev) => ({ ...prev, xnome: e.target.value }))}
-                style={{ width: "100%", padding: 6 }}
-              />
-            </div>
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #d9d9d9",
+              borderRadius: 4,
+              overflow: "hidden",
+            }}
+          >
+            {loading ? (
+              <div style={{ padding: 16 }}>Carregando...</div>
+            ) : rows.length === 0 ? (
+              <div style={{ padding: 16 }}>Nenhum cadastro encontrado.</div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: "#f3f3f3" }}>
+                      <th style={th}>ID</th>
+                      <th style={th}>Tipo</th>
+                      <th style={th}>CNPJ</th>
+                      <th style={th}>Nome</th>
+                      <th style={th}>UF</th>
+                      <th style={th}>Município</th>
+                      <th style={th}>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr
+                        key={r.id}
+                        style={{
+                          background: form.id === r.id ? "#eaf3ff" : "#fff",
+                        }}
+                      >
+                        <td style={td}>{r.id}</td>
+                        <td style={td}>{r.tipo}</td>
+                        <td style={td}>{formatCnpj(r.cnpj)}</td>
+                        <td style={td}>{r.xnome}</td>
+                        <td style={td}>{r.uf || "-"}</td>
+                        <td style={td}>{r.municipio || "-"}</td>
+                        <td style={td}>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button onClick={() => editar(r.id)} style={miniBtn}>
+                              Editar
+                            </button>
+                            <button onClick={() => excluir(r.id)} style={miniBtnDanger}>
+                              Excluir
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
 
-            <div>
-              <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>IE</label>
-              <input
-                value={form.ie}
-                onChange={(e) => setForm((prev) => ({ ...prev, ie: e.target.value }))}
-                style={{ width: "100%", padding: 6 }}
-              />
-            </div>
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #d9d9d9",
+            borderRadius: 4,
+            padding: 14,
+          }}
+        >
+          <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 12 }}>
+            {form.id ? "Alterar participante" : "Novo participante"}
+          </div>
 
-            <div>
-              <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>UF</label>
-              <input
-                value={form.uf}
-                maxLength={2}
-                onChange={(e) => setForm((prev) => ({ ...prev, uf: e.target.value.toUpperCase() }))}
-                style={{ width: "100%", padding: 6 }}
-              />
-            </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle}>ID</label>
+            <input value={form.id || ""} readOnly style={{ ...inputStyle, background: "#f1f1f1" }} />
+          </div>
 
-            <div>
-              <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Município</label>
-              <input
-                value={form.municipio}
-                onChange={(e) => setForm((prev) => ({ ...prev, municipio: e.target.value }))}
-                style={{ width: "100%", padding: 6 }}
-              />
-            </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle}>Tipo</label>
+            <select
+              value={form.tipo}
+              onChange={(e) => setForm((prev) => ({ ...prev, tipo: e.target.value }))}
+              style={inputStyle}
+            >
+              <option value="EMITENTE">Emitente</option>
+              <option value="DESTINATARIO">Destinatário</option>
+            </select>
+          </div>
 
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={salvar}>{form.id ? "Salvar alterações" : "Cadastrar"}</button>
-              <button type="button" onClick={limparFormulario}>Novo</button>
-            </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle}>CNPJ</label>
+            <input
+              value={form.cnpj}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, cnpj: onlyDigits(e.target.value) }))
+              }
+              maxLength={14}
+              style={inputStyle}
+            />
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle}>Nome</label>
+            <input
+              value={form.xnome}
+              onChange={(e) => setForm((prev) => ({ ...prev, xnome: e.target.value }))}
+              style={inputStyle}
+            />
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle}>IE</label>
+            <input
+              value={form.ie}
+              onChange={(e) => setForm((prev) => ({ ...prev, ie: e.target.value }))}
+              style={inputStyle}
+            />
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle}>UF</label>
+            <input
+              value={form.uf}
+              maxLength={2}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, uf: e.target.value.toUpperCase() }))
+              }
+              style={inputStyle}
+            />
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Município</label>
+            <input
+              value={form.municipio}
+              onChange={(e) => setForm((prev) => ({ ...prev, municipio: e.target.value }))}
+              style={inputStyle}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+            <button onClick={salvar} style={btnBlue}>
+              {form.id ? "Atualizar" : "Cadastrar"}
+            </button>
+
+            <button
+              onClick={() => excluir(form.id)}
+              disabled={!form.id}
+              style={{
+                ...btnRed,
+                opacity: form.id ? 1 : 0.5,
+                cursor: form.id ? "pointer" : "not-allowed",
+              }}
+            >
+              Excluir
+            </button>
+
+            <button onClick={limparFormulario} style={btnLight}>
+              Novo
+            </button>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <button
+              onClick={irAnterior}
+              disabled={selectedIndex <= 0}
+              style={{
+                ...btnNav,
+                opacity: selectedIndex <= 0 ? 0.5 : 1,
+                cursor: selectedIndex <= 0 ? "not-allowed" : "pointer",
+              }}
+            >
+              ⏪ Anterior
+            </button>
+
+            <button
+              onClick={irProximo}
+              disabled={selectedIndex < 0 || selectedIndex >= rows.length - 1}
+              style={{
+                ...btnNav,
+                opacity: selectedIndex < 0 || selectedIndex >= rows.length - 1 ? 0.5 : 1,
+                cursor:
+                  selectedIndex < 0 || selectedIndex >= rows.length - 1
+                    ? "not-allowed"
+                    : "pointer",
+              }}
+            >
+              Próximo ⏩
+            </button>
           </div>
         </div>
       </div>
@@ -328,14 +490,111 @@ export default function ParticipantesPage() {
   );
 }
 
+const labelStyle = {
+  display: "block",
+  fontSize: 12,
+  fontWeight: 600,
+  marginBottom: 4,
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: "8px 10px",
+  border: "1px solid #cfcfcf",
+  borderRadius: 2,
+  fontSize: 13,
+  outline: "none",
+  background: "#fff",
+};
+
 const th = {
   textAlign: "left",
-  padding: 8,
-  borderBottom: "1px solid #eee",
+  padding: 10,
+  borderBottom: "1px solid #ddd",
+  whiteSpace: "nowrap",
 };
 
 const td = {
-  padding: 8,
-  borderBottom: "1px solid #f0f0f0",
+  padding: 10,
+  borderBottom: "1px solid #eee",
   verticalAlign: "top",
+};
+
+const btnBlue = {
+  background: "#2f6fed",
+  color: "#fff",
+  border: "none",
+  borderRadius: 3,
+  padding: "8px 14px",
+  cursor: "pointer",
+  fontWeight: 600,
+};
+
+const btnRed = {
+  background: "#e53935",
+  color: "#fff",
+  border: "none",
+  borderRadius: 3,
+  padding: "8px 14px",
+  cursor: "pointer",
+  fontWeight: 600,
+};
+
+const btnGreen = {
+  background: "#16a34a",
+  color: "#fff",
+  border: "none",
+  borderRadius: 3,
+  padding: "8px 12px",
+  cursor: "pointer",
+  fontWeight: 600,
+};
+
+const btnGray = {
+  background: "#6b7280",
+  color: "#fff",
+  border: "none",
+  borderRadius: 3,
+  padding: "8px 12px",
+  cursor: "pointer",
+  fontWeight: 600,
+};
+
+const btnLight = {
+  background: "#e5e7eb",
+  color: "#111827",
+  border: "1px solid #d1d5db",
+  borderRadius: 3,
+  padding: "8px 12px",
+  cursor: "pointer",
+  fontWeight: 600,
+};
+
+const btnNav = {
+  background: "#e5e7eb",
+  color: "#111827",
+  border: "1px solid #d1d5db",
+  borderRadius: 3,
+  padding: "8px 12px",
+  fontWeight: 600,
+};
+
+const miniBtn = {
+  background: "#2563eb",
+  color: "#fff",
+  border: "none",
+  borderRadius: 3,
+  padding: "6px 10px",
+  cursor: "pointer",
+  fontSize: 12,
+};
+
+const miniBtnDanger = {
+  background: "#dc2626",
+  color: "#fff",
+  border: "none",
+  borderRadius: 3,
+  padding: "6px 10px",
+  cursor: "pointer",
+  fontSize: 12,
 };
