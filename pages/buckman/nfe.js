@@ -30,6 +30,224 @@ function moneyBR(v) {
   });
 }
 
+const thStyle = {
+  border: "1px solid #000",
+  padding: 6,
+  textAlign: "left",
+  background: "#f3f3f3",
+  fontWeight: 600,
+};
+
+const tdStyle = {
+  border: "1px solid #000",
+  padding: 6,
+  verticalAlign: "top",
+};
+
+function DanfePreview({ detail, onClose, onDownloadXml, onCopyKey }) {
+  const doc = detail?.document || {};
+  const items = Array.isArray(detail?.items) ? detail.items : [];
+  const payments = Array.isArray(detail?.payments) ? detail.payments : [];
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.45)",
+        zIndex: 9999,
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "flex-start",
+        padding: 24,
+        overflowY: "auto",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 1120,
+          background: "#fff",
+          borderRadius: 12,
+          boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            padding: 12,
+            borderBottom: "1px solid #e5e5e5",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            background: "#fafafa",
+            position: "sticky",
+            top: 0,
+            zIndex: 2,
+          }}
+        >
+          <strong>Pré-visualização DANFE</strong>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button onClick={() => onCopyKey(doc.chave_nfe)}>Copiar chave</button>
+            <button onClick={() => onDownloadXml(doc.id)}>Baixar XML</button>
+            <button onClick={onClose}>Fechar</button>
+          </div>
+        </div>
+
+        <div style={{ padding: 20, color: "#111", fontSize: 13, lineHeight: 1.4 }}>
+          <div style={{ border: "2px solid #000", padding: 12, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
+              <div style={{ border: "1px solid #000", padding: 10 }}>
+                <div style={{ fontWeight: "bold", fontSize: 16 }}>{doc.xnome_emit || "-"}</div>
+                <div>CNPJ: {onlyDigits(doc.cnpj_emit) || "-"}</div>
+                <div>UF: {doc.uf_emit || "-"}</div>
+                <div>Município: {doc.municipio_emit || "-"}</div>
+              </div>
+
+              <div style={{ border: "1px solid #000", padding: 10 }}>
+                <div style={{ fontWeight: "bold", marginBottom: 4 }}>DANFE</div>
+                <div>Documento Auxiliar da Nota Fiscal Eletrônica</div>
+                <div style={{ marginTop: 8 }}>
+                  <strong>NF-e:</strong> {doc.n_nf || "-"}
+                </div>
+                <div>
+                  <strong>Série:</strong> {doc.serie || "-"}
+                </div>
+                <div>
+                  <strong>Emissão:</strong>{" "}
+                  {doc.dh_emi ? new Date(doc.dh_emi).toLocaleString("pt-BR") : "-"}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 10, border: "1px solid #000", padding: 10 }}>
+              <div>
+                <strong>Chave de Acesso:</strong> {doc.chave_nfe || "-"}
+              </div>
+              <div>
+                <strong>Protocolo:</strong> {doc.nprot || "-"}
+              </div>
+              <div>
+                <strong>Autorização:</strong> {doc.xmotivo || "-"}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ border: "1px solid #000", padding: 10, marginBottom: 12 }}>
+            <div style={{ fontWeight: "bold", marginBottom: 6 }}>Destinatário / Remetente</div>
+            <div>
+              <strong>Nome:</strong> {doc.xnome_dest || "-"}
+            </div>
+            <div>
+              <strong>CNPJ:</strong> {onlyDigits(doc.cnpj_dest) || "-"}
+            </div>
+            <div>
+              <strong>UF:</strong> {doc.uf_dest || "-"}
+            </div>
+            <div>
+              <strong>Município:</strong> {doc.municipio_dest || "-"}
+            </div>
+          </div>
+
+          <div style={{ border: "1px solid #000", padding: 10, marginBottom: 12 }}>
+            <div style={{ fontWeight: "bold", marginBottom: 6 }}>Itens da Nota</div>
+
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Item</th>
+                    <th style={thStyle}>Descrição</th>
+                    <th style={thStyle}>NCM</th>
+                    <th style={thStyle}>CFOP</th>
+                    <th style={thStyle}>Qtd</th>
+                    <th style={thStyle}>Un</th>
+                    <th style={thStyle}>Vlr Unit.</th>
+                    <th style={thStyle}>Vlr Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.length === 0 ? (
+                    <tr>
+                      <td style={{ ...tdStyle, textAlign: "center" }} colSpan={8}>
+                        Nenhum item encontrado.
+                      </td>
+                    </tr>
+                  ) : (
+                    items.map((it) => (
+                      <tr key={it.id}>
+                        <td style={tdStyle}>{it.n_item || "-"}</td>
+                        <td style={tdStyle}>{it.xprod || "-"}</td>
+                        <td style={tdStyle}>{it.ncm || "-"}</td>
+                        <td style={tdStyle}>{it.cfop || "-"}</td>
+                        <td style={tdStyle}>{it.qcom ?? "-"}</td>
+                        <td style={tdStyle}>{it.ucom || "-"}</td>
+                        <td style={tdStyle}>{moneyBR(it.vuncom)}</td>
+                        <td style={tdStyle}>{moneyBR(it.vprod)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
+            <div style={{ border: "1px solid #000", padding: 10 }}>
+              <div style={{ fontWeight: "bold", marginBottom: 6 }}>Informações complementares</div>
+              <div>{doc.infcpl || "-"}</div>
+
+              {doc.infadfisco ? (
+                <div style={{ marginTop: 10 }}>
+                  <strong>Informações ao Fisco:</strong>
+                  <div>{doc.infadfisco}</div>
+                </div>
+              ) : null}
+            </div>
+
+            <div style={{ border: "1px solid #000", padding: 10 }}>
+              <div style={{ fontWeight: "bold", marginBottom: 6 }}>Totais</div>
+              <div>
+                <strong>Valor produtos:</strong> {moneyBR(doc.vprod)}
+              </div>
+              <div>
+                <strong>Base ICMS:</strong> {moneyBR(doc.vbc)}
+              </div>
+              <div>
+                <strong>ICMS:</strong> {moneyBR(doc.vicms)}
+              </div>
+              <div>
+                <strong>PIS:</strong> {moneyBR(doc.vpis)}
+              </div>
+              <div>
+                <strong>COFINS:</strong> {moneyBR(doc.vcofins)}
+              </div>
+              <div style={{ marginTop: 8, fontSize: 15 }}>
+                <strong>Valor NF:</strong> {moneyBR(doc.vnf)}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ border: "1px solid #000", padding: 10, marginTop: 12 }}>
+            <div style={{ fontWeight: "bold", marginBottom: 6 }}>Pagamentos</div>
+
+            {payments.length === 0 ? (
+              <div>Nenhum pagamento encontrado.</div>
+            ) : (
+              payments.map((p) => (
+                <div key={p.id} style={{ marginBottom: 4 }}>
+                  <strong>tPag:</strong> {p.tpag || "-"} | <strong>vPag:</strong> {moneyBR(p.vpag)}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function NfeImport() {
   const [xmlText, setXmlText] = useState("");
   const [fileName, setFileName] = useState("");
@@ -42,6 +260,7 @@ export default function NfeImport() {
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [showDanfe, setShowDanfe] = useState(false);
 
   const chavePreview = useMemo(() => extractChaveQuick(xmlText), [xmlText]);
 
@@ -156,7 +375,9 @@ export default function NfeImport() {
     });
 
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error || data?.details || `Falha (${res.status})`);
+    if (!res.ok) {
+      throw new Error(data?.error || data?.details || `Falha (${res.status})`);
+    }
 
     setDocs((prev) =>
       prev.map((d) => (d.id === id ? { ...d, status_erp: data.status_erp } : d))
@@ -173,10 +394,6 @@ export default function NfeImport() {
     window.open(`/api/nfe/${id}/xml`, "_blank");
   }
 
-  function visualizarDanfe(id) {
-    window.open(`/api/nfe/${id}/danfe`, "_blank");
-  }
-
   async function copiarChave(chave) {
     try {
       await navigator.clipboard.writeText(chave || "");
@@ -191,7 +408,12 @@ export default function NfeImport() {
       <h1>NFe - Importar XML</h1>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <input type="file" accept=".xml,text/xml,application/xml" onChange={onPickFile} disabled={loading} />
+        <input
+          type="file"
+          accept=".xml,text/xml,application/xml"
+          onChange={onPickFile}
+          disabled={loading}
+        />
         <button onClick={importar} disabled={loading || !xmlText}>
           {loading ? "Importando..." : "Importar"}
         </button>
@@ -252,7 +474,11 @@ export default function NfeImport() {
           style={{ width: 420, maxWidth: "100%", padding: 6 }}
         />
 
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ padding: 6 }}>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          style={{ padding: 6 }}
+        >
           <option value="">Status: todos</option>
           <option value="1">1 - {STATUS[1]}</option>
           <option value="2">2 - {STATUS[2]}</option>
@@ -262,7 +488,15 @@ export default function NfeImport() {
         <button onClick={loadDocs}>Buscar</button>
       </div>
 
-      <div style={{ marginTop: 12, display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+      <div
+        style={{
+          marginTop: 12,
+          display: "flex",
+          gap: 16,
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
         <div style={{ flex: "1 1 720px" }}>
           {docs.length === 0 ? (
             <p>Nenhum documento encontrado.</p>
@@ -271,14 +505,30 @@ export default function NfeImport() {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "#f7f7f7" }}>
-                    <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>Chave</th>
-                    <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>Nº/Série</th>
-                    <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>Emitente</th>
-                    <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>Destinatário</th>
-                    <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>VNF</th>
-                    <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>Status ERP</th>
-                    <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Criado em</th>
-                    <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Ações</th>
+                    <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>
+                      Chave
+                    </th>
+                    <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>
+                      Nº/Série
+                    </th>
+                    <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>
+                      Emitente
+                    </th>
+                    <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>
+                      Destinatário
+                    </th>
+                    <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>
+                      VNF
+                    </th>
+                    <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>
+                      Status ERP
+                    </th>
+                    <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>
+                      Criado em
+                    </th>
+                    <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>
+                      Ações
+                    </th>
                   </tr>
                 </thead>
 
@@ -287,12 +537,27 @@ export default function NfeImport() {
                     const st = Number(d.status_erp ?? 2);
 
                     return (
-                      <tr key={d.id} style={{ background: selectedId === d.id ? "#f3f8ff" : "white" }}>
-                        <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>
+                      <tr
+                        key={d.id}
+                        style={{ background: selectedId === d.id ? "#f3f8ff" : "white" }}
+                      >
+                        <td
+                          style={{
+                            padding: 8,
+                            borderBottom: "1px solid #f0f0f0",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
                           {d.chave_nfe}
                         </td>
 
-                        <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>
+                        <td
+                          style={{
+                            padding: 8,
+                            borderBottom: "1px solid #f0f0f0",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
                           {d.n_nf || "-"} / {d.serie || "-"}
                         </td>
 
@@ -304,17 +569,29 @@ export default function NfeImport() {
                           {d.xnome_dest || "-"} ({onlyDigits(d.cnpj_dest) || "-"})
                         </td>
 
-                        <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0", textAlign: "right" }}>
+                        <td
+                          style={{
+                            padding: 8,
+                            borderBottom: "1px solid #f0f0f0",
+                            textAlign: "right",
+                          }}
+                        >
                           {moneyBR(d.vnf)}
                         </td>
 
-                        <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>
+                        <td
+                          style={{
+                            padding: 8,
+                            borderBottom: "1px solid #f0f0f0",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
                           <select
                             value={st}
                             onChange={(e) =>
-                              atualizarStatus(d.id, e.target.value).catch((err) => {
-                                alert(err.message);
-                              })
+                              atualizarStatus(d.id, e.target.value).catch((err) =>
+                                alert(err.message)
+                              )
                             }
                             style={{ padding: 4 }}
                           >
@@ -323,14 +600,28 @@ export default function NfeImport() {
                             <option value={3}>3 - {STATUS[3]}</option>
                           </select>
 
-                          <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>{statusLabel(st)}</div>
+                          <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+                            {statusLabel(st)}
+                          </div>
                         </td>
 
-                        <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0", textAlign: "right" }}>
+                        <td
+                          style={{
+                            padding: 8,
+                            borderBottom: "1px solid #f0f0f0",
+                            textAlign: "right",
+                          }}
+                        >
                           {d.created_at ? new Date(d.created_at).toLocaleString("pt-BR") : ""}
                         </td>
 
-                        <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0", textAlign: "right" }}>
+                        <td
+                          style={{
+                            padding: 8,
+                            borderBottom: "1px solid #f0f0f0",
+                            textAlign: "right",
+                          }}
+                        >
                           <button onClick={() => verDetalhe(d.id)}>Ver detalhes</button>
                         </td>
                       </tr>
@@ -352,9 +643,11 @@ export default function NfeImport() {
               <h3 style={{ marginTop: 0 }}>Detalhes</h3>
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-                <button onClick={() => visualizarDanfe(detail.document?.id)}>Visualizar DANFE</button>
+                <button onClick={() => setShowDanfe(true)}>Visualizar DANFE</button>
                 <button onClick={() => baixarXml(detail.document?.id)}>Baixar XML</button>
-                <button onClick={() => copiarChave(detail.document?.chave_nfe)}>Copiar chave</button>
+                <button onClick={() => copiarChave(detail.document?.chave_nfe)}>
+                  Copiar chave
+                </button>
               </div>
 
               <div style={{ fontSize: 14 }}>
@@ -373,7 +666,9 @@ export default function NfeImport() {
                 </div>
                 <div>
                   <strong>Emissão:</strong>{" "}
-                  {detail.document?.dh_emi ? new Date(detail.document.dh_emi).toLocaleString("pt-BR") : "-"}
+                  {detail.document?.dh_emi
+                    ? new Date(detail.document.dh_emi).toLocaleString("pt-BR")
+                    : "-"}
                 </div>
                 <div>
                   <strong>VNF:</strong> {moneyBR(detail.document?.vnf)}
@@ -385,7 +680,14 @@ export default function NfeImport() {
               </div>
 
               <h4 style={{ marginBottom: 8 }}>Itens ({detail.items?.length || 0})</h4>
-              <div style={{ maxHeight: 260, overflow: "auto", border: "1px solid #eee", borderRadius: 6 }}>
+              <div
+                style={{
+                  maxHeight: 260,
+                  overflow: "auto",
+                  border: "1px solid #eee",
+                  borderRadius: 6,
+                }}
+              >
                 {(detail.items || []).length === 0 ? (
                   <div style={{ padding: 8, color: "#666" }}>Nenhum item encontrado.</div>
                 ) : (
@@ -398,27 +700,37 @@ export default function NfeImport() {
                         cProd: {it.cprod || "-"} | NCM: {it.ncm || "-"} | CFOP: {it.cfop || "-"}
                       </div>
                       <div style={{ fontSize: 12, color: "#555" }}>
-                        Qtd: {it.qcom ?? "-"} {it.ucom || ""} | Unit: {moneyBR(it.vuncom)} | Total:{" "}
-                        {moneyBR(it.vprod)}
+                        Qtd: {it.qcom ?? "-"} {it.ucom || ""} | Unit: {moneyBR(it.vuncom)} |
+                        Total: {moneyBR(it.vprod)}
                       </div>
                     </div>
                   ))
                 )}
               </div>
 
-              <h4 style={{ marginBottom: 8, marginTop: 16 }}>Pagamentos ({detail.payments?.length || 0})</h4>
-              <div style={{ maxHeight: 180, overflow: "auto", border: "1px solid #eee", borderRadius: 6 }}>
+              <h4 style={{ marginBottom: 8, marginTop: 16 }}>
+                Pagamentos ({detail.payments?.length || 0})
+              </h4>
+              <div
+                style={{
+                  maxHeight: 180,
+                  overflow: "auto",
+                  border: "1px solid #eee",
+                  borderRadius: 6,
+                }}
+              >
                 {(detail.payments || []).length === 0 ? (
                   <div style={{ padding: 8, color: "#666" }}>Nenhum pagamento encontrado.</div>
                 ) : (
                   (detail.payments || []).map((p) => (
                     <div key={p.id} style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>
                       <div>
-                        <strong>tPag:</strong> {p.tpag || "-"} | <strong>vPag:</strong> {moneyBR(p.vpag)}
+                        <strong>tPag:</strong> {p.tpag || "-"} | <strong>vPag:</strong>{" "}
+                        {moneyBR(p.vpag)}
                       </div>
                       <div style={{ fontSize: 12, color: "#555" }}>
-                        Card CNPJ: {onlyDigits(p.card_cnpj) || "-"} | Bandeira: {p.card_tband || "-"} | Integração:{" "}
-                        {p.card_tpintegra || "-"}
+                        Card CNPJ: {onlyDigits(p.card_cnpj) || "-"} | Bandeira:{" "}
+                        {p.card_tband || "-"} | Integração: {p.card_tpintegra || "-"}
                       </div>
                     </div>
                   ))
@@ -430,6 +742,15 @@ export default function NfeImport() {
           )}
         </div>
       </div>
+
+      {showDanfe && detail ? (
+        <DanfePreview
+          detail={detail}
+          onClose={() => setShowDanfe(false)}
+          onDownloadXml={baixarXml}
+          onCopyKey={copiarChave}
+        />
+      ) : null}
     </div>
   );
 }
