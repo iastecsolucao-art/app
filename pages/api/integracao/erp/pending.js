@@ -125,20 +125,28 @@ export default async function handler(req, res) {
         i.q_com AS qcom,
         i.v_un_com AS vuncom,
         i.v_prod AS vprod,
-        m.codigo_erp AS codigo_produto_erp,
+        m.codigo_produto_erp,
         m.descricao_erp
       FROM public.nfe_item i
       LEFT JOIN public.nfe_item_erp_map m
         ON m.cnpj_fornecedor = (
-          SELECT d.cnpj_emit
-          FROM public.nfe_document d
-          WHERE d.id = i.nfe_id
-        )
+             SELECT d.cnpj_emit
+             FROM public.nfe_document d
+             WHERE d.id = i.nfe_id
+           )
        AND (
-            m.cprod_fornecedor = i.c_prod
-            OR (m.cprod_fornecedor IS NULL AND UPPER(COALESCE(m.xprod_fornecedor, '')) = UPPER(COALESCE(i.x_prod, '')))
+            m.cprod_origem = i.c_prod
+            OR (
+              COALESCE(NULLIF(TRIM(m.cprod_origem), ''), NULL) IS NULL
+              AND UPPER(COALESCE(m.xprod_origem, '')) = UPPER(COALESCE(i.x_prod, ''))
+              AND (
+                m.ncm_origem IS NULL
+                OR m.ncm_origem = i.ncm
+              )
+            )
        )
        AND COALESCE(m.ativo, true) = true
+       AND COALESCE(m.status_map, 'PENDENTE') = 'OK'
       WHERE i.nfe_id IN (${placeholders})
       ORDER BY i.nfe_id ASC, i.n_item ASC, i.id ASC
       `,
