@@ -12,7 +12,10 @@ let pool = global._nfePgPool;
 if (!pool) {
   pool = new Pool({
     connectionString,
-    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+    ssl:
+      process.env.NODE_ENV === "production"
+        ? { rejectUnauthorized: false }
+        : false,
     max: 5,
     idleTimeoutMillis: 10000,
     connectionTimeoutMillis: 10000,
@@ -24,43 +27,46 @@ if (!pool) {
 function checkAuth(req) {
   const auth = req.headers.authorization || "";
   const token = auth.replace(/^Bearer\s+/i, "").trim();
-  return API_TOKEN && token === API_TOKEN;
+  return !!API_TOKEN && token === API_TOKEN;
 }
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
-    return res.status(405).json({ error: `Método ${req.method} não permitido` });
+    return res.status(405).json({
+      error: `Método ${req.method} não permitido`,
+    });
   }
 
   if (!checkAuth(req)) {
     return res.status(401).json({ error: "Não autorizado" });
   }
 
-  const { nfe_id, mensagem, protocolo_cliente } = req.body || {};
-  const nfeId = Number(nfe_id);
-
-  if (!Number.isInteger(nfeId) || nfeId <= 0) {
-    return res.status(400).json({ error: "nfe_id inválido" });
-  }
-
   const client = await pool.connect();
 
   try {
+    const { nfe_id, mensagem, protocolo_cliente } = req.body || {};
+    const nfeId = Number(nfe_id);
+
+    if (!Number.isInteger(nfeId) || nfeId <= 0) {
+      return res.status(400).json({ error: "nfe_id inválido" });
+    }
+
     await client.query("BEGIN");
 
     await client.query(
       `
       UPDATE public.nfe_erp_queue
       SET
-        status = 'SUCESSO',
+        status = 'INTEGRADO',
         integrado_em = NOW(),
-        protocolo_cliente = $2,
+        updated_at = NOW(),
         last_error = NULL,
-        updated_at = NOW()
+        reservado_em = NULL,
+        reservado_por = NULL
       WHERE nfe_id = $1
       `,
-      [nfeId, protocolo_cliente || null]
+      [nfeId]
     );
 
     await client.query(
@@ -72,18 +78,49 @@ export default async function handler(req, res) {
       [nfeId]
     );
 
+    await client.query(
+      `
+      INSERT INTO public.nfe_erp_log (
+        nfe_id,
+        tipo_evento,
+        mensagem,
+        detalhes,
+        created_at
+      )
+      VALUES (
+        $1,
+        'SUCESSO',
+        $2,
+        $3,
+        NOW()
+      )
+      `,
+      [nfeId, mensagem || "Integração concluída com sucesso", protocolo_cliente || null]
+    ).catch(() => null);
+
     await client.query("COMMIT");
 
     return res.status(200).json({
       success: true,
       nfe_id: nfeId,
-      message: mensagem || "NF processada com sucesso no ERP",
+      status: "INTEGRADO",
     });
   } catch (e) {
-    await client.query("ROLLBACK");
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+
+    console.error("Erro em POST /api/integracao/erp/ack-success:", {
+      message: e?.message,
+      stack: e?.stack,
+      code: e?.code,
+      detail: e?.detail,
+      hint: e?.hint,
+      table: e?.table,
+    });
 
     return res.status(500).json({
-      error: "Erro ao confirmar sucesso da integração",
+      error: "Erro ao confirmar sucesso da integração ERP",
       details: e?.message || String(e),
     });
   } finally {

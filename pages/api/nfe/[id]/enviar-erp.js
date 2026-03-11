@@ -77,8 +77,12 @@ export default async function handler(req, res) {
       `
       INSERT INTO public.nfe_erp_queue (
         nfe_id,
-        status_fila,
+        status,
         tentativas,
+        last_error,
+        integrado_em,
+        reservado_em,
+        reservado_por,
         created_at,
         updated_at
       )
@@ -86,13 +90,20 @@ export default async function handler(req, res) {
         $1,
         'PENDENTE',
         0,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
         NOW(),
         NOW()
       )
       ON CONFLICT (nfe_id)
       DO UPDATE SET
-        status_fila = 'PENDENTE',
-        updated_at = NOW()
+        status = 'PENDENTE',
+        updated_at = NOW(),
+        last_error = NULL,
+        reservado_em = NULL,
+        reservado_por = NULL
       `,
       [id]
     );
