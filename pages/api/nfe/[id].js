@@ -100,7 +100,7 @@ export default async function handler(req, res) {
         xml_raw,
         created_at,
         COALESCE(status_erp, 2) AS status_erp
-      FROM nfe_document
+      FROM public.nfe_document
       WHERE id = $1
       LIMIT 1
       `,
@@ -171,7 +171,7 @@ export default async function handler(req, res) {
         ipi_qunid,
         ipi_vunid,
         infadprod
-      FROM nfe_item
+      FROM public.nfe_item
       WHERE nfe_id = $1
       ORDER BY n_item ASC, id ASC
       `,
@@ -192,7 +192,7 @@ export default async function handler(req, res) {
         card_tband,
         card_tpintegra,
         card_caut
-      FROM nfe_payment
+      FROM public.nfe_payment
       WHERE nfe_id = $1
       ORDER BY id ASC
       `,
@@ -202,13 +202,59 @@ export default async function handler(req, res) {
     const payments = Array.isArray(payRes.rows) ? payRes.rows : [];
 
     // =========================
-    // VALIDAÇÃO DE/PARA
+    // FILA ERP
+    // =========================
+    const queueRes = await pool.query(
+      `
+      SELECT
+        id,
+        status,
+        tentativas,
+        last_error,
+        integrado_em,
+        reservado_em,
+        reservado_por,
+        created_at,
+        updated_at
+      FROM public.nfe_erp_queue
+      WHERE nfe_id = $1
+      ORDER BY id DESC
+      LIMIT 1
+      `,
+      [idInt]
+    );
+
+    const queue = queueRes.rows[0] || null;
+
+    // =========================
+    // ÚLTIMA VALIDAÇÃO ERP
+    // =========================
+    const validacaoRes = await pool.query(
+      `
+      SELECT
+        id,
+        status_validacao,
+        mensagem,
+        payload_json,
+        created_at,
+        updated_at
+      FROM public.nfe_erp_validacao
+      WHERE nfe_id = $1
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
+      `,
+      [idInt]
+    );
+
+    const validacao = validacaoRes.rows[0] || null;
+
+    // =========================
+    // VALIDAÇÃO DE/PARA LOCAL
     // =========================
     const mapPendencias = [];
     const cnpjEmit = normalizeCnpj(document.cnpj_emit);
     const cnpjDest = normalizeCnpj(document.cnpj_dest);
 
-    // Busca participante base por CNPJ emitente / destinatário
     const partRes = await pool.query(
       `
       SELECT
@@ -226,12 +272,11 @@ export default async function handler(req, res) {
     );
 
     const participantes = Array.isArray(partRes.rows) ? partRes.rows : [];
-    const participanteEmit = participantes.find((p) => normalizeCnpj(p.cnpj) === cnpjEmit) || null;
-    const participanteDest = participantes.find((p) => normalizeCnpj(p.cnpj) === cnpjDest) || null;
+    const participanteEmit =
+      participantes.find((p) => normalizeCnpj(p.cnpj) === cnpjEmit) || null;
+    const participanteDest =
+      participantes.find((p) => normalizeCnpj(p.cnpj) === cnpjDest) || null;
 
-    // Regra:
-    // - se participante existe, consideramos fornecedor/destinatário base ok
-    // - de/para ERP é opcional para participante, pois pode usar dados originais
     const mapFornecedorOk = !!participanteEmit;
     const mapDestinatarioOk = !!participanteDest || !cnpjDest;
 
@@ -247,7 +292,6 @@ export default async function handler(req, res) {
       );
     }
 
-    // Validação de itens no mapa ERP
     let mapItensOk = true;
 
     if (items.length > 0 && cnpjEmit) {
@@ -255,54 +299,73 @@ export default async function handler(req, res) {
         .map((it) => String(it.cprod || "").trim())
         .filter(Boolean);
 
-      if (itemCodes.length > 0) {
+      const itemNames = items
+        .map((it) => String(it.xprod || "").trim())
+        .filter(Boolean);
+
+      let itemMaps = [];
+
+      if (itemCodes.length > 0 || itemNames.length > 0) {
         const itemMapRes = await pool.query(
           `
           SELECT
             id,
+            participante_id,
             cnpj_fornecedor,
             cprod_origem,
+            xprod_origem,
             codigo_produto_erp,
+            descricao_erp,
             status_map,
             ativo
           FROM public.nfe_item_erp_map
           WHERE cnpj_fornecedor = $1
-            AND cprod_origem = ANY($2::text[])
+            AND COALESCE(ativo, true) = true
           `,
-          [cnpjEmit, itemCodes]
+          [cnpjEmit]
         );
 
-        const itemMaps = Array.isArray(itemMapRes.rows) ? itemMapRes.rows : [];
-
-        for (const item of items) {
-          const cprod = String(item.cprod || "").trim();
-          if (!cprod) {
-            mapItensOk = false;
-            mapPendencias.push(
-              `Item ${item.n_item || "-"} sem código de origem (cProd)`
-            );
-            continue;
-          }
-
-          const found = itemMaps.find(
-            (m) =>
-              normalizeCnpj(m.cnpj_fornecedor) === cnpjEmit &&
-              String(m.cprod_origem || "").trim() === cprod &&
-              m.ativo === true &&
-              String(m.status_map || "").toUpperCase() !== "IGNORADO"
-          );
-
-          if (!found || !found.codigo_produto_erp) {
-            mapItensOk = false;
-            mapPendencias.push(
-              `Item ${cprod} - ${item.xprod || "-"} sem de/para ERP`
-            );
-          }
-        }
-      } else {
-        mapItensOk = false;
-        mapPendencias.push("Nenhum item possui cProd para validação de de/para");
+        itemMaps = Array.isArray(itemMapRes.rows) ? itemMapRes.rows : [];
       }
+
+      for (const item of items) {
+        const cprod = String(item.cprod || "").trim();
+        const xprod = String(item.xprod || "").trim().toUpperCase();
+        const ncm = String(item.ncm || "").trim();
+
+        const found = itemMaps.find((m) => {
+          const mapCprod = String(m.cprod_origem || "").trim();
+          const mapXprod = String(m.xprod_origem || "").trim().toUpperCase();
+          const mapStatus = String(m.status_map || "").trim().toUpperCase();
+
+          if (m.ativo !== true) return false;
+          if (mapStatus === "IGNORADO") return false;
+
+          if (mapCprod && cprod && mapCprod === cprod) return true;
+
+          if (!mapCprod && mapXprod && xprod && mapXprod === xprod) {
+            return true;
+          }
+
+          return false;
+        });
+
+        if (!cprod && !xprod) {
+          mapItensOk = false;
+          mapPendencias.push(`Item ${item.n_item || "-"} sem código/descrição de origem`);
+          continue;
+        }
+
+        if (!found || !found.codigo_produto_erp) {
+          mapItensOk = false;
+          mapPendencias.push(
+            `Item ${cprod || "-"} - ${item.xprod || "-"} sem de/para ERP`
+          );
+        }
+      }
+    } else if (items.length > 0 && !cnpjEmit) {
+      mapItensOk = false;
+      mapPendencias.push("Emitente sem CNPJ para validação de de/para dos itens");
     }
 
     let mapStatus = "OK";
@@ -315,9 +378,17 @@ export default async function handler(req, res) {
       mapStatus = "PENDENTE_DESTINATARIO";
     }
 
+    // =========================
+    // STATUS VISUAL DO DETALHE
+    // =========================
+    const statusValidacaoErp = validacao?.status_validacao || null;
+    const mensagemValidacaoErp = validacao?.mensagem || null;
+
     return res.status(200).json({
       document: {
         ...document,
+
+        // de/para local
         map_fornecedor_ok: mapFornecedorOk,
         map_destinatario_ok: mapDestinatarioOk,
         map_itens_ok: mapItensOk,
@@ -325,6 +396,22 @@ export default async function handler(req, res) {
         map_pendencias: mapPendencias,
         participante_emit_id: participanteEmit?.id || null,
         participante_dest_id: participanteDest?.id || null,
+
+        // fila ERP
+        fila_erp_id: queue?.id || null,
+        fila_erp_status: queue?.status || null,
+        fila_erp_tentativas: queue?.tentativas ?? 0,
+        fila_erp_last_error: queue?.last_error || null,
+        fila_erp_integrado_em: queue?.integrado_em || null,
+        fila_erp_reservado_em: queue?.reservado_em || null,
+        fila_erp_reservado_por: queue?.reservado_por || null,
+
+        // última validação ERP
+        validacao_erp_id: validacao?.id || null,
+        validacao_erp_status: statusValidacaoErp,
+        validacao_erp_mensagem: mensagemValidacaoErp,
+        validacao_erp_payload: validacao?.payload_json || null,
+        validacao_erp_created_at: validacao?.created_at || null,
       },
       items,
       payments,

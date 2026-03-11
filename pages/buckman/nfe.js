@@ -54,6 +54,82 @@ function statusColor(v) {
   };
 }
 
+function filaStatusColor(v) {
+  const s = String(v || "").toUpperCase();
+
+  if (s === "PENDENTE") {
+    return {
+      background: "#fff7d6",
+      color: "#8a6700",
+      border: "1px solid #f3d46b",
+    };
+  }
+
+  if (s === "PROCESSANDO") {
+    return {
+      background: "#dff1ff",
+      color: "#0b5cab",
+      border: "1px solid #8ec5ff",
+    };
+  }
+
+  if (s === "INTEGRADO") {
+    return {
+      background: "#e6f7e8",
+      color: "#166534",
+      border: "1px solid #9ed8a6",
+    };
+  }
+
+  if (s === "ERRO") {
+    return {
+      background: "#ffe5e5",
+      color: "#b00020",
+      border: "1px solid #f2b8b5",
+    };
+  }
+
+  return {
+    background: "#f3f4f6",
+    color: "#374151",
+    border: "1px solid #d1d5db",
+  };
+}
+
+function validacaoErpColor(v) {
+  const s = String(v || "").toUpperCase();
+
+  if (s === "OK" || s === "VALIDADO") {
+    return {
+      background: "#e6f7e8",
+      color: "#166534",
+      border: "1px solid #9ed8a6",
+    };
+  }
+
+  if (s.startsWith("PENDENTE")) {
+    return {
+      background: "#fff7d6",
+      color: "#8a6700",
+      border: "1px solid #f3d46b",
+    };
+  }
+
+  if (s === "ERRO") {
+    return {
+      background: "#ffe5e5",
+      color: "#b00020",
+      border: "1px solid #f2b8b5",
+    };
+  }
+
+  return {
+    background: "#f3f4f6",
+    color: "#374151",
+    border: "1px solid #d1d5db",
+  };
+}
+
 function moneyBR(v) {
   if (v == null || v === "") return "-";
   const n = Number(v);
@@ -369,6 +445,7 @@ export default function NfeImport() {
   const [importMsg, setImportMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [sendingErpId, setSendingErpId] = useState(null);
+  const [reprocessingId, setReprocessingId] = useState(null);
 
   const [filters, setFilters] = useState({
     chave_nfe: "",
@@ -516,7 +593,6 @@ export default function NfeImport() {
       }
 
       setImportMsg(data?.message || "NF enviada para fila do ERP com sucesso.");
-
       await loadDocs();
 
       if (selectedId === id) {
@@ -526,6 +602,35 @@ export default function NfeImport() {
       setImportMsg(`Erro ao enviar para ERP: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setSendingErpId(null);
+    }
+  }
+
+  async function reprocessarErp(id) {
+    try {
+      setReprocessingId(id);
+      setImportMsg("");
+
+      const res = await fetch(`/api/nfe/${id}/reprocessar-erp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data?.details || data?.error || `Falha (${res.status})`);
+      }
+
+      setImportMsg(data?.message || "NF marcada para reprocessamento.");
+      await loadDocs();
+
+      if (selectedId === id) {
+        await verDetalhe(id);
+      }
+    } catch (e) {
+      setImportMsg(`Erro ao reprocessar ERP: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setReprocessingId(null);
     }
   }
 
@@ -672,9 +777,7 @@ export default function NfeImport() {
           <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Destinatário</label>
           <input
             value={filters.destinatario}
-            onChange={(e) =>
-              setFilters((prev) => ({ ...prev, destinatario: e.target.value }))
-            }
+            onChange={(e) => setFilters((prev) => ({ ...prev, destinatario: e.target.value }))}
             placeholder="Nome ou CNPJ do destinatário"
             style={{ width: "100%", padding: 6 }}
           />
@@ -753,8 +856,9 @@ export default function NfeImport() {
                   {docs.map((d) => {
                     const st = Number(d.status_erp ?? 2);
                     const mapInfo = mapStatusInfo(d);
-                    const podeEnviar =
-                    st === 2 ;
+                    const podeEnviar = st === 2;
+                    const podeReprocessar = st === 1 || String(d.fila_erp_status || "").toUpperCase() === "ERRO";
+
                     return (
                       <tr
                         key={d.id}
@@ -881,11 +985,27 @@ export default function NfeImport() {
                               }}
                               title={
                                 !podeEnviar
-                                  ? "Só é possível enviar quando o status estiver 2 e o de/para estiver OK."
+                                  ? "Só é possível enviar quando o status estiver 2."
                                   : "Enviar para fila do ERP"
                               }
                             >
                               {sendingErpId === d.id ? "Enviando..." : "Enviar ERP"}
+                            </button>
+
+                            <button
+                              onClick={() => reprocessarErp(d.id)}
+                              disabled={!podeReprocessar || reprocessingId === d.id}
+                              style={{
+                                opacity: !podeReprocessar || reprocessingId === d.id ? 0.6 : 1,
+                                cursor: !podeReprocessar || reprocessingId === d.id ? "not-allowed" : "pointer",
+                              }}
+                              title={
+                                !podeReprocessar
+                                  ? "Reprocessamento disponível quando a NF estiver enviada ou com erro na fila."
+                                  : "Voltar NF para reprocessamento"
+                              }
+                            >
+                              {reprocessingId === d.id ? "Reprocessando..." : "Reprocessar ERP"}
                             </button>
                           </div>
                         </td>
@@ -919,39 +1039,58 @@ export default function NfeImport() {
                   disabled={
                     !detail.document?.id ||
                     sendingErpId === detail.document?.id ||
-                    Number(detail.document?.status_erp ?? 2) !== 2 ||
-                    !(
-                      detail.document?.map_status === "OK" ||
-                      (detail.document?.map_fornecedor_ok === true &&
-                        detail.document?.map_itens_ok === true)
-                    )
+                    Number(detail.document?.status_erp ?? 2) !== 2
                   }
                   style={{
                     opacity:
                       !detail.document?.id ||
                       sendingErpId === detail.document?.id ||
-                      Number(detail.document?.status_erp ?? 2) !== 2 ||
-                      !(
-                        detail.document?.map_status === "OK" ||
-                        (detail.document?.map_fornecedor_ok === true &&
-                          detail.document?.map_itens_ok === true)
-                      )
+                      Number(detail.document?.status_erp ?? 2) !== 2
                         ? 0.6
                         : 1,
                     cursor:
                       !detail.document?.id ||
                       sendingErpId === detail.document?.id ||
-                      Number(detail.document?.status_erp ?? 2) !== 2 ||
-                      !(
-                        detail.document?.map_status === "OK" ||
-                        (detail.document?.map_fornecedor_ok === true &&
-                          detail.document?.map_itens_ok === true)
-                      )
+                      Number(detail.document?.status_erp ?? 2) !== 2
                         ? "not-allowed"
                         : "pointer",
                   }}
                 >
                   {sendingErpId === detail.document?.id ? "Enviando..." : "Enviar ERP"}
+                </button>
+
+                <button
+                  onClick={() => reprocessarErp(detail.document?.id)}
+                  disabled={
+                    !detail.document?.id ||
+                    reprocessingId === detail.document?.id ||
+                    !(
+                      Number(detail.document?.status_erp ?? 2) === 1 ||
+                      String(detail.document?.fila_erp_status || "").toUpperCase() === "ERRO"
+                    )
+                  }
+                  style={{
+                    opacity:
+                      !detail.document?.id ||
+                      reprocessingId === detail.document?.id ||
+                      !(
+                        Number(detail.document?.status_erp ?? 2) === 1 ||
+                        String(detail.document?.fila_erp_status || "").toUpperCase() === "ERRO"
+                      )
+                        ? 0.6
+                        : 1,
+                    cursor:
+                      !detail.document?.id ||
+                      reprocessingId === detail.document?.id ||
+                      !(
+                        Number(detail.document?.status_erp ?? 2) === 1 ||
+                        String(detail.document?.fila_erp_status || "").toUpperCase() === "ERRO"
+                      )
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  {reprocessingId === detail.document?.id ? "Reprocessando..." : "Reprocessar ERP"}
                 </button>
               </div>
 
@@ -994,6 +1133,77 @@ export default function NfeImport() {
                     {statusLabel(detail.document?.status_erp ?? 2)}
                   </span>
                 </div>
+
+                {detail.document?.fila_erp_status ? (
+                  <div style={{ marginTop: 8 }}>
+                    <strong>Fila ERP:</strong>{" "}
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "4px 8px",
+                        borderRadius: 999,
+                        fontWeight: 600,
+                        ...filaStatusColor(detail.document?.fila_erp_status),
+                      }}
+                    >
+                      {detail.document?.fila_erp_status}
+                    </span>
+                    {detail.document?.fila_erp_tentativas != null ? (
+                      <span style={{ marginLeft: 8 }}>
+                        Tentativas: {detail.document?.fila_erp_tentativas}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {detail.document?.fila_erp_last_error ? (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: 10,
+                      borderRadius: 8,
+                      background: "#ffe5e5",
+                      border: "1px solid #f2b8b5",
+                      color: "#b00020",
+                    }}
+                  >
+                    <strong>Último erro da fila ERP:</strong>
+                    <div>{detail.document?.fila_erp_last_error}</div>
+                  </div>
+                ) : null}
+
+                {detail.document?.validacao_erp_status ? (
+                  <div style={{ marginTop: 8 }}>
+                    <strong>Validação ERP:</strong>{" "}
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "4px 8px",
+                        borderRadius: 999,
+                        fontWeight: 600,
+                        ...validacaoErpColor(detail.document?.validacao_erp_status),
+                      }}
+                    >
+                      {detail.document?.validacao_erp_status}
+                    </span>
+                  </div>
+                ) : null}
+
+                {detail.document?.validacao_erp_mensagem ? (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: 10,
+                      borderRadius: 8,
+                      background: "#fff7d6",
+                      border: "1px solid #f3d46b",
+                      color: "#8a6700",
+                    }}
+                  >
+                    <strong>Mensagem validação ERP:</strong>
+                    <div>{detail.document?.validacao_erp_mensagem}</div>
+                  </div>
+                ) : null}
 
                 <div style={{ marginTop: 8 }}>
                   {(() => {
