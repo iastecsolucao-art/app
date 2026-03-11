@@ -86,7 +86,8 @@ function mapStatusInfo(rowOrDetail) {
     if (
       mapStatus === "PENDENTE_FORNECEDOR" ||
       mapStatus === "PENDENTE_ITEM" ||
-      mapStatus === "PENDENTE"
+      mapStatus === "PENDENTE" ||
+      mapStatus === "PENDENTE_DESTINATARIO"
     ) {
       return {
         label: "De/Para pendente",
@@ -140,18 +141,6 @@ function mapStatusInfo(rowOrDetail) {
       border: "1px solid #d1d5db",
     },
   };
-}
-
-function canChangeStatus(currentStatus, nextStatus) {
-  const current = Number(currentStatus);
-  const next = Number(nextStatus);
-
-  if (current === next) return true;
-  if (current === 2 && next === 1) return true;
-  if (current === 1 && next === 2) return true;
-  if (current === 1 && next === 3) return true;
-
-  return false;
 }
 
 const thStyle = {
@@ -379,6 +368,7 @@ export default function NfeImport() {
   const [fileName, setFileName] = useState("");
   const [importMsg, setImportMsg] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sendingErpId, setSendingErpId] = useState(null);
 
   const [filters, setFilters] = useState({
     chave_nfe: "",
@@ -506,38 +496,37 @@ export default function NfeImport() {
     }
   }
 
-  async function atualizarStatus(id, novoStatus) {
-    const atual =
-      detail?.document?.id === id
-        ? Number(detail.document?.status_erp ?? 2)
-        : Number(docs.find((x) => x.id === id)?.status_erp ?? 2);
+  async function enviarParaErp(id) {
+    try {
+      setSendingErpId(id);
+      setImportMsg("");
 
-    const next = Number(novoStatus);
+      const res = await fetch(`/api/nfe/${id}/enviar-erp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
 
-    if (!canChangeStatus(atual, next)) {
-      throw new Error("Transição de status não permitida. Fluxo esperado: 2 → 1 → 3.");
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const pendencias = Array.isArray(data?.map_pendencias)
+          ? data.map_pendencias.join(" | ")
+          : "";
+        throw new Error(data?.details || data?.error || pendencias || `Falha (${res.status})`);
+      }
+
+      setImportMsg(data?.message || "NF enviada para fila do ERP com sucesso.");
+
+      await loadDocs();
+
+      if (selectedId === id) {
+        await verDetalhe(id);
+      }
+    } catch (e) {
+      setImportMsg(`Erro ao enviar para ERP: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSendingErpId(null);
     }
-
-    const res = await fetch(`/api/nfe/${id}/status`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status_erp: next }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(data?.error || data?.details || `Falha (${res.status})`);
-    }
-
-    setDocs((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, status_erp: data.status_erp } : d))
-    );
-
-    setDetail((prev) =>
-      prev?.document?.id === id
-        ? { ...prev, document: { ...prev.document, status_erp: data.status_erp } }
-        : prev
-    );
   }
 
   function baixarXml(id) {
@@ -764,6 +753,8 @@ export default function NfeImport() {
                   {docs.map((d) => {
                     const st = Number(d.status_erp ?? 2);
                     const mapInfo = mapStatusInfo(d);
+                    const podeEnviar =
+                      st === 2 && (d.map_status === "OK" || (d.map_fornecedor_ok === true && d.map_itens_ok === true));
 
                     return (
                       <tr
@@ -815,15 +806,7 @@ export default function NfeImport() {
                             whiteSpace: "nowrap",
                           }}
                         >
-                          <select
-                            value={st}
-                            onChange={(e) =>
-                              atualizarStatus(d.id, e.target.value).catch((err) =>
-                                alert(err.message)
-                              )
-                            }
-                            style={{ padding: 4, minWidth: 240 }}
-                          >
+                          <select value={st} disabled style={{ padding: 4, minWidth: 240 }}>
                             <option value={2}>2 - {STATUS[2]}</option>
                             <option value={1}>1 - {STATUS[1]}</option>
                             <option value={3}>3 - {STATUS[3]}</option>
@@ -887,7 +870,25 @@ export default function NfeImport() {
                             textAlign: "right",
                           }}
                         >
-                          <button onClick={() => verDetalhe(d.id)}>Ver detalhes</button>
+                          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                            <button onClick={() => verDetalhe(d.id)}>Ver detalhes</button>
+
+                            <button
+                              onClick={() => enviarParaErp(d.id)}
+                              disabled={!podeEnviar || sendingErpId === d.id}
+                              style={{
+                                opacity: !podeEnviar || sendingErpId === d.id ? 0.6 : 1,
+                                cursor: !podeEnviar || sendingErpId === d.id ? "not-allowed" : "pointer",
+                              }}
+                              title={
+                                !podeEnviar
+                                  ? "Só é possível enviar quando o status estiver 2 e o de/para estiver OK."
+                                  : "Enviar para fila do ERP"
+                              }
+                            >
+                              {sendingErpId === d.id ? "Enviando..." : "Enviar ERP"}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -912,6 +913,46 @@ export default function NfeImport() {
                 <button onClick={() => baixarXml(detail.document?.id)}>Baixar XML</button>
                 <button onClick={() => copiarChave(detail.document?.chave_nfe)}>
                   Copiar chave
+                </button>
+
+                <button
+                  onClick={() => enviarParaErp(detail.document?.id)}
+                  disabled={
+                    !detail.document?.id ||
+                    sendingErpId === detail.document?.id ||
+                    Number(detail.document?.status_erp ?? 2) !== 2 ||
+                    !(
+                      detail.document?.map_status === "OK" ||
+                      (detail.document?.map_fornecedor_ok === true &&
+                        detail.document?.map_itens_ok === true)
+                    )
+                  }
+                  style={{
+                    opacity:
+                      !detail.document?.id ||
+                      sendingErpId === detail.document?.id ||
+                      Number(detail.document?.status_erp ?? 2) !== 2 ||
+                      !(
+                        detail.document?.map_status === "OK" ||
+                        (detail.document?.map_fornecedor_ok === true &&
+                          detail.document?.map_itens_ok === true)
+                      )
+                        ? 0.6
+                        : 1,
+                    cursor:
+                      !detail.document?.id ||
+                      sendingErpId === detail.document?.id ||
+                      Number(detail.document?.status_erp ?? 2) !== 2 ||
+                      !(
+                        detail.document?.map_status === "OK" ||
+                        (detail.document?.map_fornecedor_ok === true &&
+                          detail.document?.map_itens_ok === true)
+                      )
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  {sendingErpId === detail.document?.id ? "Enviando..." : "Enviar ERP"}
                 </button>
               </div>
 
