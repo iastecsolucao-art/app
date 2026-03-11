@@ -46,30 +46,37 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "pedido é obrigatório" });
     }
 
-    if (!["PROCESSADO", "ERRO", "PENDENTE"].includes(data.status)) {
+    if (!["PENDENTE", "PROCESSADO", "ERRO"].includes(data.status)) {
       return res.status(400).json({ error: "status inválido" });
     }
 
     const result = await pool.query(
       `
-      UPDATE public.erp_compra_resumo
+      UPDATE public.erp_compra_queue
       SET
         status_integracao = $1,
         mensagem_integracao = $2,
         updated_at = NOW()
       WHERE pedido = $3
-      RETURNING id, pedido, status_integracao, mensagem_integracao
+      RETURNING
+        id,
+        nfe_id,
+        chave_nfe,
+        pedido,
+        status_integracao,
+        mensagem_integracao,
+        updated_at
       `,
       [data.status, data.message, data.pedido]
     );
 
     if (!result.rowCount) {
-      return res.status(404).json({ error: "Pedido não encontrado" });
+      return res.status(404).json({ error: "Pedido não encontrado na fila" });
     }
 
     return res.status(200).json({
       success: true,
-      row: result.rows[0],
+      rows: result.rows,
     });
   } catch (e) {
     console.error("Erro em POST /api/erp/compras/retorno:", {

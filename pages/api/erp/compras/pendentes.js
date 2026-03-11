@@ -33,21 +33,23 @@ export default async function handler(req, res) {
 
   try {
     const limit = Math.min(
-      Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1),
-      200
+      Math.max(parseInt(String(req.query.limit || "100"), 10) || 100, 1),
+      500
     );
 
     const result = await pool.query(
       `
       SELECT
+        id,
+        nfe_id,
+        chave_nfe,
         pedido,
-        emissao,
-        tipo_compra,
-        fornecedor_nome,
-        status_sistema,
+        origem_texto,
+        status_integracao,
+        mensagem_integracao,
         created_at,
         updated_at
-      FROM public.erp_compra_resumo
+      FROM public.erp_compra_queue
       WHERE COALESCE(status_integracao, 'PENDENTE') IN ('PENDENTE', 'ERRO')
       ORDER BY updated_at ASC, id ASC
       LIMIT $1
