@@ -754,8 +754,7 @@ export default function NfeImport() {
                     const st = Number(d.status_erp ?? 2);
                     const mapInfo = mapStatusInfo(d);
                     const podeEnviar =
-                      st === 2 && (d.map_status === "OK" || (d.map_fornecedor_ok === true && d.map_itens_ok === true));
-
+                    st === 2 ;
                     return (
                       <tr
                         key={d.id}
