@@ -146,51 +146,136 @@ export default async function handler(req, res) {
 
     const pedidos = extractPedidos(doc.infcpl);
     let comprasCriadas = 0;
+    let comprasAtualizadas = 0;
 
-    for (const pedido of pedidos) {
-      const compraRes = await client.query(
+    if (pedidos.length > 0) {
+      for (const pedido of pedidos) {
+        const existingRes = await client.query(
+          `
+          SELECT id
+          FROM public.erp_compra_queue
+          WHERE nfe_id = $1
+            AND pedido = $2
+          LIMIT 1
+          `,
+          [id, pedido]
+        );
+
+        if (existingRes.rowCount > 0) {
+          await client.query(
+            `
+            UPDATE public.erp_compra_queue
+            SET
+              origem_texto = $3,
+              status_integracao = 'PENDENTE',
+              mensagem_integracao = 'Reenfileirado automaticamente no envio ao ERP',
+              tentativas = 0,
+              reservado_em = NULL,
+              reservado_por = NULL,
+              integrado_em = NULL,
+              updated_at = NOW()
+            WHERE id = $1
+            `,
+            [existingRes.rows[0].id, pedido, doc.infcpl || null]
+          );
+          comprasAtualizadas += 1;
+        } else {
+          await client.query(
+            `
+            INSERT INTO public.erp_compra_queue (
+              nfe_id,
+              pedido,
+              origem_texto,
+              status_integracao,
+              mensagem_integracao,
+              tentativas,
+              reservado_em,
+              reservado_por,
+              integrado_em,
+              created_at,
+              updated_at
+            )
+            VALUES (
+              $1,
+              $2,
+              $3,
+              'PENDENTE',
+              'Criado automaticamente no envio ao ERP',
+              0,
+              NULL,
+              NULL,
+              NULL,
+              NOW(),
+              NOW()
+            )
+            `,
+            [id, pedido, doc.infcpl || null]
+          );
+          comprasCriadas += 1;
+        }
+      }
+    } else {
+      const existingNoPedidoRes = await client.query(
         `
-        INSERT INTO public.erp_compra_queue (
-          nfe_id,
-          pedido,
-          origem_texto,
-          status_integracao,
-          mensagem_integracao,
-          tentativas,
-          reservado_em,
-          reservado_por,
-          integrado_em,
-          created_at,
-          updated_at
-        )
-        VALUES (
-          $1,
-          $2,
-          $3,
-          'PENDENTE',
-          'Criado automaticamente no envio ao ERP',
-          0,
-          NULL,
-          NULL,
-          NULL,
-          NOW(),
-          NOW()
-        )
-        ON CONFLICT (nfe_id, pedido)
-        DO UPDATE SET
-          status_integracao = 'PENDENTE',
-          mensagem_integracao = 'Reenfileirado automaticamente no envio ao ERP',
-          tentativas = 0,
-          reservado_em = NULL,
-          reservado_por = NULL,
-          integrado_em = NULL,
-          updated_at = NOW()
-        RETURNING id
+        SELECT id
+        FROM public.erp_compra_queue
+        WHERE nfe_id = $1
+          AND pedido IS NULL
+        LIMIT 1
         `,
-        [id, pedido, doc.infcpl || null]
+        [id]
       );
 
-      if (compraRes.rowCount > 0) {
+      if (existingNoPedidoRes.rowCount > 0) {
+        await client.query(
+          `
+          UPDATE public.erp_compra_queue
+          SET
+            origem_texto = $2,
+            status_integracao = 'SEM_PEDIDO',
+            mensagem_integracao = 'NF enviada ao ERP sem número de pedido identificado na observação',
+            tentativas = 0,
+            reservado_em = NULL,
+            reservado_por = NULL,
+            integrado_em = NULL,
+            updated_at = NOW()
+          WHERE id = $1
+          `,
+          [existingNoPedidoRes.rows[0].id, doc.infcpl || null]
+        );
+        comprasAtualizadas += 1;
+      } else {
+        await client.query(
+          `
+          INSERT INTO public.erp_compra_queue (
+            nfe_id,
+            pedido,
+            origem_texto,
+            status_integracao,
+            mensagem_integracao,
+            tentativas,
+            reservado_em,
+            reservado_por,
+            integrado_em,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            $1,
+            NULL,
+            $2,
+            'SEM_PEDIDO',
+            'NF enviada ao ERP sem número de pedido identificado na observação',
+            0,
+            NULL,
+            NULL,
+            NULL,
+            NOW(),
+            NOW()
+          )
+          `,
+          [id, doc.infcpl || null]
+        );
         comprasCriadas += 1;
       }
     }
@@ -222,6 +307,7 @@ export default async function handler(req, res) {
             serie: doc.serie,
             status_anterior: statusAtual,
             pedidos_encontrados: pedidos,
+            compra_status: pedidos.length > 0 ? 'PENDENTE' : 'SEM_PEDIDO',
           }),
         ]
       )
@@ -241,6 +327,8 @@ export default async function handler(req, res) {
       queue_updated: queueRes.rowCount > 0,
       pedidos_encontrados: pedidos,
       compras_criadas: comprasCriadas,
+      compras_atualizadas: comprasAtualizadas,
+      compra_status: pedidos.length > 0 ? "PENDENTE" : "SEM_PEDIDO",
     });
   } catch (e) {
     try {
