@@ -57,7 +57,7 @@ export default async function handler(req, res) {
         updated_at
       FROM public.erp_compra_queue
       WHERE
-        status_integracao IN ('PENDENTE', 'ERRO')
+        status_integracao IN ('PENDENTE', 'ERRO','SEM_PEDIDO')
         OR (
           status_integracao = 'PROCESSANDO'
           AND reservado_em IS NOT NULL
