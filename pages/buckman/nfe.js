@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"; 
+import { useEffect, useMemo, useState } from "react"; 
 
  
 
@@ -15,6 +15,70 @@ function extractChaveQuick(xmlText) {
   const m = (xmlText || "").match(/Id=['"]NFe(\d{44})['"]/i); 
 
   return m ? m[1] : null; 
+
+} 
+
+ 
+
+function formatDateBR(value) { 
+
+  if (!value) return "-"; 
+
+  try { 
+
+    return new Date(value).toLocaleString("pt-BR"); 
+
+  } catch { 
+
+    return String(value); 
+
+  } 
+
+} 
+
+ 
+
+function moneyBR(v) { 
+
+  if (v == null || v === "") return "-"; 
+
+  const n = Number(v); 
+
+  if (Number.isNaN(n)) return String(v); 
+
+  return n.toLocaleString("pt-BR", { 
+
+    style: "currency", 
+
+    currency: "BRL", 
+
+  }); 
+
+} 
+
+ 
+
+function parseMultiTerms(value) { 
+
+  return String(value || "") 
+
+    .split(",") 
+
+    .map((s) => s.trim().toLowerCase()) 
+
+    .filter(Boolean); 
+
+} 
+
+ 
+
+function containsAnyTerm(source, terms) { 
+
+  if (!terms.length) return true; 
+
+  const base = String(source || "").toLowerCase(); 
+
+  return terms.some((term) => base.includes(term)); 
 
 } 
 
@@ -194,112 +258,6 @@ function filaStatusColor(v) {
 
  
 
-function validacaoErpColor(v) { 
-
-  const s = String(v || "").toUpperCase(); 
-
- 
-
-  if (s === "OK" || s === "VALIDADO") { 
-
-    return { 
-
-      background: "#e6f7e8", 
-
-      color: "#166534", 
-
-      border: "1px solid #9ed8a6", 
-
-    }; 
-
-  } 
-
- 
-
-  if (s.startsWith("PENDENTE")) { 
-
-    return { 
-
-      background: "#fff7d6", 
-
-      color: "#8a6700", 
-
-      border: "1px solid #f3d46b", 
-
-    }; 
-
-  } 
-
- 
-
-  if (s === "ERRO") { 
-
-    return { 
-
-      background: "#ffe5e5", 
-
-      color: "#b00020", 
-
-      border: "1px solid #f2b8b5", 
-
-    }; 
-
-  } 
-
- 
-
-  return { 
-
-    background: "#f3f4f6", 
-
-    color: "#374151", 
-
-    border: "1px solid #d1d5db", 
-
-  }; 
-
-} 
-
- 
-
-function moneyBR(v) { 
-
-  if (v == null || v === "") return "-"; 
-
-  const n = Number(v); 
-
-  if (Number.isNaN(n)) return String(v); 
-
-  return n.toLocaleString("pt-BR", { 
-
-    style: "currency", 
-
-    currency: "BRL", 
-
-  }); 
-
-} 
-
- 
-
-function formatDateBR(value) { 
-
-  if (!value) return "-"; 
-
-  try { 
-
-    return new Date(value).toLocaleString("pt-BR"); 
-
-  } catch { 
-
-    return String(value); 
-
-  } 
-
-} 
-
- 
-
 function mapStatusInfo(rowOrDetail) { 
 
   const obj = rowOrDetail || {}; 
@@ -458,155 +416,13 @@ function mapStatusInfo(rowOrDetail) {
 
  
 
-const thStyle = { 
+function DanfePdfViewer({ nfeId, chaveNfe, onClose }) { 
 
-  border: "1px solid #000", 
-
-  padding: 6, 
-
-  textAlign: "left", 
-
-  background: "#f3f3f3", 
-
-  fontWeight: 600, 
-
-}; 
+  if (!nfeId) return null; 
 
  
 
-const tdStyle = { 
-
-  border: "1px solid #000", 
-
-  padding: 6, 
-
-  verticalAlign: "top", 
-
-}; 
-
- 
-
-function DanfePreview({ detail, onClose, onDownloadXml, onCopyKey }) { 
-
-  const doc = detail?.document || {}; 
-
-  const items = Array.isArray(detail?.items) ? detail.items : []; 
-
-  const payments = Array.isArray(detail?.payments) ? detail.payments : []; 
-
-  const printRef = useRef(null); 
-
- 
-
-  function exportDanfePdf() { 
-
-    const content = printRef.current?.innerHTML; 
-
-    if (!content) return; 
-
- 
-
-    const printWindow = window.open("", "_blank", "width=1100,height=900"); 
-
-    if (!printWindow) return; 
-
- 
-
-    printWindow.document.write(` 
-
-      <html> 
-
-        <head> 
-
-          <title>DANFE - ${doc.chave_nfe || "NFe"}</title> 
-
-          <style> 
-
-            body { 
-
-              font-family: Arial, sans-serif; 
-
-              color: #111; 
-
-              padding: 20px; 
-
-              font-size: 12px; 
-
-              line-height: 1.35; 
-
-            } 
-
-            table { 
-
-              width: 100%; 
-
-              border-collapse: collapse; 
-
-              font-size: 12px; 
-
-            } 
-
-            th, td { 
-
-              border: 1px solid #000; 
-
-              padding: 6px; 
-
-              vertical-align: top; 
-
-              text-align: left; 
-
-            } 
-
-            th { 
-
-              background: #f3f3f3; 
-
-              font-weight: 600; 
-
-            } 
-
-            @page { 
-
-              size: A4 portrait; 
-
-              margin: 10mm; 
-
-            } 
-
-          </style> 
-
-        </head> 
-
-        <body> 
-
-          ${content} 
-
-          <script> 
-
-            window.onload = function() { 
-
-              setTimeout(function() { 
-
-                window.print(); 
-
-              }, 300); 
-
-            }; 
-
-          </script> 
-
-        </body> 
-
-      </html> 
-
-    `); 
-
- 
-
-    printWindow.document.close(); 
-
-  } 
+  const pdfUrl = `/api/nfe/${nfeId}/danfe-pdf`; 
 
  
 
@@ -620,7 +436,7 @@ function DanfePreview({ detail, onClose, onDownloadXml, onCopyKey }) {
 
         inset: 0, 
 
-        background: "rgba(0,0,0,0.45)", 
+        background: "rgba(0,0,0,0.55)", 
 
         zIndex: 9999, 
 
@@ -630,7 +446,7 @@ function DanfePreview({ detail, onClose, onDownloadXml, onCopyKey }) {
 
         alignItems: "flex-start", 
 
-        padding: 24, 
+        padding: 20, 
 
         overflowY: "auto", 
 
@@ -644,13 +460,13 @@ function DanfePreview({ detail, onClose, onDownloadXml, onCopyKey }) {
 
           width: "100%", 
 
-          maxWidth: 1120, 
+          maxWidth: 1320, 
 
           background: "#fff", 
 
           borderRadius: 12, 
 
-          boxShadow: "0 10px 30px rgba(0,0,0,0.25)", 
+          boxShadow: "0 12px 30px rgba(0,0,0,0.25)", 
 
           overflow: "hidden", 
 
@@ -662,9 +478,9 @@ function DanfePreview({ detail, onClose, onDownloadXml, onCopyKey }) {
 
           style={{ 
 
-            padding: 12, 
+            padding: "14px 18px", 
 
-            borderBottom: "1px solid #e5e5e5", 
+            borderBottom: "1px solid #e5e7eb", 
 
             display: "flex", 
 
@@ -672,33 +488,37 @@ function DanfePreview({ detail, onClose, onDownloadXml, onCopyKey }) {
 
             alignItems: "center", 
 
-            background: "#fafafa", 
-
-            position: "sticky", 
-
-            top: 0, 
-
-            zIndex: 2, 
-
             gap: 12, 
 
             flexWrap: "wrap", 
+
+            background: "#f9fafb", 
 
           }} 
 
         > 
 
-          <strong>Pré-visualização DANFE</strong> 
+          <strong>PDF da NF-e — {chaveNfe || nfeId}</strong> 
 
  
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}> 
 
-            <button onClick={() => onCopyKey(doc.chave_nfe)}>Copiar chave</button> 
+            <a href={pdfUrl} target="_blank" rel="noreferrer" style={linkButtonStyle}> 
 
-            <button onClick={() => onDownloadXml(doc.id)}>Baixar XML</button> 
+              Abrir em nova guia 
 
-            <button onClick={exportDanfePdf}>Exportar PDF</button> 
+            </a> 
+
+ 
+
+            <a href={pdfUrl} download style={linkButtonStyle}> 
+
+              Baixar PDF 
+
+            </a> 
+
+ 
 
             <button onClick={onClose}>Fechar</button> 
 
@@ -708,303 +528,39 @@ function DanfePreview({ detail, onClose, onDownloadXml, onCopyKey }) {
 
  
 
-        <div ref={printRef} style={{ padding: 20, color: "#111", fontSize: 13, lineHeight: 1.4 }}> 
+        <div 
 
-          <div style={{ border: "2px solid #000", padding: 12, marginBottom: 12 }}> 
+          style={{ 
 
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}> 
+            width: "100%", 
 
-              <div style={{ border: "1px solid #000", padding: 10 }}> 
+            height: "85vh", 
 
-                <div style={{ fontWeight: "bold", fontSize: 16 }}>{doc.xnome_emit || "-"}</div> 
+            background: "#111827", 
 
-                <div>CNPJ: {onlyDigits(doc.cnpj_emit) || "-"}</div> 
+          }} 
 
-                <div>UF: {doc.uf_emit || "-"}</div> 
+        > 
 
-                <div>Município: {doc.municipio_emit || "-"}</div> 
+          <iframe 
 
-              </div> 
+            src={pdfUrl} 
 
- 
+            title={`PDF DANFE ${chaveNfe || nfeId}`} 
 
-              <div style={{ border: "1px solid #000", padding: 10 }}> 
+            style={{ 
 
-                <div style={{ fontWeight: "bold", marginBottom: 4 }}>DANFE</div> 
+              width: "100%", 
 
-                <div>Documento Auxiliar da Nota Fiscal Eletrônica</div> 
+              height: "100%", 
 
-                <div style={{ marginTop: 8 }}> 
+              border: "none", 
 
-                  <strong>NF-e:</strong> {doc.n_nf || "-"} 
+              background: "#111827", 
 
-                </div> 
+            }} 
 
-                <div> 
-
-                  <strong>Série:</strong> {doc.serie || "-"} 
-
-                </div> 
-
-                <div> 
-
-                  <strong>Emissão:</strong> {doc.dh_emi ? formatDateBR(doc.dh_emi) : "-"} 
-
-                </div> 
-
-                <div> 
-
-                  <strong>Natureza:</strong> {doc.natureza_operacao || doc.nat_op || "-"} 
-
-                </div> 
-
-              </div> 
-
-            </div> 
-
- 
-
-            <div style={{ marginTop: 10, border: "1px solid #000", padding: 10 }}> 
-
-              <div> 
-
-                <strong>Chave de Acesso:</strong> {doc.chave_nfe || "-"} 
-
-              </div> 
-
-              <div> 
-
-                <strong>Protocolo:</strong> {doc.nprot || "-"} 
-
-              </div> 
-
-              <div> 
-
-                <strong>Autorização:</strong> {doc.xmotivo || "-"} 
-
-              </div> 
-
-            </div> 
-
-          </div> 
-
- 
-
-          <div style={{ border: "1px solid #000", padding: 10, marginBottom: 12 }}> 
-
-            <div style={{ fontWeight: "bold", marginBottom: 6 }}>Destinatário / Remetente</div> 
-
-            <div> 
-
-              <strong>Nome:</strong> {doc.xnome_dest || "-"} 
-
-            </div> 
-
-            <div> 
-
-              <strong>CNPJ:</strong> {onlyDigits(doc.cnpj_dest) || "-"} 
-
-            </div> 
-
-            <div> 
-
-              <strong>UF:</strong> {doc.uf_dest || "-"} 
-
-            </div> 
-
-            <div> 
-
-              <strong>Município:</strong> {doc.municipio_dest || "-"} 
-
-            </div> 
-
-          </div> 
-
- 
-
-          <div style={{ border: "1px solid #000", padding: 10, marginBottom: 12 }}> 
-
-            <div style={{ fontWeight: "bold", marginBottom: 6 }}>Itens da Nota</div> 
-
- 
-
-            <div style={{ overflowX: "auto" }}> 
-
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}> 
-
-                <thead> 
-
-                  <tr> 
-
-                    <th style={thStyle}>Item</th> 
-
-                    <th style={thStyle}>Descrição</th> 
-
-                    <th style={thStyle}>NCM</th> 
-
-                    <th style={thStyle}>CFOP</th> 
-
-                    <th style={thStyle}>Qtd</th> 
-
-                    <th style={thStyle}>Un</th> 
-
-                    <th style={thStyle}>Vlr Unit.</th> 
-
-                    <th style={thStyle}>Vlr Total</th> 
-
-                  </tr> 
-
-                </thead> 
-
-                <tbody> 
-
-                  {items.length === 0 ? ( 
-
-                    <tr> 
-
-                      <td style={{ ...tdStyle, textAlign: "center" }} colSpan={8}> 
-
-                        Nenhum item encontrado. 
-
-                      </td> 
-
-                    </tr> 
-
-                  ) : ( 
-
-                    items.map((it) => ( 
-
-                      <tr key={it.id}> 
-
-                        <td style={tdStyle}>{it.n_item || "-"}</td> 
-
-                        <td style={tdStyle}>{it.xprod || "-"}</td> 
-
-                        <td style={tdStyle}>{it.ncm || "-"}</td> 
-
-                        <td style={tdStyle}>{it.cfop || "-"}</td> 
-
-                        <td style={tdStyle}>{it.qcom ?? "-"}</td> 
-
-                        <td style={tdStyle}>{it.ucom || "-"}</td> 
-
-                        <td style={tdStyle}>{moneyBR(it.vuncom)}</td> 
-
-                        <td style={tdStyle}>{moneyBR(it.vprod)}</td> 
-
-                      </tr> 
-
-                    )) 
-
-                  )} 
-
-                </tbody> 
-
-              </table> 
-
-            </div> 
-
-          </div> 
-
- 
-
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}> 
-
-            <div style={{ border: "1px solid #000", padding: 10 }}> 
-
-              <div style={{ fontWeight: "bold", marginBottom: 6 }}>Informações complementares</div> 
-
-              <div>{doc.infcpl || "-"}</div> 
-
- 
-
-              {doc.infadfisco ? ( 
-
-                <div style={{ marginTop: 10 }}> 
-
-                  <strong>Informações ao Fisco:</strong> 
-
-                  <div>{doc.infadfisco}</div> 
-
-                </div> 
-
-              ) : null} 
-
-            </div> 
-
- 
-
-            <div style={{ border: "1px solid #000", padding: 10 }}> 
-
-              <div style={{ fontWeight: "bold", marginBottom: 6 }}>Totais</div> 
-
-              <div> 
-
-                <strong>Valor produtos:</strong> {moneyBR(doc.vprod)} 
-
-              </div> 
-
-              <div> 
-
-                <strong>Base ICMS:</strong> {moneyBR(doc.vbc)} 
-
-              </div> 
-
-              <div> 
-
-                <strong>ICMS:</strong> {moneyBR(doc.vicms)} 
-
-              </div> 
-
-              <div> 
-
-                <strong>PIS:</strong> {moneyBR(doc.vpis)} 
-
-              </div> 
-
-              <div> 
-
-                <strong>COFINS:</strong> {moneyBR(doc.vcofins)} 
-
-              </div> 
-
-              <div style={{ marginTop: 8, fontSize: 15 }}> 
-
-                <strong>Valor NF:</strong> {moneyBR(doc.vnf)} 
-
-              </div> 
-
-            </div> 
-
-          </div> 
-
- 
-
-          <div style={{ border: "1px solid #000", padding: 10, marginTop: 12 }}> 
-
-            <div style={{ fontWeight: "bold", marginBottom: 6 }}>Pagamentos</div> 
-
- 
-
-            {payments.length === 0 ? ( 
-
-              <div>Nenhum pagamento encontrado.</div> 
-
-            ) : ( 
-
-              payments.map((p) => ( 
-
-                <div key={p.id} style={{ marginBottom: 4 }}> 
-
-                  <strong>tPag:</strong> {p.tpag || "-"} | <strong>vPag:</strong> {moneyBR(p.vpag)} 
-
-                </div> 
-
-              )) 
-
-            )} 
-
-          </div> 
+          /> 
 
         </div> 
 
@@ -1092,9 +648,9 @@ function DetailPanel({
 
           <div><strong>Status ERP:</strong> {statusLabel(doc.status_erp)}</div> 
 
-          <div><strong>Status fila:</strong> {doc.queue_status || "-"}</div> 
+          <div><strong>Status fila:</strong> {doc.queue_status || doc.fila_erp_status || "-"}</div> 
 
-          <div><strong>Validação ERP:</strong> {doc.erp_validacao_status || "-"}</div> 
+          <div><strong>Validação ERP:</strong> {doc.erp_validacao_status || doc.validacao_erp_status || "-"}</div> 
 
         </div> 
 
@@ -1110,9 +666,9 @@ function DetailPanel({
 
  
 
-          <span style={{ ...filaStatusColor(doc.queue_status), borderRadius: 999, padding: "6px 10px", fontSize: 12 }}> 
+          <span style={{ ...filaStatusColor(doc.queue_status || doc.fila_erp_status), borderRadius: 999, padding: "6px 10px", fontSize: 12 }}> 
 
-            {doc.queue_status || "Sem fila"} 
+            {doc.queue_status || doc.fila_erp_status || "Sem fila"} 
 
           </span> 
 
@@ -1372,7 +928,7 @@ export default function NfeImport() {
 
   const [loadingDetail, setLoadingDetail] = useState(false); 
 
-  const [showDanfe, setShowDanfe] = useState(false); 
+  const [showDanfePdf, setShowDanfePdf] = useState(false); 
 
  
 
@@ -1400,9 +956,15 @@ export default function NfeImport() {
 
       if (f.destinatario?.trim()) params.set("destinatario", f.destinatario.trim()); 
 
+ 
+
+      // envia como string única; o front também filtra localmente por múltiplos termos 
+
       if (f.natureza_operacao?.trim()) params.set("natureza_operacao", f.natureza_operacao.trim()); 
 
       if (f.cfop?.trim()) params.set("cfop", f.cfop.trim()); 
+
+ 
 
       if (f.status_erp?.trim()) params.set("status_erp", f.status_erp.trim()); 
 
@@ -1443,6 +1005,44 @@ export default function NfeImport() {
     loadDocs(); 
 
   }, []); 
+
+ 
+
+  const filteredDocs = useMemo(() => { 
+
+    const naturezaTerms = parseMultiTerms(filters.natureza_operacao); 
+
+    const cfopTerms = parseMultiTerms(filters.cfop); 
+
+ 
+
+    return docs.filter((row) => { 
+
+      const naturezaOk = containsAnyTerm(row.natureza_operacao || row.nat_op || "", naturezaTerms); 
+
+ 
+
+      const cfopSource = 
+
+        row.cfop || 
+
+        row.cfops || 
+
+        row.cfop_resumo || 
+
+        ""; 
+
+ 
+
+      const cfopOk = containsAnyTerm(cfopSource, cfopTerms); 
+
+ 
+
+      return naturezaOk && cfopOk; 
+
+    }); 
+
+  }, [docs, filters.natureza_operacao, filters.cfop]); 
 
  
 
@@ -1998,7 +1598,7 @@ export default function NfeImport() {
 
           <input 
 
-            placeholder="Natureza da operação" 
+            placeholder="Natureza da operação (ex: transferência, venda)" 
 
             value={filters.natureza_operacao} 
 
@@ -2014,7 +1614,7 @@ export default function NfeImport() {
 
           <input 
 
-            placeholder="CFOP" 
+            placeholder="CFOP (ex: 5102, 5152)" 
 
             value={filters.cfop} 
 
@@ -2046,7 +1646,7 @@ export default function NfeImport() {
 
  
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 18 }}> 
+        <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}> 
 
           <button type="submit">Buscar</button> 
 
@@ -2055,6 +1655,12 @@ export default function NfeImport() {
             Limpar 
 
           </button> 
+
+          <span style={{ fontSize: 12, color: "#6b7280", alignSelf: "center" }}> 
+
+            Natureza e CFOP aceitam múltiplos termos separados por vírgula. 
+
+          </span> 
 
         </div> 
 
@@ -2096,7 +1702,7 @@ export default function NfeImport() {
 
           <tbody> 
 
-            {docs.length === 0 ? ( 
+            {filteredDocs.length === 0 ? ( 
 
               <tr> 
 
@@ -2110,7 +1716,7 @@ export default function NfeImport() {
 
             ) : ( 
 
-              docs.map((row) => { 
+              filteredDocs.map((row) => { 
 
                 const mapInfo = mapStatusInfo(row); 
 
@@ -2162,7 +1768,7 @@ export default function NfeImport() {
 
                     </td> 
 
-                    <td style={tableCell}>{row.natureza_operacao || "-"}</td> 
+                    <td style={tableCell}>{row.natureza_operacao || row.nat_op || "-"}</td> 
 
                     <td style={tableCell}>{moneyBR(row.vnf)}</td> 
 
@@ -2264,6 +1870,24 @@ export default function NfeImport() {
 
  
 
+                        <button 
+
+                          onClick={async () => { 
+
+                            await verDetalhe(row.id); 
+
+                            setShowDanfePdf(true); 
+
+                          }} 
+
+                        > 
+
+                          Ver DANFE 
+
+                        </button> 
+
+ 
+
                         {Number(row.status_erp) === 2 ? ( 
 
                           <button 
@@ -2282,7 +1906,7 @@ export default function NfeImport() {
 
  
 
-                        {Number(row.status_erp) === 1 || Number(row.status_erp) === 3 ? ( 
+                        {(Number(row.status_erp) === 1 || Number(row.status_erp) === 3) ? ( 
 
                           <button 
 
@@ -2330,7 +1954,7 @@ export default function NfeImport() {
 
           onCopyKey={copiarChave} 
 
-          onOpenDanfe={() => setShowDanfe(true)} 
+          onOpenDanfe={() => setShowDanfePdf(true)} 
 
         /> 
 
@@ -2338,17 +1962,15 @@ export default function NfeImport() {
 
  
 
-      {showDanfe && detail ? ( 
+      {showDanfePdf && detail ? ( 
 
-        <DanfePreview 
+        <DanfePdfViewer 
 
-          detail={detail} 
+          nfeId={detail?.document?.id} 
 
-          onClose={() => setShowDanfe(false)} 
+          chaveNfe={detail?.document?.chave_nfe} 
 
-          onDownloadXml={baixarXml} 
-
-          onCopyKey={copiarChave} 
+          onClose={() => setShowDanfePdf(false)} 
 
         /> 
 
@@ -2359,6 +1981,32 @@ export default function NfeImport() {
   ); 
 
 } 
+
+ 
+
+const linkButtonStyle = { 
+
+  display: "inline-flex", 
+
+  alignItems: "center", 
+
+  justifyContent: "center", 
+
+  padding: "8px 12px", 
+
+  borderRadius: 6, 
+
+  textDecoration: "none", 
+
+  border: "1px solid #d1d5db", 
+
+  background: "#fff", 
+
+  color: "#111827", 
+
+  fontSize: 14, 
+
+}; 
 
  
 
