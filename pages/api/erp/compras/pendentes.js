@@ -23,26 +23,6 @@ if (!pool) {
   global._erpPgPool = pool;
 }
 
-function extractPedido(texto) {
-  const s = String(texto || "");
-
-  const patterns = [
-    /PEDIDO\s+DE\s+COMPRA\s+(\d+)/i,
-    /PEDIDO\(S\)\s*:\s*(\d+)/i,
-    /PEDIDO\s+IB\s*:\s*(\d+)/i,
-    /PEDIDO\s*:\s*(\d+)/i,
-  ];
-
-  for (const pattern of patterns) {
-    const match = s.match(pattern);
-    if (match?.[1]) {
-      return match[1].trim();
-    }
-  }
-
-  return null;
-}
-
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]);
@@ -59,70 +39,70 @@ export default async function handler(req, res) {
       200
     );
 
+    const reservadoPor = "python-compras";
+
+    await client.query("BEGIN");
+
     const result = await client.query(
       `
       SELECT
-        q.id AS queue_id,
-        q.nfe_id,
-        q.status,
-        q.tentativas,
-        q.last_error,
-        q.integrado_em,
-        q.reservado_em,
-        q.reservado_por,
-        q.created_at,
-        q.updated_at,
-        d.chave_nfe,
-        d.n_nf,
-        d.serie,
-        d.cnpj_emit,
-        d.xnome_emit,
-        d.cnpj_dest,
-        d.xnome_dest,
-        d.infcpl
-      FROM public.nfe_erp_queue q
-      JOIN public.nfe_document d
-        ON d.id = q.nfe_id
-      WHERE q.status IN ('PENDENTE', 'ERRO')
-         OR (
-              q.status = 'PROCESSANDO'
-              AND q.reservado_em IS NOT NULL
-              AND q.reservado_em < NOW() - INTERVAL '1 minute'
-            )
-      ORDER BY q.updated_at ASC, q.id ASC
+        id,
+        pedido,
+        origem_texto,
+        status_integracao,
+        mensagem_integracao,
+        reservado_em,
+        reservado_por,
+        created_at,
+        updated_at
+      FROM public.erp_compra_queue
+      WHERE
+        status_integracao IN ('PENDENTE', 'ERRO')
+        OR (
+          status_integracao = 'PROCESSANDO'
+          AND reservado_em IS NOT NULL
+          AND reservado_em < NOW() - INTERVAL '1 minutes'
+        )
+      ORDER BY updated_at ASC, id ASC
       LIMIT $1
+      FOR UPDATE SKIP LOCKED
       `,
       [limit]
     );
 
-    const rows = (result.rows || [])
-      .map((row) => {
-        const pedido = extractPedido(row.infcpl);
+    const rows = result.rows || [];
 
-        return {
-          queue_id: row.queue_id,
-          nfe_id: row.nfe_id,
-          pedido,
-          origem_texto: row.infcpl,
-          chave_nfe: row.chave_nfe,
-          n_nf: row.n_nf,
-          serie: row.serie,
-          cnpj_emit: row.cnpj_emit,
-          xnome_emit: row.xnome_emit,
-          cnpj_dest: row.cnpj_dest,
-          xnome_dest: row.xnome_dest,
-          status_integracao: row.status,
-          mensagem_integracao: row.last_error,
-          reservado_em: row.reservado_em,
-          reservado_por: row.reservado_por,
-          created_at: row.created_at,
-          updated_at: row.updated_at,
-        };
-      })
-      .filter((row) => !!row.pedido);
+    const selectedIds = rows.map((r) => r.id);
 
-    return res.status(200).json({ rows });
+    if (selectedIds.length > 0) {
+      await client.query(
+        `
+        UPDATE public.erp_compra_queue
+        SET
+          status_integracao = 'PROCESSANDO',
+          reservado_em = NOW(),
+          reservado_por = $2,
+          updated_at = NOW()
+        WHERE id = ANY($1::bigint[])
+        `,
+        [selectedIds, reservadoPor]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    return res.status(200).json({
+      rows: rows.map((r) => ({
+        ...r,
+        status_integracao: "PROCESSANDO",
+        reservado_por: reservadoPor,
+      })),
+    });
   } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+
     console.error("Erro em GET /api/erp/compras/pendentes:", {
       message: e?.message,
       stack: e?.stack,

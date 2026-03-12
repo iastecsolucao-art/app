@@ -30,6 +30,29 @@ function checkAuth(req) {
   return !!API_TOKEN && token === API_TOKEN;
 }
 
+function extractPedidos(texto) {
+  const s = String(texto || "");
+  const patterns = [
+    /PEDIDO\s+DE\s+COMPRA\s+(\d+)/gi,
+    /PEDIDO\(S\)\s*:\s*(\d+)/gi,
+    /PEDIDO\s+IB\s*:\s*(\d+)/gi,
+    /PEDIDO\s*:\s*(\d+)/gi,
+  ];
+
+  const found = new Set();
+
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(s)) !== null) {
+      if (match?.[1]) {
+        found.add(match[1].trim());
+      }
+    }
+  }
+
+  return Array.from(found);
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
@@ -56,7 +79,6 @@ export default async function handler(req, res) {
 
     await client.query("BEGIN");
 
-    // Atualiza fila ERP
     const queueRes = await client.query(
       `
       UPDATE public.nfe_erp_queue
@@ -73,7 +95,6 @@ export default async function handler(req, res) {
       [nfeId]
     );
 
-    // Atualiza documento
     await client.query(
       `
       UPDATE public.nfe_document
@@ -83,7 +104,56 @@ export default async function handler(req, res) {
       [nfeId]
     );
 
-    // Log da integração (não quebra o fluxo se falhar)
+    const docRes = await client.query(
+      `
+      SELECT id, infcpl
+      FROM public.nfe_document
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [nfeId]
+    );
+
+    const infcpl = docRes.rows?.[0]?.infcpl || "";
+    const pedidos = extractPedidos(infcpl);
+
+    let comprasCriadas = 0;
+
+    for (const pedido of pedidos) {
+      const insertRes = await client.query(
+        `
+        INSERT INTO public.erp_compra_queue (
+          nfe_id,
+          pedido,
+          origem_texto,
+          status_integracao,
+          mensagem_integracao,
+          tentativas,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          'PENDENTE',
+          'Criado automaticamente a partir da NF-e integrada',
+          0,
+          NOW(),
+          NOW()
+        )
+        ON CONFLICT (nfe_id, pedido)
+        DO NOTHING
+        RETURNING id
+        `,
+        [nfeId, pedido, infcpl]
+      );
+
+      if (insertRes.rowCount > 0) {
+        comprasCriadas += 1;
+      }
+    }
+
     await client
       .query(
         `
@@ -114,7 +184,8 @@ export default async function handler(req, res) {
       status: "INTEGRADO",
       status_erp: 3,
       queue_updated: queueRes.rowCount > 0,
-      integrado_em: new Date().toISOString(),
+      pedidos_encontrados: pedidos,
+      compras_criadas: comprasCriadas,
     });
   } catch (e) {
     try {
