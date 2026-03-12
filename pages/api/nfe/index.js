@@ -45,6 +45,8 @@ export default async function handler(req, res) {
     const rawSerie = firstValue(req.query.serie);
     const rawEmitente = firstValue(req.query.emitente);
     const rawDestinatario = firstValue(req.query.destinatario);
+    const rawNatureza = firstValue(req.query.natureza_operacao);
+    const rawCfop = firstValue(req.query.cfop);
     const rawStatus = firstValue(req.query.status_erp);
     const rawLimit = firstValue(req.query.limit);
 
@@ -53,6 +55,8 @@ export default async function handler(req, res) {
     const serie = String(rawSerie || "").trim();
     const emitente = String(rawEmitente || "").trim();
     const destinatario = String(rawDestinatario || "").trim();
+    const natureza_operacao = String(rawNatureza || "").trim();
+    const cfop = String(rawCfop || "").trim();
 
     const lim = Math.min(
       Math.max(parseInt(String(rawLimit || "50"), 10) || 50, 1),
@@ -117,6 +121,25 @@ export default async function handler(req, res) {
       }
     }
 
+    // Filtro por natureza da operação
+    if (natureza_operacao) {
+      params.push(`%${natureza_operacao}%`);
+      where.push(`COALESCE(d.nat_op, '') ILIKE $${params.length}`);
+    }
+
+    // Filtro por CFOP em qualquer item da NF
+    if (cfop) {
+      params.push(`%${cfop}%`);
+      where.push(`
+        EXISTS (
+          SELECT 1
+          FROM public.nfe_item fi
+          WHERE fi.nfe_id = d.id
+            AND COALESCE(fi.cfop, '') ILIKE $${params.length}
+        )
+      `);
+    }
+
     if (rawStatus !== undefined && rawStatus !== null && String(rawStatus).trim() !== "") {
       const statusInt = parseInt(String(rawStatus), 10);
 
@@ -149,8 +172,28 @@ export default async function handler(req, res) {
         d.cnpj_dest,
         d.vnf,
         d.created_at,
-        COALESCE(d.status_erp, 2) AS status_erp
-      FROM nfe_document d
+        d.nat_op AS natureza_operacao,
+        COALESCE(d.status_erp, 2) AS status_erp,
+
+        q.status AS queue_status,
+        q.tentativas AS queue_tentativas,
+        q.last_error AS queue_last_error,
+        q.integrado_em AS queue_integrado_em,
+
+        v.status_validacao AS erp_validacao_status,
+        v.created_at AS erp_validado_em
+      FROM public.nfe_document d
+      LEFT JOIN public.nfe_erp_queue q
+        ON q.nfe_id = d.id
+      LEFT JOIN LATERAL (
+        SELECT
+          vv.status_validacao,
+          vv.created_at
+        FROM public.nfe_erp_validacao vv
+        WHERE vv.nfe_id = d.id
+        ORDER BY vv.created_at DESC, vv.id DESC
+        LIMIT 1
+      ) v ON TRUE
       ${whereSql}
       ORDER BY d.created_at DESC, d.id DESC
       LIMIT ${limitParam}
@@ -168,6 +211,7 @@ export default async function handler(req, res) {
     // VALIDAÇÃO DE/PARA PARA LISTAGEM
     // =========================
     const cnpjsEmit = [...new Set(rows.map((r) => normalizeCnpj(r.cnpj_emit)).filter(Boolean))];
+    const rowIds = rows.map((r) => r.id);
 
     const participanteRes =
       cnpjsEmit.length > 0
@@ -186,8 +230,6 @@ export default async function handler(req, res) {
 
     const participantes = Array.isArray(participanteRes.rows) ? participanteRes.rows : [];
 
-    const rowIds = rows.map((r) => r.id);
-
     const itemRes =
       rowIds.length > 0
         ? await pool.query(
@@ -197,6 +239,7 @@ export default async function handler(req, res) {
               i.n_item,
               i.c_prod AS cprod,
               i.x_prod AS xprod,
+              i.cfop,
               m.id AS map_id,
               m.codigo_produto_erp,
               m.ativo,
@@ -234,7 +277,7 @@ export default async function handler(req, res) {
       const pendencias = [];
 
       const mapFornecedorOk = !!participanteEmit;
-      const mapDestinatarioOk = true; // aqui deixei flexível na listagem
+      const mapDestinatarioOk = true;
       let mapItensOk = true;
 
       if (!mapFornecedorOk) {

@@ -574,12 +574,6 @@ function DanfePreview({ detail, onClose, onDownloadXml, onCopyKey }) {
 
             } 
 
-            .page-break { 
-
-              page-break-before: always; 
-
-            } 
-
           </style> 
 
         </head> 
@@ -760,7 +754,7 @@ function DanfePreview({ detail, onClose, onDownloadXml, onCopyKey }) {
 
                 <div> 
 
-                  <strong>Natureza:</strong> {doc.natop || "-"} 
+                  <strong>Natureza:</strong> {doc.natureza_operacao || doc.nat_op || "-"} 
 
                 </div> 
 
@@ -1094,13 +1088,13 @@ function DetailPanel({
 
           <div><strong>Número/Série:</strong> {doc.n_nf || "-"} / {doc.serie || "-"}</div> 
 
-          <div><strong>Natureza:</strong> {doc.natop || "-"}</div> 
+          <div><strong>Natureza:</strong> {doc.natureza_operacao || doc.nat_op || "-"}</div> 
 
           <div><strong>Status ERP:</strong> {statusLabel(doc.status_erp)}</div> 
 
           <div><strong>Status fila:</strong> {doc.queue_status || "-"}</div> 
 
-          <div><strong>Validação ERP:</strong> {doc.erp_validado_em || doc.map_status || "-"}</div> 
+          <div><strong>Validação ERP:</strong> {doc.erp_validacao_status || "-"}</div> 
 
         </div> 
 
@@ -1396,21 +1390,21 @@ export default function NfeImport() {
 
  
 
-      if (f.chave_nfe) params.set("chave_nfe", f.chave_nfe); 
+      if (f.chave_nfe?.trim()) params.set("chave_nfe", f.chave_nfe.trim()); 
 
-      if (f.n_nf) params.set("n_nf", f.n_nf); 
+      if (f.n_nf?.trim()) params.set("n_nf", f.n_nf.trim()); 
 
-      if (f.serie) params.set("serie", f.serie); 
+      if (f.serie?.trim()) params.set("serie", f.serie.trim()); 
 
-      if (f.emitente) params.set("emitente", f.emitente); 
+      if (f.emitente?.trim()) params.set("emitente", f.emitente.trim()); 
 
-      if (f.destinatario) params.set("destinatario", f.destinatario); 
+      if (f.destinatario?.trim()) params.set("destinatario", f.destinatario.trim()); 
 
-      if (f.natureza_operacao) params.set("natureza_operacao", f.natureza_operacao); 
+      if (f.natureza_operacao?.trim()) params.set("natureza_operacao", f.natureza_operacao.trim()); 
 
-      if (f.cfop) params.set("cfop", f.cfop); 
+      if (f.cfop?.trim()) params.set("cfop", f.cfop.trim()); 
 
-      if (f.status_erp) params.set("status_erp", f.status_erp); 
+      if (f.status_erp?.trim()) params.set("status_erp", f.status_erp.trim()); 
 
  
 
@@ -2168,7 +2162,7 @@ export default function NfeImport() {
 
                     </td> 
 
-                    <td style={tableCell}>{row.natop || "-"}</td> 
+                    <td style={tableCell}>{row.natureza_operacao || "-"}</td> 
 
                     <td style={tableCell}>{moneyBR(row.vnf)}</td> 
 

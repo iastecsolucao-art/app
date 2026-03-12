@@ -113,7 +113,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const document = docRes.rows[0];
+    const rawDocument = docRes.rows[0];
 
     const itemRes = await pool.query(
       `
@@ -252,8 +252,8 @@ export default async function handler(req, res) {
     // VALIDAÇÃO DE/PARA LOCAL
     // =========================
     const mapPendencias = [];
-    const cnpjEmit = normalizeCnpj(document.cnpj_emit);
-    const cnpjDest = normalizeCnpj(document.cnpj_dest);
+    const cnpjEmit = normalizeCnpj(rawDocument.cnpj_emit);
+    const cnpjDest = normalizeCnpj(rawDocument.cnpj_dest);
 
     const partRes = await pool.query(
       `
@@ -282,56 +282,45 @@ export default async function handler(req, res) {
 
     if (!mapFornecedorOk) {
       mapPendencias.push(
-        `Fornecedor ${document.xnome_emit || "-"} (${cnpjEmit || "-"}) não cadastrado em participantes`
+        `Fornecedor ${rawDocument.xnome_emit || "-"} (${cnpjEmit || "-"}) não cadastrado em participantes`
       );
     }
 
     if (!mapDestinatarioOk) {
       mapPendencias.push(
-        `Destinatário ${document.xnome_dest || "-"} (${cnpjDest || "-"}) não cadastrado em participantes`
+        `Destinatário ${rawDocument.xnome_dest || "-"} (${cnpjDest || "-"}) não cadastrado em participantes`
       );
     }
 
     let mapItensOk = true;
 
     if (items.length > 0 && cnpjEmit) {
-      const itemCodes = items
-        .map((it) => String(it.cprod || "").trim())
-        .filter(Boolean);
-
-      const itemNames = items
-        .map((it) => String(it.xprod || "").trim())
-        .filter(Boolean);
-
       let itemMaps = [];
 
-      if (itemCodes.length > 0 || itemNames.length > 0) {
-        const itemMapRes = await pool.query(
-          `
-          SELECT
-            id,
-            participante_id,
-            cnpj_fornecedor,
-            cprod_origem,
-            xprod_origem,
-            codigo_produto_erp,
-            descricao_erp,
-            status_map,
-            ativo
-          FROM public.nfe_item_erp_map
-          WHERE cnpj_fornecedor = $1
-            AND COALESCE(ativo, true) = true
-          `,
-          [cnpjEmit]
-        );
+      const itemMapRes = await pool.query(
+        `
+        SELECT
+          id,
+          participante_id,
+          cnpj_fornecedor,
+          cprod_origem,
+          xprod_origem,
+          codigo_produto_erp,
+          descricao_erp,
+          status_map,
+          ativo
+        FROM public.nfe_item_erp_map
+        WHERE cnpj_fornecedor = $1
+          AND COALESCE(ativo, true) = true
+        `,
+        [cnpjEmit]
+      );
 
-        itemMaps = Array.isArray(itemMapRes.rows) ? itemMapRes.rows : [];
-      }
+      itemMaps = Array.isArray(itemMapRes.rows) ? itemMapRes.rows : [];
 
       for (const item of items) {
         const cprod = String(item.cprod || "").trim();
         const xprod = String(item.xprod || "").trim().toUpperCase();
-        const ncm = String(item.ncm || "").trim();
 
         const found = itemMaps.find((m) => {
           const mapCprod = String(m.cprod_origem || "").trim();
@@ -384,35 +373,55 @@ export default async function handler(req, res) {
     const statusValidacaoErp = validacao?.status_validacao || null;
     const mensagemValidacaoErp = validacao?.mensagem || null;
 
+    const document = {
+      ...rawDocument,
+
+      // compatibilidade com front novo
+      natureza_operacao: rawDocument.nat_op || null,
+
+      // de/para local
+      map_fornecedor_ok: mapFornecedorOk,
+      map_destinatario_ok: mapDestinatarioOk,
+      map_itens_ok: mapItensOk,
+      map_status: mapStatus,
+      map_pendencias: mapPendencias,
+      participante_emit_id: participanteEmit?.id || null,
+      participante_dest_id: participanteDest?.id || null,
+
+      // fila ERP - nomes antigos
+      fila_erp_id: queue?.id || null,
+      fila_erp_status: queue?.status || null,
+      fila_erp_tentativas: queue?.tentativas ?? 0,
+      fila_erp_last_error: queue?.last_error || null,
+      fila_erp_integrado_em: queue?.integrado_em || null,
+      fila_erp_reservado_em: queue?.reservado_em || null,
+      fila_erp_reservado_por: queue?.reservado_por || null,
+
+      // fila ERP - nomes compatíveis com front da listagem/detalhe
+      queue_id: queue?.id || null,
+      queue_status: queue?.status || null,
+      queue_tentativas: queue?.tentativas ?? 0,
+      queue_last_error: queue?.last_error || null,
+      queue_integrado_em: queue?.integrado_em || null,
+      queue_reservado_em: queue?.reservado_em || null,
+      queue_reservado_por: queue?.reservado_por || null,
+
+      // última validação ERP - nomes antigos
+      validacao_erp_id: validacao?.id || null,
+      validacao_erp_status: statusValidacaoErp,
+      validacao_erp_mensagem: mensagemValidacaoErp,
+      validacao_erp_payload: validacao?.payload_json || null,
+      validacao_erp_created_at: validacao?.created_at || null,
+
+      // última validação ERP - nomes compatíveis com front
+      erp_validacao_status: statusValidacaoErp,
+      erp_validacao_mensagem: mensagemValidacaoErp,
+      erp_validado_em: validacao?.created_at || null,
+      erp_validacao_payload: validacao?.payload_json || null,
+    };
+
     return res.status(200).json({
-      document: {
-        ...document,
-
-        // de/para local
-        map_fornecedor_ok: mapFornecedorOk,
-        map_destinatario_ok: mapDestinatarioOk,
-        map_itens_ok: mapItensOk,
-        map_status: mapStatus,
-        map_pendencias: mapPendencias,
-        participante_emit_id: participanteEmit?.id || null,
-        participante_dest_id: participanteDest?.id || null,
-
-        // fila ERP
-        fila_erp_id: queue?.id || null,
-        fila_erp_status: queue?.status || null,
-        fila_erp_tentativas: queue?.tentativas ?? 0,
-        fila_erp_last_error: queue?.last_error || null,
-        fila_erp_integrado_em: queue?.integrado_em || null,
-        fila_erp_reservado_em: queue?.reservado_em || null,
-        fila_erp_reservado_por: queue?.reservado_por || null,
-
-        // última validação ERP
-        validacao_erp_id: validacao?.id || null,
-        validacao_erp_status: statusValidacaoErp,
-        validacao_erp_mensagem: mensagemValidacaoErp,
-        validacao_erp_payload: validacao?.payload_json || null,
-        validacao_erp_created_at: validacao?.created_at || null,
-      },
+      document,
       items,
       payments,
     });
