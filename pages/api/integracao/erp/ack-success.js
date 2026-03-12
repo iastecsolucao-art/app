@@ -52,9 +52,12 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "nfe_id inválido" });
     }
 
+    const msg = mensagem || "Integração concluída com sucesso";
+
     await client.query("BEGIN");
 
-    await client.query(
+    // Atualiza fila ERP
+    const queueRes = await client.query(
       `
       UPDATE public.nfe_erp_queue
       SET
@@ -65,10 +68,12 @@ export default async function handler(req, res) {
         reservado_em = NULL,
         reservado_por = NULL
       WHERE nfe_id = $1
+      RETURNING id
       `,
       [nfeId]
     );
 
+    // Atualiza documento
     await client.query(
       `
       UPDATE public.nfe_document
@@ -78,25 +83,28 @@ export default async function handler(req, res) {
       [nfeId]
     );
 
-    await client.query(
-      `
-      INSERT INTO public.nfe_erp_log (
-        nfe_id,
-        tipo_evento,
-        mensagem,
-        detalhes,
-        created_at
+    // Log da integração (não quebra o fluxo se falhar)
+    await client
+      .query(
+        `
+        INSERT INTO public.nfe_erp_log (
+          nfe_id,
+          tipo_evento,
+          mensagem,
+          detalhes,
+          created_at
+        )
+        VALUES (
+          $1,
+          'SUCESSO',
+          $2,
+          $3,
+          NOW()
+        )
+        `,
+        [nfeId, msg, protocolo_cliente || null]
       )
-      VALUES (
-        $1,
-        'SUCESSO',
-        $2,
-        $3,
-        NOW()
-      )
-      `,
-      [nfeId, mensagem || "Integração concluída com sucesso", protocolo_cliente || null]
-    ).catch(() => null);
+      .catch(() => null);
 
     await client.query("COMMIT");
 
@@ -104,6 +112,9 @@ export default async function handler(req, res) {
       success: true,
       nfe_id: nfeId,
       status: "INTEGRADO",
+      status_erp: 3,
+      queue_updated: queueRes.rowCount > 0,
+      integrado_em: new Date().toISOString(),
     });
   } catch (e) {
     try {

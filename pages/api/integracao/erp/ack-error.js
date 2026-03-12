@@ -52,11 +52,13 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "nfe_id inválido" });
     }
 
-    const mensagemErro = [erro, detalhes].filter(Boolean).join(" | ") || "Erro desconhecido ao integrar no ERP";
+    const mensagemErro =
+      [erro, detalhes].filter(Boolean).join(" | ") ||
+      "Erro desconhecido ao integrar no ERP";
 
     await client.query("BEGIN");
 
-    await client.query(
+    const queueRes = await client.query(
       `
       UPDATE public.nfe_erp_queue
       SET
@@ -67,6 +69,7 @@ export default async function handler(req, res) {
         reservado_em = NULL,
         reservado_por = NULL
       WHERE nfe_id = $1
+      RETURNING id, nfe_id, status, last_error
       `,
       [nfeId, mensagemErro]
     );
@@ -105,7 +108,9 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       nfe_id: nfeId,
+      queue_updated: queueRes.rowCount > 0,
       status: "ERRO",
+      status_erp: 2,
       last_error: mensagemErro,
     });
   } catch (e) {
