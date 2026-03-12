@@ -61,7 +61,7 @@ export default async function handler(req, res) {
         OR (
           status_integracao = 'PROCESSANDO'
           AND reservado_em IS NOT NULL
-          AND reservado_em < NOW() - INTERVAL '10 minutes'
+          AND reservado_em < NOW() - INTERVAL '1 minutes'
         )
       ORDER BY updated_at ASC, id ASC
       LIMIT $1
