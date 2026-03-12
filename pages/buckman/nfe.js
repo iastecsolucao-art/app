@@ -1324,13 +1324,30 @@ export default function NfeImport() {
 
  
 
-  function baixarXml(id) { 
+async function baixarXml(id) {
+  try {
+    const res = await fetch(`/api/nfe/${id}/xml`);
 
-    window.open(`/api/nfe/${id}/xml`, "_blank"); 
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data?.error || data?.details || `Falha ao baixar XML (${res.status})`);
+    }
 
-  } 
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
 
- 
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `nfe-${id}.xml`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    window.URL.revokeObjectURL(url);
+  } catch (e) {
+    setImportMsg(`Erro ao baixar XML: ${e instanceof Error ? e.message : String(e)}`);
+  }
+} 
 
   async function copiarChave(chave) { 
 
