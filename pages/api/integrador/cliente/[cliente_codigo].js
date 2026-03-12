@@ -26,7 +26,9 @@ if (!pool) {
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]);
-    return res.status(405).json({ error: `Método ${req.method} não permitido` });
+    return res.status(405).json({
+      error: `Método ${req.method} não permitido`,
+    });
   }
 
   const rawCodigo = Array.isArray(req.query.cliente_codigo)
@@ -82,15 +84,42 @@ export default async function handler(req, res) {
       [clienteCodigo]
     );
 
+    const importLogs = await client.query(
+      `
+      SELECT
+        id,
+        cliente_codigo,
+        tipo_importacao,
+        referencia,
+        status,
+        mensagem,
+        detalhes,
+        created_at
+      FROM public.integrador_import_log
+      WHERE cliente_codigo = $1
+      ORDER BY created_at DESC
+      LIMIT 100
+      `,
+      [clienteCodigo]
+    );
+
+    const ultimoHeartbeat = hb.rows?.[0] || null;
+
     return res.status(200).json({
       cliente_codigo: clienteCodigo,
+      resumo: ultimoHeartbeat,
       heartbeats: hb.rows,
       eventos: eventos.rows,
+      import_logs: importLogs.rows,
     });
   } catch (e) {
     console.error("Erro em /api/integrador/cliente/[cliente_codigo]:", {
       message: e?.message,
       stack: e?.stack,
+      code: e?.code,
+      detail: e?.detail,
+      hint: e?.hint,
+      table: e?.table,
     });
 
     return res.status(500).json({
