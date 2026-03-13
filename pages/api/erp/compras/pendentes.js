@@ -46,24 +46,35 @@ export default async function handler(req, res) {
     const result = await client.query(
       `
       SELECT
-        id,
-        pedido,
-        origem_texto,
-        status_integracao,
-        mensagem_integracao,
-        reservado_em,
-        reservado_por,
-        created_at,
-        updated_at
-      FROM public.erp_compra_queue
+        q.id,
+        q.nfe_id,
+        q.pedido,
+        q.origem_texto,
+        q.status_integracao,
+        q.mensagem_integracao,
+        q.reservado_em,
+        q.reservado_por,
+        q.created_at,
+        q.updated_at,
+
+        d.chave_nfe,
+        d.cnpj_emit AS cnpj_fornecedor,
+        d.cnpj_emit,
+        d.xnome_emit AS fornecedor,
+        d.xnome_emit,
+        d.infcpl,
+        d.infadfisco
+      FROM public.erp_compra_queue q
+      LEFT JOIN public.nfe_document d
+        ON d.id = q.nfe_id
       WHERE
-        status_integracao IN ('PENDENTE', 'ERRO','SEM_PEDIDO')
+        q.status_integracao IN ('PENDENTE', 'ERRO', 'SEM_PEDIDO', 'FORNECEDOR_DIVERGENTE')
         OR (
-          status_integracao = 'PROCESSANDO'
-          AND reservado_em IS NOT NULL
-          AND reservado_em < NOW() - INTERVAL '1 minutes'
+          q.status_integracao = 'PROCESSANDO'
+          AND q.reservado_em IS NOT NULL
+          AND q.reservado_em < NOW() - INTERVAL '1 minutes'
         )
-      ORDER BY updated_at ASC, id ASC
+      ORDER BY q.updated_at ASC, q.id ASC
       LIMIT $1
       FOR UPDATE SKIP LOCKED
       `,
@@ -71,7 +82,6 @@ export default async function handler(req, res) {
     );
 
     const rows = result.rows || [];
-
     const selectedIds = rows.map((r) => r.id);
 
     if (selectedIds.length > 0) {
