@@ -32,6 +32,10 @@ function normalizeText(v) {
   return s || null;
 }
 
+function normalizeCode(v) {
+  return String(v || "").trim();
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
@@ -45,7 +49,11 @@ export default async function handler(req, res) {
   try {
     const body = req.body || {};
     const cliente_codigo = normalizeText(body.cliente_codigo);
-    const nfe_id = body.nfe_id ? Number(body.nfe_id) : null;
+    const nfe_id =
+      body.nfe_id !== undefined && body.nfe_id !== null && String(body.nfe_id).trim() !== ""
+        ? Number(body.nfe_id)
+        : null;
+
     const fornecedor_cnpj = normalizeDigits(body.fornecedor_cnpj);
     const itens = Array.isArray(body.itens_pendentes) ? body.itens_pendentes : [];
 
@@ -65,10 +73,11 @@ export default async function handler(req, res) {
 
     let inserted = 0;
     let updated = 0;
+    let ignored = 0;
     const processed = [];
 
     for (const rawItem of itens) {
-      const cprod_origem = normalizeText(rawItem?.cprod_origem || rawItem?.cprod);
+      const cprod_origem = normalizeCode(rawItem?.cprod_origem || rawItem?.cprod);
       const xprod_origem = normalizeText(rawItem?.xprod_origem || rawItem?.xprod);
       const ncm_origem = normalizeText(rawItem?.ncm_origem || rawItem?.ncm);
       const cfop_origem = normalizeText(rawItem?.cfop_origem || rawItem?.cfop);
@@ -78,6 +87,12 @@ export default async function handler(req, res) {
       const n_item = rawItem?.n_item ?? null;
 
       if (!cprod_origem) {
+        ignored += 1;
+        processed.push({
+          n_item,
+          action: "ignored",
+          reason: "cprod_origem vazio",
+        });
         continue;
       }
 
@@ -87,7 +102,11 @@ export default async function handler(req, res) {
           id,
           codigo_produto_erp,
           descricao_erp,
-          status_map
+          status_map,
+          xprod_origem,
+          ncm_origem,
+          cfop_origem,
+          tipo_item_origem
         FROM public.nfe_item_erp_map
         WHERE cnpj_fornecedor = $1
           AND cprod_origem = $2
@@ -103,18 +122,25 @@ export default async function handler(req, res) {
           `
           UPDATE public.nfe_item_erp_map
           SET
-            xprod_origem = COALESCE($3, xprod_origem),
-            ncm_origem = COALESCE($4, ncm_origem),
-            cfop_origem = COALESCE($5, cfop_origem),
-            tipo_item_origem = COALESCE($6, tipo_item_origem),
-            codigo_produto_erp = COALESCE(codigo_produto_erp, $7),
-            descricao_erp = COALESCE(descricao_erp, $8),
+            xprod_origem      = COALESCE(xprod_origem, $2),
+            ncm_origem        = COALESCE(ncm_origem, $3),
+            cfop_origem       = COALESCE(cfop_origem, $4),
+            tipo_item_origem  = COALESCE(tipo_item_origem, $5),
+            codigo_produto_erp = CASE
+              WHEN codigo_produto_erp IS NULL OR TRIM(codigo_produto_erp) = ''
+                THEN $6
+              ELSE codigo_produto_erp
+            END,
+            descricao_erp = CASE
+              WHEN descricao_erp IS NULL OR TRIM(descricao_erp) = ''
+                THEN $7
+              ELSE descricao_erp
+            END,
             updated_at = NOW()
           WHERE id = $1
           `,
           [
             existing.id,
-            fornecedor_cnpj,
             xprod_origem,
             ncm_origem,
             cfop_origem,
@@ -130,6 +156,8 @@ export default async function handler(req, res) {
           n_item,
           cprod_origem,
           action: "updated",
+          status_map: existing.status_map,
+          codigo_produto_erp_atual: existing.codigo_produto_erp,
         });
 
         continue;
@@ -139,6 +167,8 @@ export default async function handler(req, res) {
         `
         INSERT INTO public.nfe_item_erp_map
         (
+          participante_id,
+          sistema_destino,
           cnpj_fornecedor,
           cprod_origem,
           xprod_origem,
@@ -154,8 +184,16 @@ export default async function handler(req, res) {
         )
         VALUES
         (
-          $1, $2, $3, $4, $5, $6,
-          $7, $8,
+          NULL,
+          'ERP',
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
           'PENDENTE',
           true,
           NOW(),
@@ -181,6 +219,7 @@ export default async function handler(req, res) {
         n_item,
         cprod_origem,
         action: "inserted",
+        status_map: "PENDENTE",
       });
     }
 
@@ -194,6 +233,7 @@ export default async function handler(req, res) {
       total_recebidos: itens.length,
       inserted,
       updated,
+      ignored,
       processed,
     });
   } catch (e) {

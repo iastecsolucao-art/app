@@ -72,7 +72,6 @@ export default async function handler(req, res) {
     }
 
     const nfeIds = queueRows.map((r) => Number(r.nfe_id));
-    const placeholders = nfeIds.map((_, i) => `$${i + 1}`).join(",");
 
     await client.query(
       `
@@ -107,50 +106,90 @@ export default async function handler(req, res) {
         d.uf_dest,
         d.municipio_dest
       FROM public.nfe_document d
-      WHERE d.id IN (${placeholders})
+      WHERE d.id = ANY($1::bigint[])
       `,
-      nfeIds
+      [nfeIds]
     );
 
     const itemRes = await client.query(
       `
-      SELECT
-        i.nfe_id,
-        i.n_item,
-        i.c_prod AS cprod,
-        i.x_prod AS xprod,
-        i.ncm,
-        i.cfop,
-        i.u_com AS ucom,
-        i.q_com AS qcom,
-        i.v_un_com AS vuncom,
-        i.v_prod AS vprod,
-        m.codigo_produto_erp,
-        m.descricao_erp
-      FROM public.nfe_item i
-      LEFT JOIN public.nfe_item_erp_map m
-        ON m.cnpj_fornecedor = (
-             SELECT d.cnpj_emit
-             FROM public.nfe_document d
-             WHERE d.id = i.nfe_id
-           )
-       AND (
-            m.cprod_origem = i.c_prod
-            OR (
-              COALESCE(NULLIF(TRIM(m.cprod_origem), ''), NULL) IS NULL
-              AND UPPER(COALESCE(m.xprod_origem, '')) = UPPER(COALESCE(i.x_prod, ''))
-              AND (
-                m.ncm_origem IS NULL
-                OR m.ncm_origem = i.ncm
+      WITH docs AS (
+        SELECT
+          d.id,
+          d.cnpj_emit,
+          regexp_replace(COALESCE(d.cnpj_emit, ''), '\\D', '', 'g') AS cnpj_emit_digits
+        FROM public.nfe_document d
+        WHERE d.id = ANY($1::bigint[])
+      ),
+      item_map_ranked AS (
+        SELECT
+          i.nfe_id,
+          i.n_item,
+          i.id AS item_row_id,
+          i.c_prod AS cprod,
+          i.x_prod AS xprod,
+          i.ncm,
+          i.cfop,
+          i.u_com AS ucom,
+          i.q_com AS qcom,
+          i.v_un_com AS vuncom,
+          i.v_prod AS vprod,
+          m.id AS map_id,
+          m.codigo_produto_erp,
+          m.descricao_erp,
+          m.status_map,
+          ROW_NUMBER() OVER (
+            PARTITION BY i.id
+            ORDER BY
+              CASE
+                WHEN COALESCE(NULLIF(TRIM(m.codigo_produto_erp), ''), NULL) IS NOT NULL
+                 AND COALESCE(m.status_map, 'PENDENTE') = 'OK' THEN 1
+                WHEN COALESCE(NULLIF(TRIM(m.codigo_produto_erp), ''), NULL) IS NOT NULL THEN 2
+                ELSE 99
+              END,
+              m.id DESC
+          ) AS rn
+        FROM public.nfe_item i
+        INNER JOIN docs d
+          ON d.id = i.nfe_id
+        LEFT JOIN public.nfe_item_erp_map m
+          ON regexp_replace(COALESCE(m.cnpj_fornecedor, ''), '\\D', '', 'g') = d.cnpj_emit_digits
+         AND COALESCE(m.ativo, true) = true
+         AND (
+              m.cprod_origem = i.c_prod
+              OR (
+                COALESCE(NULLIF(TRIM(m.cprod_origem), ''), NULL) IS NULL
+                AND UPPER(COALESCE(m.xprod_origem, '')) = UPPER(COALESCE(i.x_prod, ''))
+                AND (
+                  m.ncm_origem IS NULL
+                  OR m.ncm_origem = i.ncm
+                )
               )
-            )
-       )
-       AND COALESCE(m.ativo, true) = true
-       AND COALESCE(m.status_map, 'PENDENTE') = 'OK'
-      WHERE i.nfe_id IN (${placeholders})
-      ORDER BY i.nfe_id ASC, i.n_item ASC, i.id ASC
+         )
+      )
+      SELECT
+        nfe_id,
+        n_item,
+        cprod,
+        xprod,
+        ncm,
+        cfop,
+        ucom,
+        qcom,
+        vuncom,
+        vprod,
+        CASE
+          WHEN COALESCE(NULLIF(TRIM(codigo_produto_erp), ''), NULL) IS NOT NULL
+            THEN codigo_produto_erp
+          ELSE NULL
+        END AS codigo_produto_erp,
+        descricao_erp,
+        status_map
+      FROM item_map_ranked
+      WHERE rn = 1
+      ORDER BY nfe_id ASC, n_item ASC, item_row_id ASC
       `,
-      nfeIds
+      [nfeIds]
     );
 
     const payRes = await client.query(
@@ -165,10 +204,10 @@ export default async function handler(req, res) {
         p.card_tpintegra,
         p.card_caut
       FROM public.nfe_payment p
-      WHERE p.nfe_id IN (${placeholders})
+      WHERE p.nfe_id = ANY($1::bigint[])
       ORDER BY p.nfe_id ASC, p.id ASC
       `,
-      nfeIds
+      [nfeIds]
     );
 
     const partMapRes = await client.query(
@@ -176,7 +215,7 @@ export default async function handler(req, res) {
       SELECT
         m.participante_id,
         m.codigo_erp,
-        p.cnpj,
+        regexp_replace(COALESCE(p.cnpj, ''), '\\D', '', 'g') AS cnpj_digits,
         p.tipo
       FROM public.nfe_participante_erp_map m
       INNER JOIN public.nfe_participante p
@@ -187,13 +226,20 @@ export default async function handler(req, res) {
 
     const mapByTipoCnpj = new Map();
     for (const r of partMapRes.rows || []) {
-      mapByTipoCnpj.set(`${String(r.tipo || "").toUpperCase()}|${String(r.cnpj || "")}`, r);
+      mapByTipoCnpj.set(
+        `${String(r.tipo || "").toUpperCase()}|${String(r.cnpj_digits || "")}`,
+        r
+      );
     }
 
     const docsById = new Map();
+
     for (const d of docRes.rows || []) {
-      const emitMap = mapByTipoCnpj.get(`EMITENTE|${d.cnpj_emit}`) || null;
-      const destMap = mapByTipoCnpj.get(`DESTINATARIO|${d.cnpj_dest}`) || null;
+      const emitDigits = String(d.cnpj_emit || "").replace(/\D/g, "");
+      const destDigits = String(d.cnpj_dest || "").replace(/\D/g, "");
+
+      const emitMap = mapByTipoCnpj.get(`EMITENTE|${emitDigits}`) || null;
+      const destMap = mapByTipoCnpj.get(`DESTINATARIO|${destDigits}`) || null;
 
       docsById.set(Number(d.nfe_id), {
         nfe_id: Number(d.nfe_id),
@@ -239,6 +285,7 @@ export default async function handler(req, res) {
         vprod: it.vprod,
         codigo_produto_erp: it.codigo_produto_erp || null,
         descricao_erp: it.descricao_erp || null,
+        status_map: it.status_map || null,
       });
     }
 
