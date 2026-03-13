@@ -43,19 +43,50 @@ export default async function handler(req, res) {
 
     await client.query("BEGIN");
 
-    const result = await client.query(
+    // 1) Seleciona e trava somente a fila
+    const lockedRes = await client.query(
       `
+      WITH locked_queue AS (
+        SELECT
+          q.id,
+          q.nfe_id,
+          q.pedido,
+          q.origem_texto,
+          q.status_integracao,
+          q.mensagem_integracao,
+          q.reservado_em,
+          q.reservado_por,
+          q.created_at,
+          q.updated_at
+        FROM public.erp_compra_queue q
+        WHERE
+          q.status_integracao IN (
+            'PENDENTE',
+            'ERRO',
+            'SEM_PEDIDO',
+            'FORNECEDOR_DIVERGENTE',
+            'DEPARA_PENDENTE'
+          )
+          OR (
+            q.status_integracao = 'PROCESSANDO'
+            AND q.reservado_em IS NOT NULL
+            AND q.reservado_em < NOW() - INTERVAL '1 minutes'
+          )
+        ORDER BY q.updated_at ASC, q.id ASC
+        LIMIT $1
+        FOR UPDATE OF q SKIP LOCKED
+      )
       SELECT
-        q.id,
-        q.nfe_id,
-        q.pedido,
-        q.origem_texto,
-        q.status_integracao,
-        q.mensagem_integracao,
-        q.reservado_em,
-        q.reservado_por,
-        q.created_at,
-        q.updated_at,
+        lq.id,
+        lq.nfe_id,
+        lq.pedido,
+        lq.origem_texto,
+        lq.status_integracao,
+        lq.mensagem_integracao,
+        lq.reservado_em,
+        lq.reservado_por,
+        lq.created_at,
+        lq.updated_at,
 
         d.chave_nfe,
         d.cnpj_emit AS cnpj_fornecedor,
@@ -64,26 +95,18 @@ export default async function handler(req, res) {
         d.xnome_emit,
         d.infcpl,
         d.infadfisco
-      FROM public.erp_compra_queue q
+      FROM locked_queue lq
       LEFT JOIN public.nfe_document d
-        ON d.id = q.nfe_id
-      WHERE
-        q.status_integracao IN ('PENDENTE', 'ERRO', 'SEM_PEDIDO', 'FORNECEDOR_DIVERGENTE')
-        OR (
-          q.status_integracao = 'PROCESSANDO'
-          AND q.reservado_em IS NOT NULL
-          AND q.reservado_em < NOW() - INTERVAL '1 minutes'
-        )
-      ORDER BY q.updated_at ASC, q.id ASC
-      LIMIT $1
-      FOR UPDATE SKIP LOCKED
+        ON d.id = lq.nfe_id
+      ORDER BY lq.updated_at ASC, lq.id ASC
       `,
       [limit]
     );
 
-    const rows = result.rows || [];
+    const rows = lockedRes.rows || [];
     const selectedIds = rows.map((r) => r.id);
 
+    // 2) Marca os registros selecionados como PROCESSANDO
     if (selectedIds.length > 0) {
       await client.query(
         `
