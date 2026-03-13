@@ -36,6 +36,7 @@ function normalizeValidationStatus(v) {
 
   if (!s) return null;
   if (s === "VALIDADO_OK") return "OK";
+
   return s;
 }
 
@@ -121,7 +122,7 @@ export default async function handler(req, res) {
 
         where.push(`(
           COALESCE(d.xnome_dest, '') ILIKE ${pText}
-          OR REPLACE(REPLACE(REPLACE(COALESCE(d.cnpj_dest, ''), '.', ''), '/', ''), '-') ILIKE ${pDigits}
+          OR REPLACE(REPLACE(REPLACE(COALESCE(d.cnpj_dest, ''), '.', ''), '/', ''), '-', '') ILIKE ${pDigits}
         )`);
       } else {
         params.push(`%${destinatario}%`);
@@ -146,7 +147,11 @@ export default async function handler(req, res) {
       `);
     }
 
-    if (rawStatus !== undefined && rawStatus !== null && String(rawStatus).trim() !== "") {
+    if (
+      rawStatus !== undefined &&
+      rawStatus !== null &&
+      String(rawStatus).trim() !== ""
+    ) {
       const statusInt = parseInt(String(rawStatus), 10);
 
       if (!Number.isInteger(statusInt) || ![1, 2, 3, 4, 5].includes(statusInt)) {
@@ -206,8 +211,18 @@ export default async function handler(req, res) {
         v.mensagem AS validacao_msg_fallback,
         v.created_at AS validacao_created_at_fallback
       FROM public.nfe_document d
-      LEFT JOIN public.nfe_erp_queue q
-        ON q.nfe_id = d.id
+      LEFT JOIN LATERAL (
+        SELECT
+          qq.status,
+          qq.tentativas,
+          qq.last_error,
+          qq.integrado_em,
+          qq.mensagem_integracao
+        FROM public.nfe_erp_queue qq
+        WHERE qq.nfe_id = d.id
+        ORDER BY qq.id DESC
+        LIMIT 1
+      ) q ON TRUE
       LEFT JOIN LATERAL (
         SELECT
           vv.status_validacao,
@@ -231,7 +246,9 @@ export default async function handler(req, res) {
       return res.status(200).json({ rows: [] });
     }
 
-    const cnpjsEmit = [...new Set(rows.map((r) => normalizeCnpj(r.cnpj_emit)).filter(Boolean))];
+    const cnpjsEmit = [
+      ...new Set(rows.map((r) => normalizeCnpj(r.cnpj_emit)).filter(Boolean)),
+    ];
     const rowIds = rows.map((r) => r.id);
 
     const participanteRes =
@@ -249,7 +266,9 @@ export default async function handler(req, res) {
           )
         : { rows: [] };
 
-    const participantes = Array.isArray(participanteRes.rows) ? participanteRes.rows : [];
+    const participantes = Array.isArray(participanteRes.rows)
+      ? participanteRes.rows
+      : [];
 
     const itemRes =
       rowIds.length > 0
@@ -313,14 +332,16 @@ export default async function handler(req, res) {
 
       for (const item of docItems) {
         const hasValidMap =
-          item.map_id &&
+          !!item.map_id &&
           item.ativo === true &&
           String(item.status_map || "").toUpperCase() !== "IGNORADO" &&
-          item.codigo_produto_erp;
+          !!item.codigo_produto_erp;
 
         if (!hasValidMap) {
           fallbackItensOk = false;
-          fallbackPendencias.push(`Item ${item.cprod || "-"} - ${item.xprod || "-"} sem de/para ERP`);
+          fallbackPendencias.push(
+            `Item ${item.cprod || "-"} - ${item.xprod || "-"} sem de/para ERP`
+          );
         }
       }
 
@@ -336,14 +357,19 @@ export default async function handler(req, res) {
         mapPendencias = [];
       } else if (normalizedValidationStatus === "PENDENTE_ITEM") {
         mapStatus = "PENDENTE_ITEM";
+        mapPendencias = fallbackPendencias;
       } else if (normalizedValidationStatus === "PENDENTE_FORNECEDOR") {
         mapStatus = "PENDENTE_FORNECEDOR";
+        mapPendencias = fallbackPendencias;
       } else if (normalizedValidationStatus === "PENDENTE_DESTINATARIO") {
         mapStatus = "PENDENTE_DESTINATARIO";
+        mapPendencias = fallbackPendencias;
       } else if (normalizedValidationStatus === "PENDENTE") {
         mapStatus = "PENDENTE";
+        mapPendencias = fallbackPendencias;
       } else if (normalizedValidationStatus === "ERRO") {
         mapStatus = "ERRO";
+        mapPendencias = fallbackPendencias;
       } else {
         if (!fallbackFornecedorOk) {
           mapStatus = "PENDENTE_FORNECEDOR";
@@ -358,15 +384,23 @@ export default async function handler(req, res) {
       return {
         ...row,
         erp_validacao_status: normalizedValidationStatus,
-        erp_validacao_msg: row.erp_validacao_msg || row.validacao_msg_fallback || null,
-        erp_validado_em: row.erp_validado_em || row.validacao_created_at_fallback || null,
+        erp_validacao_msg:
+          row.erp_validacao_msg || row.validacao_msg_fallback || null,
+        erp_validado_em:
+          row.erp_validado_em || row.validacao_created_at_fallback || null,
 
         map_fornecedor_ok:
-          normalizedValidationStatus === "OK" ? true : (row.erp_fornecedor_existe ?? fallbackFornecedorOk),
+          normalizedValidationStatus === "OK"
+            ? true
+            : row.erp_fornecedor_existe ?? fallbackFornecedorOk,
         map_destinatario_ok:
-          normalizedValidationStatus === "OK" ? true : (row.erp_destinatario_existe ?? true),
+          normalizedValidationStatus === "OK"
+            ? true
+            : row.erp_destinatario_existe ?? true,
         map_itens_ok:
-          normalizedValidationStatus === "OK" ? true : (row.erp_itens_ok ?? fallbackItensOk),
+          normalizedValidationStatus === "OK"
+            ? true
+            : row.erp_itens_ok ?? fallbackItensOk,
         map_status: mapStatus,
         map_pendencias: mapPendencias,
         participante_emit_id: participanteEmit?.id || null,

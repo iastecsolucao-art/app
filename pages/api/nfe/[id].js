@@ -32,6 +32,7 @@ function normalizeValidationStatus(v) {
 
   if (!s) return null;
   if (s === "VALIDADO_OK") return "OK";
+
   return s;
 }
 
@@ -54,75 +55,75 @@ export default async function handler(req, res) {
     const docRes = await pool.query(
       `
       SELECT
-        id,
-        chave_nfe,
-        n_nf,
-        serie,
-        mod,
-        tp_nf,
-        nat_op,
-        dh_emi,
-        dh_sai_ent,
-        tpamb,
-        indfinal,
-        indpres,
-        indintermed,
-        nfref,
-        cstat,
-        xmotivo,
-        nprot,
-        dhrecbto,
-        cnpj_emit,
-        xnome_emit,
-        ie_emit,
-        crt_emit,
-        uf_emit,
-        municipio_emit,
-        cnpj_dest,
-        xnome_dest,
-        ie_dest,
-        indiedest,
-        uf_dest,
-        municipio_dest,
-        vprod,
-        vicms,
-        vbc,
-        vpis,
-        vcofins,
-        vnf,
-        vtottrib,
-        infcpl,
-        infadfisco,
-        obscont_xcampo,
-        obscont_xtexto,
-        intermed_cnpj,
-        intermed_id,
-        modfrete,
-        transp_cnpj,
-        transp_xnome,
-        transp_uf,
-        transp_xmun,
-        vol_qvol,
-        vol_pesol,
-        vol_pesob,
-        xml_raw,
-        created_at,
-        COALESCE(status_erp, 2) AS status_erp,
+        d.id,
+        d.chave_nfe,
+        d.n_nf,
+        d.serie,
+        d.mod,
+        d.tp_nf,
+        d.nat_op,
+        d.dh_emi,
+        d.dh_sai_ent,
+        d.tpamb,
+        d.indfinal,
+        d.indpres,
+        d.indintermed,
+        d.nfref,
+        d.cstat,
+        d.xmotivo,
+        d.nprot,
+        d.dhrecbto,
+        d.cnpj_emit,
+        d.xnome_emit,
+        d.ie_emit,
+        d.crt_emit,
+        d.uf_emit,
+        d.municipio_emit,
+        d.cnpj_dest,
+        d.xnome_dest,
+        d.ie_dest,
+        d.indiedest,
+        d.uf_dest,
+        d.municipio_dest,
+        d.vprod,
+        d.vicms,
+        d.vbc,
+        d.vpis,
+        d.vcofins,
+        d.vnf,
+        d.vtottrib,
+        d.infcpl,
+        d.infadfisco,
+        d.obscont_xcampo,
+        d.obscont_xtexto,
+        d.intermed_cnpj,
+        d.intermed_id,
+        d.modfrete,
+        d.transp_cnpj,
+        d.transp_xnome,
+        d.transp_uf,
+        d.transp_xmun,
+        d.vol_qvol,
+        d.vol_pesol,
+        d.vol_pesob,
+        d.xml_raw,
+        d.created_at,
+        COALESCE(d.status_erp, 2) AS status_erp,
 
-        erp_stage_status,
-        erp_stage_msg,
-        erp_integracao_id,
-        erp_stage_updated_at,
-        erp_integrado_em,
+        d.erp_stage_status,
+        d.erp_stage_msg,
+        d.erp_integracao_id,
+        d.erp_stage_updated_at,
+        d.erp_integrado_em,
 
-        erp_validacao_status,
-        erp_validacao_msg,
-        erp_validado_em,
-        erp_fornecedor_existe,
-        erp_destinatario_existe,
-        erp_itens_ok
-      FROM public.nfe_document
-      WHERE id = $1
+        d.erp_validacao_status,
+        d.erp_validacao_msg,
+        d.erp_validado_em,
+        d.erp_fornecedor_existe,
+        d.erp_destinatario_existe,
+        d.erp_itens_ok
+      FROM public.nfe_document d
+      WHERE d.id = $1
       LIMIT 1
       `,
       [idInt]
@@ -225,19 +226,19 @@ export default async function handler(req, res) {
     const queueRes = await pool.query(
       `
       SELECT
-        id,
-        status,
-        tentativas,
-        last_error,
-        integrado_em,
-        reservado_em,
-        reservado_por,
-        mensagem_integracao,
-        created_at,
-        updated_at
-      FROM public.nfe_erp_queue
-      WHERE nfe_id = $1
-      ORDER BY id DESC
+        q.id,
+        q.status,
+        q.tentativas,
+        q.last_error,
+        q.integrado_em,
+        q.reservado_em,
+        q.reservado_por,
+        q.mensagem_integracao,
+        q.created_at,
+        q.updated_at
+      FROM public.nfe_erp_queue q
+      WHERE q.nfe_id = $1
+      ORDER BY q.id DESC
       LIMIT 1
       `,
       [idInt]
@@ -248,15 +249,15 @@ export default async function handler(req, res) {
     const validacaoRes = await pool.query(
       `
       SELECT
-        id,
-        status_validacao,
-        mensagem,
-        payload_json,
-        created_at,
-        updated_at
-      FROM public.nfe_erp_validacao
-      WHERE nfe_id = $1
-      ORDER BY created_at DESC, id DESC
+        v.id,
+        v.status_validacao,
+        v.mensagem,
+        v.payload_json,
+        v.created_at,
+        v.updated_at
+      FROM public.nfe_erp_validacao v
+      WHERE v.nfe_id = $1
+      ORDER BY v.created_at DESC, v.id DESC
       LIMIT 1
       `,
       [idInt]
@@ -264,7 +265,6 @@ export default async function handler(req, res) {
 
     const validacao = validacaoRes.rows[0] || null;
 
-    const mapPendencias = [];
     const cnpjEmit = normalizeCnpj(rawDocument.cnpj_emit);
     const cnpjDest = normalizeCnpj(rawDocument.cnpj_dest);
 
@@ -285,22 +285,26 @@ export default async function handler(req, res) {
     );
 
     const participantes = Array.isArray(partRes.rows) ? partRes.rows : [];
+
     const participanteEmit =
       participantes.find((p) => normalizeCnpj(p.cnpj) === cnpjEmit) || null;
+
     const participanteDest =
       participantes.find((p) => normalizeCnpj(p.cnpj) === cnpjDest) || null;
+
+    const fallbackPendencias = [];
 
     const fallbackFornecedorOk = !!participanteEmit;
     const fallbackDestinatarioOk = !!participanteDest || !cnpjDest;
 
     if (!fallbackFornecedorOk) {
-      mapPendencias.push(
+      fallbackPendencias.push(
         `Fornecedor ${rawDocument.xnome_emit || "-"} (${cnpjEmit || "-"}) não cadastrado em participantes`
       );
     }
 
     if (!fallbackDestinatarioOk) {
-      mapPendencias.push(
+      fallbackPendencias.push(
         `Destinatário ${rawDocument.xnome_dest || "-"} (${cnpjDest || "-"}) não cadastrado em participantes`
       );
     }
@@ -342,27 +346,39 @@ export default async function handler(req, res) {
           if (mapStatus === "IGNORADO") return false;
 
           if (mapCprod && cprod && mapCprod === cprod) return true;
-          if (!mapCprod && mapXprod && xprod && mapXprod === xprod) return true;
+
+          if (
+            !mapCprod &&
+            mapXprod &&
+            xprod &&
+            mapXprod === xprod
+          ) {
+            return true;
+          }
 
           return false;
         });
 
         if (!cprod && !xprod) {
           fallbackItensOk = false;
-          mapPendencias.push(`Item ${item.n_item || "-"} sem código/descrição de origem`);
+          fallbackPendencias.push(
+            `Item ${item.n_item || "-"} sem código/descrição de origem`
+          );
           continue;
         }
 
         if (!found || !found.codigo_produto_erp) {
           fallbackItensOk = false;
-          mapPendencias.push(
+          fallbackPendencias.push(
             `Item ${cprod || "-"} - ${item.xprod || "-"} sem de/para ERP`
           );
         }
       }
     } else if (items.length > 0 && !cnpjEmit) {
       fallbackItensOk = false;
-      mapPendencias.push("Emitente sem CNPJ para validação de de/para dos itens");
+      fallbackPendencias.push(
+        "Emitente sem CNPJ para validação de de/para dos itens"
+      );
     }
 
     const normalizedValidationStatus = normalizeValidationStatus(
@@ -377,19 +393,19 @@ export default async function handler(req, res) {
       finalMapPendencias = [];
     } else if (normalizedValidationStatus === "PENDENTE_ITEM") {
       mapStatus = "PENDENTE_ITEM";
-      finalMapPendencias = mapPendencias;
+      finalMapPendencias = fallbackPendencias;
     } else if (normalizedValidationStatus === "PENDENTE_FORNECEDOR") {
       mapStatus = "PENDENTE_FORNECEDOR";
-      finalMapPendencias = mapPendencias;
+      finalMapPendencias = fallbackPendencias;
     } else if (normalizedValidationStatus === "PENDENTE_DESTINATARIO") {
       mapStatus = "PENDENTE_DESTINATARIO";
-      finalMapPendencias = mapPendencias;
+      finalMapPendencias = fallbackPendencias;
     } else if (normalizedValidationStatus === "PENDENTE") {
       mapStatus = "PENDENTE";
-      finalMapPendencias = mapPendencias;
+      finalMapPendencias = fallbackPendencias;
     } else if (normalizedValidationStatus === "ERRO") {
       mapStatus = "ERRO";
-      finalMapPendencias = mapPendencias;
+      finalMapPendencias = fallbackPendencias;
     } else {
       if (!fallbackFornecedorOk) {
         mapStatus = "PENDENTE_FORNECEDOR";
@@ -400,7 +416,8 @@ export default async function handler(req, res) {
       } else {
         mapStatus = "OK";
       }
-      finalMapPendencias = mapPendencias;
+
+      finalMapPendencias = fallbackPendencias;
     }
 
     const document = {
@@ -409,13 +426,23 @@ export default async function handler(req, res) {
       natureza_operacao: rawDocument.nat_op || null,
 
       map_fornecedor_ok:
-        normalizedValidationStatus === "OK" ? true : (rawDocument.erp_fornecedor_existe ?? fallbackFornecedorOk),
+        normalizedValidationStatus === "OK"
+          ? true
+          : (rawDocument.erp_fornecedor_existe ?? fallbackFornecedorOk),
+
       map_destinatario_ok:
-        normalizedValidationStatus === "OK" ? true : (rawDocument.erp_destinatario_existe ?? fallbackDestinatarioOk),
+        normalizedValidationStatus === "OK"
+          ? true
+          : (rawDocument.erp_destinatario_existe ?? fallbackDestinatarioOk),
+
       map_itens_ok:
-        normalizedValidationStatus === "OK" ? true : (rawDocument.erp_itens_ok ?? fallbackItensOk),
+        normalizedValidationStatus === "OK"
+          ? true
+          : (rawDocument.erp_itens_ok ?? fallbackItensOk),
+
       map_status: mapStatus,
       map_pendencias: finalMapPendencias,
+
       participante_emit_id: participanteEmit?.id || null,
       participante_dest_id: participanteDest?.id || null,
 
@@ -440,13 +467,17 @@ export default async function handler(req, res) {
 
       validacao_erp_id: validacao?.id || null,
       validacao_erp_status: normalizedValidationStatus,
-      validacao_erp_mensagem: rawDocument.erp_validacao_msg || validacao?.mensagem || null,
+      validacao_erp_mensagem:
+        rawDocument.erp_validacao_msg || validacao?.mensagem || null,
       validacao_erp_payload: validacao?.payload_json || null,
-      validacao_erp_created_at: rawDocument.erp_validado_em || validacao?.created_at || null,
+      validacao_erp_created_at:
+        rawDocument.erp_validado_em || validacao?.created_at || null,
 
       erp_validacao_status: normalizedValidationStatus,
-      erp_validacao_msg: rawDocument.erp_validacao_msg || validacao?.mensagem || null,
-      erp_validado_em: rawDocument.erp_validado_em || validacao?.created_at || null,
+      erp_validacao_msg:
+        rawDocument.erp_validacao_msg || validacao?.mensagem || null,
+      erp_validado_em:
+        rawDocument.erp_validado_em || validacao?.created_at || null,
       erp_validacao_payload: validacao?.payload_json || null,
     };
 
