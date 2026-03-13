@@ -31,6 +31,14 @@ function normalizeCnpj(v) {
   return String(v || "").replace(/\D/g, "");
 }
 
+function normalizeValidationStatus(v) {
+  const s = String(v || "").trim().toUpperCase();
+
+  if (!s) return null;
+  if (s === "VALIDADO_OK") return "OK";
+  return s;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]);
@@ -113,7 +121,7 @@ export default async function handler(req, res) {
 
         where.push(`(
           COALESCE(d.xnome_dest, '') ILIKE ${pText}
-          OR REPLACE(REPLACE(REPLACE(COALESCE(d.cnpj_dest, ''), '.', ''), '/', ''), '-', '') ILIKE ${pDigits}
+          OR REPLACE(REPLACE(REPLACE(COALESCE(d.cnpj_dest, ''), '.', ''), '/', ''), '-') ILIKE ${pDigits}
         )`);
       } else {
         params.push(`%${destinatario}%`);
@@ -121,13 +129,11 @@ export default async function handler(req, res) {
       }
     }
 
-    // Filtro por natureza da operação
     if (natureza_operacao) {
       params.push(`%${natureza_operacao}%`);
       where.push(`COALESCE(d.nat_op, '') ILIKE $${params.length}`);
     }
 
-    // Filtro por CFOP em qualquer item da NF
     if (cfop) {
       params.push(`%${cfop}%`);
       where.push(`
@@ -143,7 +149,7 @@ export default async function handler(req, res) {
     if (rawStatus !== undefined && rawStatus !== null && String(rawStatus).trim() !== "") {
       const statusInt = parseInt(String(rawStatus), 10);
 
-      if (!Number.isInteger(statusInt) || ![1, 2, 3].includes(statusInt)) {
+      if (!Number.isInteger(statusInt) || ![1, 2, 3, 4, 5].includes(statusInt)) {
         return res.status(400).json({
           error: "status_erp inválido",
         });
@@ -173,21 +179,39 @@ export default async function handler(req, res) {
         d.vnf,
         d.created_at,
         d.nat_op AS natureza_operacao,
+        d.infcpl,
+        d.infadfisco,
         COALESCE(d.status_erp, 2) AS status_erp,
+
+        d.erp_stage_status,
+        d.erp_stage_msg,
+        d.erp_integracao_id,
+        d.erp_stage_updated_at,
+        d.erp_integrado_em,
+
+        d.erp_validacao_status,
+        d.erp_validacao_msg,
+        d.erp_validado_em,
+        d.erp_fornecedor_existe,
+        d.erp_destinatario_existe,
+        d.erp_itens_ok,
 
         q.status AS queue_status,
         q.tentativas AS queue_tentativas,
         q.last_error AS queue_last_error,
         q.integrado_em AS queue_integrado_em,
+        q.mensagem_integracao,
 
-        v.status_validacao AS erp_validacao_status,
-        v.created_at AS erp_validado_em
+        v.status_validacao AS validacao_status_fallback,
+        v.mensagem AS validacao_msg_fallback,
+        v.created_at AS validacao_created_at_fallback
       FROM public.nfe_document d
       LEFT JOIN public.nfe_erp_queue q
         ON q.nfe_id = d.id
       LEFT JOIN LATERAL (
         SELECT
           vv.status_validacao,
+          vv.mensagem,
           vv.created_at
         FROM public.nfe_erp_validacao vv
         WHERE vv.nfe_id = d.id
@@ -207,9 +231,6 @@ export default async function handler(req, res) {
       return res.status(200).json({ rows: [] });
     }
 
-    // =========================
-    // VALIDAÇÃO DE/PARA PARA LISTAGEM
-    // =========================
     const cnpjsEmit = [...new Set(rows.map((r) => normalizeCnpj(r.cnpj_emit)).filter(Boolean))];
     const rowIds = rows.map((r) => r.id);
 
@@ -249,7 +270,13 @@ export default async function handler(req, res) {
               ON d.id = i.nfe_id
             LEFT JOIN public.nfe_item_erp_map m
               ON m.cnpj_fornecedor = d.cnpj_emit
-             AND m.cprod_origem = i.c_prod
+             AND (
+               m.cprod_origem = i.c_prod
+               OR (
+                 COALESCE(NULLIF(TRIM(m.cprod_origem), ''), NULL) IS NULL
+                 AND UPPER(COALESCE(m.xprod_origem, '')) = UPPER(COALESCE(i.x_prod, ''))
+               )
+             )
             WHERE i.nfe_id = ANY($1::bigint[])
             ORDER BY i.nfe_id, i.n_item, i.id
             `,
@@ -258,7 +285,6 @@ export default async function handler(req, res) {
         : { rows: [] };
 
     const itemRows = Array.isArray(itemRes.rows) ? itemRes.rows : [];
-
     const itemsByDoc = new Map();
 
     for (const item of itemRows) {
@@ -274,14 +300,13 @@ export default async function handler(req, res) {
         participantes.find((p) => normalizeCnpj(p.cnpj) === cnpjEmit) || null;
 
       const docItems = itemsByDoc.get(row.id) || [];
-      const pendencias = [];
+      const fallbackPendencias = [];
 
-      const mapFornecedorOk = !!participanteEmit;
-      const mapDestinatarioOk = true;
-      let mapItensOk = true;
+      const fallbackFornecedorOk = !!participanteEmit;
+      let fallbackItensOk = true;
 
-      if (!mapFornecedorOk) {
-        pendencias.push(
+      if (!fallbackFornecedorOk) {
+        fallbackPendencias.push(
           `Fornecedor ${row.xnome_emit || "-"} (${cnpjEmit || "-"}) não cadastrado em participantes`
         );
       }
@@ -294,28 +319,56 @@ export default async function handler(req, res) {
           item.codigo_produto_erp;
 
         if (!hasValidMap) {
-          mapItensOk = false;
-          pendencias.push(`Item ${item.cprod || "-"} - ${item.xprod || "-"} sem de/para ERP`);
+          fallbackItensOk = false;
+          fallbackPendencias.push(`Item ${item.cprod || "-"} - ${item.xprod || "-"} sem de/para ERP`);
         }
       }
 
-      let mapStatus = "OK";
+      const normalizedValidationStatus = normalizeValidationStatus(
+        row.erp_validacao_status || row.validacao_status_fallback
+      );
 
-      if (!mapFornecedorOk) {
-        mapStatus = "PENDENTE_FORNECEDOR";
-      } else if (!mapItensOk) {
+      let mapStatus = "NAO_VALIDADO";
+      let mapPendencias = [];
+
+      if (normalizedValidationStatus === "OK") {
+        mapStatus = "OK";
+        mapPendencias = [];
+      } else if (normalizedValidationStatus === "PENDENTE_ITEM") {
         mapStatus = "PENDENTE_ITEM";
-      } else if (!mapDestinatarioOk) {
+      } else if (normalizedValidationStatus === "PENDENTE_FORNECEDOR") {
+        mapStatus = "PENDENTE_FORNECEDOR";
+      } else if (normalizedValidationStatus === "PENDENTE_DESTINATARIO") {
         mapStatus = "PENDENTE_DESTINATARIO";
+      } else if (normalizedValidationStatus === "PENDENTE") {
+        mapStatus = "PENDENTE";
+      } else if (normalizedValidationStatus === "ERRO") {
+        mapStatus = "ERRO";
+      } else {
+        if (!fallbackFornecedorOk) {
+          mapStatus = "PENDENTE_FORNECEDOR";
+        } else if (!fallbackItensOk) {
+          mapStatus = "PENDENTE_ITEM";
+        } else {
+          mapStatus = "OK";
+        }
+        mapPendencias = fallbackPendencias;
       }
 
       return {
         ...row,
-        map_fornecedor_ok: mapFornecedorOk,
-        map_destinatario_ok: mapDestinatarioOk,
-        map_itens_ok: mapItensOk,
+        erp_validacao_status: normalizedValidationStatus,
+        erp_validacao_msg: row.erp_validacao_msg || row.validacao_msg_fallback || null,
+        erp_validado_em: row.erp_validado_em || row.validacao_created_at_fallback || null,
+
+        map_fornecedor_ok:
+          normalizedValidationStatus === "OK" ? true : (row.erp_fornecedor_existe ?? fallbackFornecedorOk),
+        map_destinatario_ok:
+          normalizedValidationStatus === "OK" ? true : (row.erp_destinatario_existe ?? true),
+        map_itens_ok:
+          normalizedValidationStatus === "OK" ? true : (row.erp_itens_ok ?? fallbackItensOk),
         map_status: mapStatus,
-        map_pendencias: pendencias,
+        map_pendencias: mapPendencias,
         participante_emit_id: participanteEmit?.id || null,
       };
     });
