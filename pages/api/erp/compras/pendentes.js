@@ -65,7 +65,9 @@ export default async function handler(req, res) {
             'ERRO',
             'SEM_PEDIDO',
             'FORNECEDOR_DIVERGENTE',
-            'DEPARA_PENDENTE'
+            'DEPARA_PENDENTE',
+            'PEDIDO_NAO_ENCONTRADO',
+            'FORNECEDOR_NAO_ENCONTRADO'
           )
           OR (
             q.status_integracao = 'PROCESSANDO'
