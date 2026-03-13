@@ -23,9 +23,26 @@ if (!pool) {
   global._erpPgPool = pool;
 }
 
+const ALLOWED_STATUS = new Set([
+  "PENDENTE",
+  "PROCESSADO",
+  "ERRO",
+  "SEM_PEDIDO",
+  "FORNECEDOR_DIVERGENTE",
+  "DEPARA_PENDENTE",
+  "ENTRADA_REALIZADA",
+]);
+
 function normalizeBody(body = {}) {
+  const queueIdRaw = body.queue_id ?? body.id ?? null;
+  const queue_id =
+    queueIdRaw === null || queueIdRaw === undefined || String(queueIdRaw).trim() === ""
+      ? null
+      : Number.parseInt(String(queueIdRaw), 10);
+
   return {
-    pedido: String(body.pedido || "").trim(),
+    queue_id: Number.isInteger(queue_id) && queue_id > 0 ? queue_id : null,
+    pedido: String(body.pedido || "").trim() || null,
     status: String(body.status || "").trim().toUpperCase(),
     message: body.message ? String(body.message).trim() : null,
   };
@@ -42,36 +59,70 @@ export default async function handler(req, res) {
   try {
     const data = normalizeBody(req.body);
 
-    if (!data.pedido) {
-      return res.status(400).json({ error: "pedido é obrigatório" });
+    if (!data.queue_id && !data.pedido) {
+      return res.status(400).json({
+        error: "queue_id ou pedido é obrigatório",
+      });
     }
 
-    if (!["PENDENTE", "PROCESSADO", "ERRO"].includes(data.status)) {
-      return res.status(400).json({ error: "status inválido" });
+    if (!ALLOWED_STATUS.has(data.status)) {
+      return res.status(400).json({
+        error: "status inválido",
+        allowed: Array.from(ALLOWED_STATUS),
+      });
     }
 
-    const result = await pool.query(
-      `
-      UPDATE public.erp_compra_queue
-      SET
-        status_integracao = $1,
-        mensagem_integracao = $2,
-        updated_at = NOW()
-      WHERE pedido = $3
-      RETURNING
-        id,
-        nfe_id,
-        chave_nfe,
-        pedido,
-        status_integracao,
-        mensagem_integracao,
-        updated_at
-      `,
-      [data.status, data.message, data.pedido]
-    );
+    let result;
+
+    if (data.queue_id) {
+      result = await pool.query(
+        `
+        UPDATE public.erp_compra_queue
+        SET
+          pedido = COALESCE($2, pedido),
+          status_integracao = $3,
+          mensagem_integracao = $4,
+          updated_at = NOW()
+        WHERE id = $1
+        RETURNING
+          id,
+          nfe_id,
+          chave_nfe,
+          pedido,
+          status_integracao,
+          mensagem_integracao,
+          updated_at
+        `,
+        [data.queue_id, data.pedido, data.status, data.message]
+      );
+    } else {
+      result = await pool.query(
+        `
+        UPDATE public.erp_compra_queue
+        SET
+          status_integracao = $1,
+          mensagem_integracao = $2,
+          updated_at = NOW()
+        WHERE pedido = $3
+        RETURNING
+          id,
+          nfe_id,
+          chave_nfe,
+          pedido,
+          status_integracao,
+          mensagem_integracao,
+          updated_at
+        `,
+        [data.status, data.message, data.pedido]
+      );
+    }
 
     if (!result.rowCount) {
-      return res.status(404).json({ error: "Pedido não encontrado na fila" });
+      return res.status(404).json({
+        error: "Registro não encontrado na fila",
+        queue_id: data.queue_id,
+        pedido: data.pedido,
+      });
     }
 
     return res.status(200).json({
