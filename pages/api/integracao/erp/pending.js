@@ -30,6 +30,46 @@ function checkAuth(req) {
   return !!API_TOKEN && token === API_TOKEN;
 }
 
+function normalizeDigits(v) {
+  return String(v || "").replace(/\D/g, "");
+}
+
+function normalizeText(v) {
+  const s = String(v || "").trim();
+  return s || null;
+}
+
+function extractPedidoFromText(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+
+  const normalized = raw.replace(/\s+/g, " ").toUpperCase();
+
+  const patterns = [
+    /\bPEDIDO\s+DE\s+COMPRA\s*[:\-]?\s*(\d{4,10})\b/i,
+    /\bPEDIDO\(S\)\s*[:\-]?\s*(\d{4,10})\b/i,
+    /\bN[ÚU]MERO\s+DO\s+PEDIDO\s*[:\-]?\s*(\d{4,10})\b/i,
+    /\bPEDIDO\s+IB\s*[:\-]?\s*(\d{4,10})\b/i,
+    /\bPEDIDO\s*[:\-]?\s*(\d{4,10})\b/i,
+    /\bPEDIDO\s+(\d{4,10})\b/i,
+    /\bP\.?EDIDO\s*[:\-]?\s*(\d{4,10})\b/i,
+    /\bPED\.\s*(\d{4,10})\b/i,
+    /\bPED\s*[:\-]?\s*(\d{4,10})\b/i,
+    /\bPED\s+(\d{4,10})\b/i,
+    /\bPC\s*[:\-]?\s*(\d{4,10})\b/i,
+    /\bPED\.?\s*N\.?\s*[:\-]?\s*(\d{4,10})\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    if (match?.[1]) {
+      return match[1].replace(/^0+/, "") || match[1];
+    }
+  }
+
+  return null;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]);
@@ -104,7 +144,10 @@ export default async function handler(req, res) {
         d.xnome_dest,
         d.ie_dest,
         d.uf_dest,
-        d.municipio_dest
+        d.municipio_dest,
+        d.infcpl,
+        d.infadfisco,
+        d.obscont_xtexto
       FROM public.nfe_document d
       WHERE d.id = ANY($1::bigint[])
       `,
@@ -116,7 +159,6 @@ export default async function handler(req, res) {
       WITH docs AS (
         SELECT
           d.id,
-          d.cnpj_emit,
           regexp_replace(COALESCE(d.cnpj_emit, ''), '\\D', '', 'g') AS cnpj_emit_digits
         FROM public.nfe_document d
         WHERE d.id = ANY($1::bigint[])
@@ -235,11 +277,19 @@ export default async function handler(req, res) {
     const docsById = new Map();
 
     for (const d of docRes.rows || []) {
-      const emitDigits = String(d.cnpj_emit || "").replace(/\D/g, "");
-      const destDigits = String(d.cnpj_dest || "").replace(/\D/g, "");
+      const emitDigits = normalizeDigits(d.cnpj_emit);
+      const destDigits = normalizeDigits(d.cnpj_dest);
 
       const emitMap = mapByTipoCnpj.get(`EMITENTE|${emitDigits}`) || null;
       const destMap = mapByTipoCnpj.get(`DESTINATARIO|${destDigits}`) || null;
+
+      const origem_texto =
+        normalizeText(d.obscont_xtexto) ||
+        normalizeText(d.infcpl) ||
+        normalizeText(d.infadfisco) ||
+        null;
+
+      const pedido_relacionado = extractPedidoFromText(origem_texto);
 
       docsById.set(Number(d.nfe_id), {
         nfe_id: Number(d.nfe_id),
@@ -248,6 +298,10 @@ export default async function handler(req, res) {
         serie: d.serie,
         dh_emi: d.dh_emi,
         vnf: d.vnf,
+        infcpl: d.infcpl || null,
+        infadfisco: d.infadfisco || null,
+        origem_texto,
+        pedido_relacionado,
         emitente: {
           cnpj: d.cnpj_emit,
           xnome: d.xnome_emit,
