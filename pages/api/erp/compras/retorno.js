@@ -31,6 +31,8 @@ const ALLOWED_STATUS = new Set([
   "FORNECEDOR_DIVERGENTE",
   "DEPARA_PENDENTE",
   "ENTRADA_REALIZADA",
+  "PEDIDO_NAO_ENCONTRADO",
+  "FORNECEDOR_NAO_ENCONTRADO",
 ]);
 
 function normalizeBody(body = {}) {
