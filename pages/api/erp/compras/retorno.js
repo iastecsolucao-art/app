@@ -87,7 +87,6 @@ export default async function handler(req, res) {
         RETURNING
           id,
           nfe_id,
-          chave_nfe,
           pedido,
           status_integracao,
           mensagem_integracao,
@@ -107,7 +106,6 @@ export default async function handler(req, res) {
         RETURNING
           id,
           nfe_id,
-          chave_nfe,
           pedido,
           status_integracao,
           mensagem_integracao,
