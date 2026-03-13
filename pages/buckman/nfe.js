@@ -84,43 +84,143 @@ function containsAnyTerm(source, terms) {
 
  
 
-const STATUS = { 
+function resumoObservacao(row) { 
 
-  2: "Importada / Aguardando envio ao ERP", 
+  const text = 
 
-  1: "Enviada ao ERP / Aguardando retorno", 
+    row?.infcpl || 
 
-  3: "Processada no ERP", 
+    row?.infadfisco || 
 
-}; 
+    row?.erp_stage_msg || 
+
+    row?.erp_validacao_msg || 
+
+    row?.mensagem_integracao || 
+
+    row?.obs || 
+
+    ""; 
 
  
 
-function statusLabel(v) { 
+  const s = String(text || "").trim(); 
 
-  const n = Number(v); 
+  if (!s) return "-"; 
 
-  return STATUS[n] || "-"; 
+  return s.length > 90 ? `${s.slice(0, 90)}...` : s; 
 
 } 
 
  
 
-function statusColor(v) { 
+function getQueueStatusText(rowOrDetail) { 
 
-  const n = Number(v); 
+  const obj = rowOrDetail || {}; 
 
  
 
-  if (n === 2) { 
+  const queueStatus = String( 
+
+    obj.queue_status || 
+
+      obj.fila_erp_status || 
+
+      obj.status_integracao || 
+
+      obj.queue?.status || 
+
+      "" 
+
+  ) 
+
+    .toUpperCase() 
+
+    .trim(); 
+
+ 
+
+  const queueMessage = String( 
+
+    obj.queue_message || 
+
+      obj.mensagem_integracao || 
+
+      obj.queue?.mensagem_integracao || 
+
+      obj.queue?.message || 
+
+      "" 
+
+  ) 
+
+    .toUpperCase() 
+
+    .trim(); 
+
+ 
+
+  if ( 
+
+    queueStatus === "SEM_PEDIDO" || 
+
+    queueMessage.includes("SEM NÚMERO DE PEDIDO") || 
+
+    queueMessage.includes("SEM NUMERO DE PEDIDO") || 
+
+    queueMessage.includes("PEDIDO NÃO IDENTIFICADO") || 
+
+    queueMessage.includes("PEDIDO NAO IDENTIFICADO") 
+
+  ) { 
+
+    return "SEM_PEDIDO"; 
+
+  } 
+
+ 
+
+  if (queueStatus) return queueStatus; 
+
+ 
+
+  return ""; 
+
+} 
+
+ 
+
+function getErpStatusInfo(rowOrDetail) { 
+
+  const obj = rowOrDetail || {}; 
+
+ 
+
+  const stage = String(obj.erp_stage_status || "").toUpperCase().trim(); 
+
+  const validacao = String(obj.erp_validacao_status || "").toUpperCase().trim(); 
+
+  const statusErp = Number(obj.status_erp); 
+
+  const queueStatus = getQueueStatusText(obj); 
+
+ 
+
+  if (queueStatus === "SEM_PEDIDO") { 
 
     return { 
 
-      background: "#fff7d6", 
+      label: "Parado na fila - sem pedido", 
 
-      color: "#8a6700", 
+      style: { 
 
-      border: "1px solid #f3d46b", 
+        background: "#ffe5e5", 
+
+        color: "#b00020", 
+
+        border: "1px solid #f2b8b5", 
+
+      }, 
 
     }; 
 
@@ -128,15 +228,21 @@ function statusColor(v) {
 
  
 
-  if (n === 1) { 
+  if (stage === "INTEGRADO") { 
 
     return { 
 
-      background: "#dff1ff", 
+      label: "Integrado", 
 
-      color: "#0b5cab", 
+      style: { 
 
-      border: "1px solid #8ec5ff", 
+        background: "#e6f7e8", 
+
+        color: "#166534", 
+
+        border: "1px solid #9ed8a6", 
+
+      }, 
 
     }; 
 
@@ -144,15 +250,351 @@ function statusColor(v) {
 
  
 
-  if (n === 3) { 
+  if (stage === "INTEGRADO_DIVERGENCIA") { 
 
     return { 
 
-      background: "#e6f7e8", 
+      label: "Integrado com divergência", 
 
-      color: "#166534", 
+      style: { 
 
-      border: "1px solid #9ed8a6", 
+        background: "#fff7d6", 
+
+        color: "#8a6700", 
+
+        border: "1px solid #f3d46b", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (stage === "INTEGRADO_DIVERGENCIA_QTD") { 
+
+    return { 
+
+      label: "Integrado com divergência de quantidade", 
+
+      style: { 
+
+        background: "#fff7d6", 
+
+        color: "#8a6700", 
+
+        border: "1px solid #f3d46b", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (stage === "INTEGRADO_DIVERGENCIA_VALOR") { 
+
+    return { 
+
+      label: "Integrado com divergência de valor", 
+
+      style: { 
+
+        background: "#fff7d6", 
+
+        color: "#8a6700", 
+
+        border: "1px solid #f3d46b", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (stage === "INTEGRADO_DIVERGENCIA_QTD_VALOR") { 
+
+    return { 
+
+      label: "Integrado com divergência de quantidade e valor", 
+
+      style: { 
+
+        background: "#fff7d6", 
+
+        color: "#8a6700", 
+
+        border: "1px solid #f3d46b", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (stage === "ERRO") { 
+
+    return { 
+
+      label: "Erro na integração", 
+
+      style: { 
+
+        background: "#ffe5e5", 
+
+        color: "#b00020", 
+
+        border: "1px solid #f2b8b5", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (stage === "DUPLICADA" || stage === "DUPLICADA_STAGE") { 
+
+    return { 
+
+      label: "NF duplicada", 
+
+      style: { 
+
+        background: "#f3f4f6", 
+
+        color: "#374151", 
+
+        border: "1px solid #d1d5db", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (stage === "PROCESSANDO") { 
+
+    return { 
+
+      label: "Processando ERP", 
+
+      style: { 
+
+        background: "#dff1ff", 
+
+        color: "#0b5cab", 
+
+        border: "1px solid #8ec5ff", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (stage === "PENDENTE") { 
+
+    return { 
+
+      label: "Pendente no ERP", 
+
+      style: { 
+
+        background: "#fff7d6", 
+
+        color: "#8a6700", 
+
+        border: "1px solid #f3d46b", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (validacao === "PENDENTE_ITEM") { 
+
+    return { 
+
+      label: "Item pendente", 
+
+      style: { 
+
+        background: "#fff7d6", 
+
+        color: "#8a6700", 
+
+        border: "1px solid #f3d46b", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (validacao === "PENDENTE_FORNECEDOR") { 
+
+    return { 
+
+      label: "Fornecedor pendente", 
+
+      style: { 
+
+        background: "#fff7d6", 
+
+        color: "#8a6700", 
+
+        border: "1px solid #f3d46b", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (validacao === "PENDENTE_DESTINATARIO") { 
+
+    return { 
+
+      label: "Destinatário pendente", 
+
+      style: { 
+
+        background: "#fff7d6", 
+
+        color: "#8a6700", 
+
+        border: "1px solid #f3d46b", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (statusErp === 5) { 
+
+    return { 
+
+      label: "Integrado com divergência", 
+
+      style: { 
+
+        background: "#fff7d6", 
+
+        color: "#8a6700", 
+
+        border: "1px solid #f3d46b", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (statusErp === 4) { 
+
+    return { 
+
+      label: "Erro na integração", 
+
+      style: { 
+
+        background: "#ffe5e5", 
+
+        color: "#b00020", 
+
+        border: "1px solid #f2b8b5", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (statusErp === 3) { 
+
+    return { 
+
+      label: "Processada no ERP", 
+
+      style: { 
+
+        background: "#e6f7e8", 
+
+        color: "#166534", 
+
+        border: "1px solid #9ed8a6", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (statusErp === 2) { 
+
+    return { 
+
+      label: "Importada / Aguardando envio ao ERP", 
+
+      style: { 
+
+        background: "#fff7d6", 
+
+        color: "#8a6700", 
+
+        border: "1px solid #f3d46b", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (statusErp === 1) { 
+
+    return { 
+
+      label: "Enviada ao ERP / Aguardando retorno", 
+
+      style: { 
+
+        background: "#dff1ff", 
+
+        color: "#0b5cab", 
+
+        border: "1px solid #8ec5ff", 
+
+      }, 
 
     }; 
 
@@ -162,11 +604,17 @@ function statusColor(v) {
 
   return { 
 
-    background: "#f3f4f6", 
+    label: "Pendente", 
 
-    color: "#374151", 
+    style: { 
 
-    border: "1px solid #d1d5db", 
+      background: "#f3f4f6", 
+
+      color: "#374151", 
+
+      border: "1px solid #d1d5db", 
+
+    }, 
 
   }; 
 
@@ -244,6 +692,22 @@ function filaStatusColor(v) {
 
  
 
+  if (s === "SEM_PEDIDO") { 
+
+    return { 
+
+      background: "#ffe5e5", 
+
+      color: "#b00020", 
+
+      border: "1px solid #f2b8b5", 
+
+    }; 
+
+  } 
+
+ 
+
   return { 
 
     background: "#f3f4f6", 
@@ -262,97 +726,45 @@ function mapStatusInfo(rowOrDetail) {
 
   const obj = rowOrDetail || {}; 
 
+ 
+
   const fornecedorOk = obj.map_fornecedor_ok; 
 
   const itensOk = obj.map_itens_ok; 
 
   const pendencias = Array.isArray(obj.map_pendencias) ? obj.map_pendencias : []; 
 
-  const mapStatus = obj.map_status || null; 
+  const mapStatus = String(obj.map_status || obj.erp_validacao_status || "").toUpperCase().trim(); 
 
  
 
-  if (mapStatus) { 
-
-    if (mapStatus === "OK") { 
-
-      return { 
-
-        label: "De/Para OK", 
-
-        style: { 
-
-          background: "#e6f7e8", 
-
-          color: "#166534", 
-
-          border: "1px solid #9ed8a6", 
-
-        }, 
-
-      }; 
-
-    } 
+  const queueStatus = getQueueStatusText(obj); 
 
  
 
-    if ( 
+  if (queueStatus === "SEM_PEDIDO") { 
 
-      mapStatus === "PENDENTE_FORNECEDOR" || 
+    return { 
 
-      mapStatus === "PENDENTE_ITEM" || 
+      label: "Sem pedido", 
 
-      mapStatus === "PENDENTE" || 
+      style: { 
 
-      mapStatus === "PENDENTE_DESTINATARIO" 
+        background: "#ffe5e5", 
 
-    ) { 
+        color: "#b00020", 
 
-      return { 
+        border: "1px solid #f2b8b5", 
 
-        label: "De/Para pendente", 
+      }, 
 
-        style: { 
-
-          background: "#fff7d6", 
-
-          color: "#8a6700", 
-
-          border: "1px solid #f3d46b", 
-
-        }, 
-
-      }; 
-
-    } 
-
- 
-
-    if (mapStatus === "ERRO") { 
-
-      return { 
-
-        label: "Erro no de/para", 
-
-        style: { 
-
-          background: "#ffe5e5", 
-
-          color: "#b00020", 
-
-          border: "1px solid #f2b8b5", 
-
-        }, 
-
-      }; 
-
-    } 
+    }; 
 
   } 
 
  
 
-  if (fornecedorOk === true && itensOk === true) { 
+  if (mapStatus === "OK") { 
 
     return { 
 
@@ -374,7 +786,83 @@ function mapStatusInfo(rowOrDetail) {
 
  
 
-  if (fornecedorOk === false || itensOk === false || pendencias.length > 0) { 
+  if (mapStatus === "PENDENTE_ITEM") { 
+
+    return { 
+
+      label: "Item pendente", 
+
+      style: { 
+
+        background: "#fff7d6", 
+
+        color: "#8a6700", 
+
+        border: "1px solid #f3d46b", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (mapStatus === "PENDENTE_FORNECEDOR") { 
+
+    return { 
+
+      label: "Fornecedor pendente", 
+
+      style: { 
+
+        background: "#fff7d6", 
+
+        color: "#8a6700", 
+
+        border: "1px solid #f3d46b", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (mapStatus === "PENDENTE_DESTINATARIO") { 
+
+    return { 
+
+      label: "Destinatário pendente", 
+
+      style: { 
+
+        background: "#fff7d6", 
+
+        color: "#8a6700", 
+
+        border: "1px solid #f3d46b", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if ( 
+
+    mapStatus === "PENDENTE" || 
+
+    fornecedorOk === false || 
+
+    itensOk === false || 
+
+    pendencias.length > 0 
+
+  ) { 
 
     return { 
 
@@ -387,6 +875,50 @@ function mapStatusInfo(rowOrDetail) {
         color: "#8a6700", 
 
         border: "1px solid #f3d46b", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (mapStatus === "ERRO") { 
+
+    return { 
+
+      label: "Erro no de/para", 
+
+      style: { 
+
+        background: "#ffe5e5", 
+
+        color: "#b00020", 
+
+        border: "1px solid #f2b8b5", 
+
+      }, 
+
+    }; 
+
+  } 
+
+ 
+
+  if (fornecedorOk === true && itensOk === true) { 
+
+    return { 
+
+      label: "De/Para OK", 
+
+      style: { 
+
+        background: "#e6f7e8", 
+
+        color: "#166534", 
+
+        border: "1px solid #9ed8a6", 
 
       }, 
 
@@ -628,6 +1160,42 @@ function DetailPanel({
 
   const mapInfo = mapStatusInfo(doc); 
 
+  const erpStatusInfo = getErpStatusInfo(doc); 
+
+ 
+
+  const observacoes = [ 
+
+    doc.infcpl, 
+
+    doc.infadfisco, 
+
+    doc.erp_stage_msg, 
+
+    doc.erp_validacao_msg, 
+
+    doc.mensagem_integracao, 
+
+    doc.obs, 
+
+  ] 
+
+    .map((v) => String(v || "").trim()) 
+
+    .filter(Boolean); 
+
+ 
+
+  const queueStatusText = 
+
+    getQueueStatusText(doc) || 
+
+    doc.queue_status || 
+
+    doc.fila_erp_status || 
+
+    "-"; 
+
  
 
   return ( 
@@ -646,9 +1214,9 @@ function DetailPanel({
 
           <div><strong>Natureza:</strong> {doc.natureza_operacao || doc.nat_op || "-"}</div> 
 
-          <div><strong>Status ERP:</strong> {statusLabel(doc.status_erp)}</div> 
+          <div><strong>Status ERP:</strong> {erpStatusInfo.label}</div> 
 
-          <div><strong>Status fila:</strong> {doc.queue_status || doc.fila_erp_status || "-"}</div> 
+          <div><strong>Status fila:</strong> {queueStatusText}</div> 
 
           <div><strong>Validação ERP:</strong> {doc.erp_validacao_status || doc.validacao_erp_status || "-"}</div> 
 
@@ -658,17 +1226,17 @@ function DetailPanel({
 
         <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}> 
 
-          <span style={{ ...statusColor(doc.status_erp), borderRadius: 999, padding: "6px 10px", fontSize: 12 }}> 
+          <span style={{ ...erpStatusInfo.style, borderRadius: 999, padding: "6px 10px", fontSize: 12 }}> 
 
-            {statusLabel(doc.status_erp)} 
+            {erpStatusInfo.label} 
 
           </span> 
 
  
 
-          <span style={{ ...filaStatusColor(doc.queue_status || doc.fila_erp_status), borderRadius: 999, padding: "6px 10px", fontSize: 12 }}> 
+          <span style={{ ...filaStatusColor(queueStatusText), borderRadius: 999, padding: "6px 10px", fontSize: 12 }}> 
 
-            {doc.queue_status || doc.fila_erp_status || "Sem fila"} 
+            {queueStatusText || "Sem fila"} 
 
           </span> 
 
@@ -753,6 +1321,52 @@ function DetailPanel({
         <button onClick={onOpenDanfe}>Visualizar DANFE</button> 
 
       </div> 
+
+ 
+
+      {observacoes.length > 0 ? ( 
+
+        <div style={{ marginTop: 16 }}> 
+
+          <h4>Observações</h4> 
+
+          <div 
+
+            style={{ 
+
+              background: "#f9fafb", 
+
+              border: "1px solid #e5e7eb", 
+
+              borderRadius: 8, 
+
+              padding: 12, 
+
+              whiteSpace: "pre-wrap", 
+
+              lineHeight: 1.5, 
+
+              fontSize: 13, 
+
+            }} 
+
+          > 
+
+            {observacoes.map((obs, idx) => ( 
+
+              <div key={idx} style={{ marginBottom: idx < observacoes.length - 1 ? 10 : 0 }}> 
+
+                {obs} 
+
+              </div> 
+
+            ))} 
+
+          </div> 
+
+        </div> 
+
+      ) : null} 
 
  
 
@@ -956,15 +1570,9 @@ export default function NfeImport() {
 
       if (f.destinatario?.trim()) params.set("destinatario", f.destinatario.trim()); 
 
- 
-
-      // envia como string única; o front também filtra localmente por múltiplos termos 
-
       if (f.natureza_operacao?.trim()) params.set("natureza_operacao", f.natureza_operacao.trim()); 
 
       if (f.cfop?.trim()) params.set("cfop", f.cfop.trim()); 
-
- 
 
       if (f.status_erp?.trim()) params.set("status_erp", f.status_erp.trim()); 
 
@@ -1254,7 +1862,9 @@ export default function NfeImport() {
 
     } catch (e) { 
 
-      setImportMsg(`Erro ao enviar para ERP: ${e instanceof Error ? e.message : String(e)}`); 
+      const msg = e instanceof Error ? e.message : String(e); 
+
+      setImportMsg("Erro ao enviar para ERP: " + msg); 
 
     } finally { 
 
@@ -1298,7 +1908,7 @@ export default function NfeImport() {
 
  
 
-      setImportMsg(data?.message || "NF marcada para reprocessamento."); 
+      setImportMsg(data?.message || "NF enviada para reprocessamento."); 
 
       await loadDocs(); 
 
@@ -1312,7 +1922,9 @@ export default function NfeImport() {
 
     } catch (e) { 
 
-      setImportMsg(`Erro ao reprocessar ERP: ${e instanceof Error ? e.message : String(e)}`); 
+      const msg = e instanceof Error ? e.message : String(e); 
+
+      setImportMsg("Erro ao reprocessar ERP: " + msg); 
 
     } finally { 
 
@@ -1324,38 +1936,59 @@ export default function NfeImport() {
 
  
 
-async function baixarXml(id) {
-  try {
-    const res = await fetch(`/api/nfe/${id}/xml`);
+  async function baixarXml(id) { 
 
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data?.error || data?.details || `Falha ao baixar XML (${res.status})`);
-    }
+    try { 
 
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
+      const res = await fetch(`/api/nfe/${id}/xml`); 
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `nfe-${id}.xml`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+      if (!res.ok) { 
 
-    window.URL.revokeObjectURL(url);
-  } catch (e) {
-    setImportMsg(`Erro ao baixar XML: ${e instanceof Error ? e.message : String(e)}`);
-  }
-} 
+        const data = await res.json().catch(() => ({})); 
+
+        throw new Error(data?.details || data?.error || `Falha (${res.status})`); 
+
+      } 
+
+ 
+
+      const blob = await res.blob(); 
+
+      const url = window.URL.createObjectURL(blob); 
+
+      const a = document.createElement("a"); 
+
+      a.href = url; 
+
+      a.download = `nfe-${id}.xml`; 
+
+      document.body.appendChild(a); 
+
+      a.click(); 
+
+      a.remove(); 
+
+      window.URL.revokeObjectURL(url); 
+
+    } catch (e) { 
+
+      const msg = e instanceof Error ? e.message : String(e); 
+
+      setImportMsg("Erro ao baixar XML: " + msg); 
+
+    } 
+
+  } 
+
+ 
 
   async function copiarChave(chave) { 
 
     try { 
 
-      await navigator.clipboard.writeText(chave || ""); 
+      await navigator.clipboard.writeText(String(chave || "")); 
 
-      setImportMsg("Chave copiada para a área de transferência."); 
+      setImportMsg("Chave copiada com sucesso."); 
 
     } catch { 
 
@@ -1367,203 +2000,81 @@ async function baixarXml(id) {
 
  
 
-  function limparFiltros() { 
-
-    const cleared = { 
-
-      chave_nfe: "", 
-
-      n_nf: "", 
-
-      serie: "", 
-
-      emitente: "", 
-
-      destinatario: "", 
-
-      natureza_operacao: "", 
-
-      cfop: "", 
-
-      status_erp: "", 
-
-    }; 
-
- 
-
-    setFilters(cleared); 
-
-    loadDocs(cleared); 
-
-  } 
-
- 
-
-  async function onBuscar(e) { 
-
-    e?.preventDefault?.(); 
-
-    await loadDocs(); 
-
-  } 
-
- 
-
   return ( 
 
-    <div style={{ padding: 20 }}> 
+    <div style={{ padding: 16 }}> 
 
-      <h1>NFe - Importar XML</h1> 
-
- 
-
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}> 
-
-        <input 
-
-          type="file" 
-
-          accept=".xml,text/xml,application/xml" 
-
-          onChange={onPickFile} 
-
-          disabled={loading} 
-
-        /> 
-
-        <button onClick={importar} disabled={loading || !xmlText}> 
-
-          {loading ? "Importando..." : "Importar"} 
-
-        </button> 
-
-      </div> 
+      <h1 style={{ marginTop: 0 }}>NF-e</h1> 
 
  
 
-      <div style={{ marginTop: 10, fontSize: 14 }}> 
+      <div style={cardStyle}> 
 
-        {fileName && ( 
-
-          <div> 
-
-            <strong>Arquivo:</strong> {fileName} 
-
-          </div> 
-
-        )} 
-
-        {chavePreview && ( 
-
-          <div> 
-
-            <strong>Chave (prévia):</strong> {chavePreview} 
-
-          </div> 
-
-        )} 
-
-      </div> 
+        <h3 style={{ marginTop: 0 }}>Importar XML</h3> 
 
  
 
-      {importMsg && ( 
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}> 
 
-        <p 
+          <input type="file" accept=".xml,text/xml" onChange={onPickFile} /> 
 
-          style={{ 
+          <button onClick={importar} disabled={loading || !xmlText}> 
 
-            marginTop: 10, 
+            {loading ? "Importando..." : "Importar XML"} 
 
-            fontWeight: "bold", 
+          </button> 
 
-            color: importMsg.toLowerCase().includes("erro") ? "red" : "green", 
-
-          }} 
-
-        > 
-
-          {importMsg} 
-
-        </p> 
-
-      )} 
+        </div> 
 
  
 
-      {xmlText && ( 
+        <div style={{ marginTop: 8, fontSize: 13, color: "#4b5563" }}> 
 
-        <details style={{ marginTop: 12 }}> 
+          <div><strong>Arquivo:</strong> {fileName || "-"}</div> 
 
-          <summary>Ver XML (raw)</summary> 
+          <div><strong>Chave (preview):</strong> {chavePreview || "-"}</div> 
 
-          <pre 
-
-            style={{ 
-
-              whiteSpace: "pre-wrap", 
-
-              background: "#f7f7f7", 
-
-              padding: 10, 
-
-              borderRadius: 8, 
-
-              overflowX: "auto", 
-
-            }} 
-
-          > 
-
-            {xmlText.slice(0, 20000)} 
-
-            {xmlText.length > 20000 ? "\n\n... (cortado)" : ""} 
-
-          </pre> 
-
-        </details> 
-
-      )} 
+        </div> 
 
  
 
-      <hr style={{ margin: "18px 0" }} /> 
+        {xmlText ? ( 
 
- 
+          <textarea 
 
-      <h2>Documentos importados</h2> 
+            value={xmlText} 
 
- 
+            onChange={(e) => setXmlText(e.target.value)} 
 
-      <form onSubmit={onBuscar}> 
+            rows={8} 
 
-        <div 
-
-          style={{ 
-
-            display: "grid", 
-
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", 
-
-            gap: 10, 
-
-            marginBottom: 12, 
-
-          }} 
-
-        > 
-
-          <input 
-
-            placeholder="Chave NFe" 
-
-            value={filters.chave_nfe} 
-
-            onChange={(e) => setFilters((s) => ({ ...s, chave_nfe: e.target.value }))} 
+            style={{ width: "100%", marginTop: 12 }} 
 
           /> 
 
+        ) : null} 
+
+      </div> 
+
  
+
+      <div style={cardStyle}> 
+
+        <h3 style={{ marginTop: 0 }}>Filtros</h3> 
+
+ 
+
+        <div style={filterGridStyle}> 
+
+          <input 
+
+            placeholder="Chave NF-e" 
+
+            value={filters.chave_nfe} 
+
+            onChange={(e) => setFilters((old) => ({ ...old, chave_nfe: e.target.value }))} 
+
+          /> 
 
           <input 
 
@@ -1571,11 +2082,9 @@ async function baixarXml(id) {
 
             value={filters.n_nf} 
 
-            onChange={(e) => setFilters((s) => ({ ...s, n_nf: e.target.value }))} 
+            onChange={(e) => setFilters((old) => ({ ...old, n_nf: e.target.value }))} 
 
           /> 
-
- 
 
           <input 
 
@@ -1583,11 +2092,9 @@ async function baixarXml(id) {
 
             value={filters.serie} 
 
-            onChange={(e) => setFilters((s) => ({ ...s, serie: e.target.value }))} 
+            onChange={(e) => setFilters((old) => ({ ...old, serie: e.target.value }))} 
 
           /> 
-
- 
 
           <input 
 
@@ -1595,11 +2102,9 @@ async function baixarXml(id) {
 
             value={filters.emitente} 
 
-            onChange={(e) => setFilters((s) => ({ ...s, emitente: e.target.value }))} 
+            onChange={(e) => setFilters((old) => ({ ...old, emitente: e.target.value }))} 
 
           /> 
-
- 
 
           <input 
 
@@ -1607,227 +2112,259 @@ async function baixarXml(id) {
 
             value={filters.destinatario} 
 
-            onChange={(e) => setFilters((s) => ({ ...s, destinatario: e.target.value }))} 
+            onChange={(e) => setFilters((old) => ({ ...old, destinatario: e.target.value }))} 
 
           /> 
 
- 
-
           <input 
 
-            placeholder="Natureza da operação (ex: transferência, venda)" 
+            placeholder="Natureza (aceita múltiplos separados por vírgula)" 
 
             value={filters.natureza_operacao} 
 
-            onChange={(e) => 
-
-              setFilters((s) => ({ ...s, natureza_operacao: e.target.value })) 
-
-            } 
+            onChange={(e) => setFilters((old) => ({ ...old, natureza_operacao: e.target.value }))} 
 
           /> 
-
- 
 
           <input 
 
-            placeholder="CFOP (ex: 5102, 5152)" 
+            placeholder="CFOP (aceita múltiplos separados por vírgula)" 
 
             value={filters.cfop} 
 
-            onChange={(e) => setFilters((s) => ({ ...s, cfop: e.target.value }))} 
+            onChange={(e) => setFilters((old) => ({ ...old, cfop: e.target.value }))} 
 
           /> 
 
- 
+          <input 
 
-          <select 
+            placeholder="Status ERP" 
 
             value={filters.status_erp} 
 
-            onChange={(e) => setFilters((s) => ({ ...s, status_erp: e.target.value }))} 
+            onChange={(e) => setFilters((old) => ({ ...old, status_erp: e.target.value }))} 
 
-          > 
-
-            <option value="">Todos os status</option> 
-
-            <option value="1">Enviada ao ERP</option> 
-
-            <option value="2">Importada</option> 
-
-            <option value="3">Processada no ERP</option> 
-
-          </select> 
+          /> 
 
         </div> 
 
  
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}> 
+        <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}> 
 
-          <button type="submit">Buscar</button> 
+          <button onClick={() => loadDocs()}>Pesquisar</button> 
 
-          <button type="button" onClick={limparFiltros}> 
+          <button 
+
+            onClick={() => { 
+
+              const clear = { 
+
+                chave_nfe: "", 
+
+                n_nf: "", 
+
+                serie: "", 
+
+                emitente: "", 
+
+                destinatario: "", 
+
+                natureza_operacao: "", 
+
+                cfop: "", 
+
+                status_erp: "", 
+
+              }; 
+
+              setFilters(clear); 
+
+              loadDocs(clear); 
+
+            }} 
+
+          > 
 
             Limpar 
 
           </button> 
 
-          <span style={{ fontSize: 12, color: "#6b7280", alignSelf: "center" }}> 
+        </div> 
 
-            Natureza e CFOP aceitam múltiplos termos separados por vírgula. 
+      </div> 
 
-          </span> 
+ 
+
+      {importMsg ? ( 
+
+        <div 
+
+          style={{ 
+
+            marginBottom: 16, 
+
+            padding: 12, 
+
+            borderRadius: 8, 
+
+            background: "#f3f4f6", 
+
+            border: "1px solid #d1d5db", 
+
+            whiteSpace: "pre-wrap", 
+
+          }} 
+
+        > 
+
+          {importMsg} 
 
         </div> 
 
-      </form> 
+      ) : null} 
 
  
 
-      <div style={{ overflowX: "auto" }}> 
+      <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: 16 }}> 
 
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}> 
+        <div style={cardStyle}> 
 
-          <thead> 
-
-            <tr> 
-
-              <th style={tableHead}>Chave</th> 
-
-              <th style={tableHead}>Nº/Série</th> 
-
-              <th style={tableHead}>Emitente</th> 
-
-              <th style={tableHead}>Destinatário</th> 
-
-              <th style={tableHead}>Natureza</th> 
-
-              <th style={tableHead}>VNF</th> 
-
-              <th style={tableHead}>Status ERP</th> 
-
-              <th style={tableHead}>De/Para</th> 
-
-              <th style={tableHead}>Criado em</th> 
-
-              <th style={tableHead}>Ações</th> 
-
-            </tr> 
-
-          </thead> 
-
-          <tbody> 
-
-            {filteredDocs.length === 0 ? ( 
-
-              <tr> 
-
-                <td colSpan={10} style={tableCellEmpty}> 
-
-                  Nenhum documento encontrado. 
-
-                </td> 
-
-              </tr> 
-
-            ) : ( 
-
-              filteredDocs.map((row) => { 
-
-                const mapInfo = mapStatusInfo(row); 
+          <h3 style={{ marginTop: 0 }}>Documentos ({filteredDocs.length})</h3> 
 
  
 
-                return ( 
+          <div style={{ overflowX: "auto" }}> 
 
-                  <tr 
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}> 
 
-                    key={row.id} 
+              <thead> 
 
-                    style={{ 
+                <tr> 
 
-                      background: selectedId === row.id ? "#f8fbff" : "#fff", 
+                  <th style={tableHead}>Chave</th> 
 
-                    }} 
+                  <th style={tableHead}>Emitente</th> 
 
-                  > 
+                  <th style={tableHead}>Destinatário</th> 
 
-                    <td style={tableCell}>{row.chave_nfe || "-"}</td> 
+                  <th style={tableHead}>Natureza</th> 
 
-                    <td style={tableCell}> 
+                  <th style={tableHead}>VNF</th> 
 
-                      {row.n_nf || "-"} / {row.serie || "-"} 
+                  <th style={tableHead}>Status ERP</th> 
+
+                  <th style={tableHead}>De/Para</th> 
+
+                  <th style={tableHead}>Observação</th> 
+
+                  <th style={tableHead}>Criado em</th> 
+
+                  <th style={tableHead}>Ações</th> 
+
+                </tr> 
+
+              </thead> 
+
+ 
+
+              <tbody> 
+
+                {filteredDocs.length === 0 ? ( 
+
+                  <tr> 
+
+                    <td colSpan={10} style={tableCellEmpty}> 
+
+                      Nenhum documento encontrado. 
 
                     </td> 
 
-                    <td style={tableCell}> 
+                  </tr> 
 
-                      <div>{row.xnome_emit || "-"}</div> 
+                ) : ( 
 
-                      <div style={{ color: "#6b7280", fontSize: 12 }}> 
+                  filteredDocs.map((row) => { 
 
-                        {onlyDigits(row.cnpj_emit) || "-"} 
+                    const erpInfo = getErpStatusInfo(row); 
 
-                      </div> 
+                    const mapInfo = mapStatusInfo(row); 
 
-                    </td> 
+ 
 
-                    <td style={tableCell}> 
+                    return ( 
 
-                      <div>{row.xnome_dest || "-"}</div> 
+                      <tr 
 
-                      <div style={{ color: "#6b7280", fontSize: 12 }}> 
-
-                        {onlyDigits(row.cnpj_dest) || "-"} 
-
-                      </div> 
-
-                    </td> 
-
-                    <td style={tableCell}>{row.natureza_operacao || row.nat_op || "-"}</td> 
-
-                    <td style={tableCell}>{moneyBR(row.vnf)}</td> 
-
-                    <td style={tableCell}> 
-
-                      <span 
+                        key={row.id} 
 
                         style={{ 
 
-                          ...statusColor(row.status_erp), 
-
-                          borderRadius: 999, 
-
-                          padding: "4px 8px", 
-
-                          fontSize: 12, 
-
-                          display: "inline-block", 
+                          background: selectedId === row.id ? "#f9fafb" : "#fff", 
 
                         }} 
 
                       > 
 
-                        {statusLabel(row.status_erp)} 
+                        <td style={tableCell}> 
 
-                      </span> 
+                          <div style={{ maxWidth: 220, wordBreak: "break-all" }}> 
+
+                            {row.chave_nfe || "-"} 
+
+                          </div> 
+
+                        </td> 
 
  
 
-                      {row.queue_status ? ( 
+                        <td style={tableCell}> 
 
-                        <div style={{ marginTop: 6 }}> 
+                          <div>{row.xnome_emit || "-"}</div> 
+
+                          <div style={{ color: "#6b7280", fontSize: 12 }}> 
+
+                            {onlyDigits(row.cnpj_emit) || "-"} 
+
+                          </div> 
+
+                        </td> 
+
+ 
+
+                        <td style={tableCell}> 
+
+                          <div>{row.xnome_dest || "-"}</div> 
+
+                          <div style={{ color: "#6b7280", fontSize: 12 }}> 
+
+                            {onlyDigits(row.cnpj_dest) || "-"} 
+
+                          </div> 
+
+                        </td> 
+
+ 
+
+                        <td style={tableCell}>{row.natureza_operacao || row.nat_op || "-"}</td> 
+
+ 
+
+                        <td style={tableCell}>{moneyBR(row.vnf)}</td> 
+
+ 
+
+                        <td style={tableCell}> 
 
                           <span 
 
                             style={{ 
 
-                              ...filaStatusColor(row.queue_status), 
+                              ...erpInfo.style, 
 
                               borderRadius: 999, 
 
-                              padding: "4px 8px", 
+                              padding: "6px 10px", 
 
                               fontSize: 12, 
 
@@ -1837,129 +2374,131 @@ async function baixarXml(id) {
 
                           > 
 
-                            {row.queue_status} 
+                            {erpInfo.label} 
 
                           </span> 
 
-                        </div> 
-
-                      ) : null} 
-
-                    </td> 
-
-                    <td style={tableCell}> 
-
-                      <span 
-
-                        style={{ 
-
-                          ...mapInfo.style, 
-
-                          borderRadius: 999, 
-
-                          padding: "4px 8px", 
-
-                          fontSize: 12, 
-
-                          display: "inline-block", 
-
-                        }} 
-
-                      > 
-
-                        {mapInfo.label} 
-
-                      </span> 
-
-                    </td> 
-
-                    <td style={tableCell}>{formatDateBR(row.created_at)}</td> 
-
-                    <td style={tableCell}> 
-
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}> 
-
-                        <button onClick={() => verDetalhe(row.id)}>Ver detalhes</button> 
+                        </td> 
 
  
 
-                        <button onClick={() => baixarXml(row.id)}>Baixar XML</button> 
+                        <td style={tableCell}> 
 
- 
+                          <span 
 
-                        <button 
+                            style={{ 
 
-                          onClick={async () => { 
+                              ...mapInfo.style, 
 
-                            await verDetalhe(row.id); 
+                              borderRadius: 999, 
 
-                            setShowDanfePdf(true); 
+                              padding: "6px 10px", 
 
-                          }} 
+                              fontSize: 12, 
 
-                        > 
+                              display: "inline-block", 
 
-                          Ver DANFE 
-
-                        </button> 
-
- 
-
-                        {Number(row.status_erp) === 2 ? ( 
-
-                          <button 
-
-                            onClick={() => enviarParaErp(row.id)} 
-
-                            disabled={sendingErpId === row.id} 
+                            }} 
 
                           > 
 
-                            {sendingErpId === row.id ? "Enviando..." : "Enviar ERP"} 
+                            {mapInfo.label} 
 
-                          </button> 
+                          </span> 
 
-                        ) : null} 
-
- 
-
-                        {(Number(row.status_erp) === 1 || Number(row.status_erp) === 3) ? ( 
-
-                          <button 
-
-                            onClick={() => reprocessarErp(row.id)} 
-
-                            disabled={reprocessingId === row.id} 
-
-                          > 
-
-                            {reprocessingId === row.id ? "Reprocessando..." : "Reprocessar ERP"} 
-
-                          </button> 
-
-                        ) : null} 
-
-                      </div> 
-
-                    </td> 
-
-                  </tr> 
-
-                ); 
-
-              }) 
-
-            )} 
-
-          </tbody> 
-
-        </table> 
-
-      </div> 
+                        </td> 
 
  
 
-      <div style={{ marginTop: 20 }}> 
+                        <td style={tableCell} title={row.infcpl || row.infadfisco || row.erp_stage_msg || row.erp_validacao_msg || row.mensagem_integracao || ""}> 
+
+                          {resumoObservacao(row)} 
+
+                        </td> 
+
+ 
+
+                        <td style={tableCell}>{formatDateBR(row.created_at)}</td> 
+
+ 
+
+                        <td style={tableCell}> 
+
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}> 
+
+                            <button onClick={() => verDetalhe(row.id)}>Ver detalhes</button> 
+
+                            <button onClick={() => baixarXml(row.id)}>Baixar XML</button> 
+
+                            <button 
+
+                              onClick={() => { 
+
+                                setSelectedId(row.id); 
+
+                                if (!detail || detail?.document?.id !== row.id) { 
+
+                                  verDetalhe(row.id).then(() => setShowDanfePdf(true)); 
+
+                                } else { 
+
+                                  setShowDanfePdf(true); 
+
+                                } 
+
+                              }} 
+
+                            > 
+
+                              Ver DANFE 
+
+                            </button> 
+
+                            <button 
+
+                              onClick={() => reprocessarErp(row.id)} 
+
+                              disabled={reprocessingId === row.id} 
+
+                            > 
+
+                              {reprocessingId === row.id ? "Reprocessando..." : "Reprocessar ERP"} 
+
+                            </button> 
+
+                            <button 
+
+                              onClick={() => enviarParaErp(row.id)} 
+
+                              disabled={sendingErpId === row.id} 
+
+                            > 
+
+                              {sendingErpId === row.id ? "Enviando..." : "Enviar ERP"} 
+
+                            </button> 
+
+                          </div> 
+
+                        </td> 
+
+                      </tr> 
+
+                    ); 
+
+                  }) 
+
+                )} 
+
+              </tbody> 
+
+            </table> 
+
+          </div> 
+
+        </div> 
+
+ 
 
         <DetailPanel 
 
@@ -1979,11 +2518,11 @@ async function baixarXml(id) {
 
  
 
-      {showDanfePdf && detail ? ( 
+      {showDanfePdf ? ( 
 
         <DanfePdfViewer 
 
-          nfeId={detail?.document?.id} 
+          nfeId={detail?.document?.id || selectedId} 
 
           chaveNfe={detail?.document?.chave_nfe} 
 
@@ -2001,6 +2540,96 @@ async function baixarXml(id) {
 
  
 
+const cardStyle = { 
+
+  background: "#fff", 
+
+  border: "1px solid #e5e7eb", 
+
+  borderRadius: 12, 
+
+  padding: 16, 
+
+  marginBottom: 16, 
+
+  boxShadow: "0 1px 2px rgba(0,0,0,0.04)", 
+
+}; 
+
+ 
+
+const detailCardStyle = { 
+
+  background: "#fff", 
+
+  border: "1px solid #e5e7eb", 
+
+  borderRadius: 12, 
+
+  padding: 16, 
+
+  minHeight: 320, 
+
+  boxShadow: "0 1px 2px rgba(0,0,0,0.04)", 
+
+}; 
+
+ 
+
+const filterGridStyle = { 
+
+  display: "grid", 
+
+  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", 
+
+  gap: 10, 
+
+}; 
+
+ 
+
+const tableHead = { 
+
+  textAlign: "left", 
+
+  padding: "10px 8px", 
+
+  borderBottom: "1px solid #e5e7eb", 
+
+  background: "#f9fafb", 
+
+  fontWeight: 600, 
+
+  whiteSpace: "nowrap", 
+
+}; 
+
+ 
+
+const tableCell = { 
+
+  padding: "10px 8px", 
+
+  borderBottom: "1px solid #f3f4f6", 
+
+  verticalAlign: "top", 
+
+}; 
+
+ 
+
+const tableCellEmpty = { 
+
+  padding: 16, 
+
+  textAlign: "center", 
+
+  color: "#6b7280", 
+
+}; 
+
+ 
+
 const linkButtonStyle = { 
 
   display: "inline-flex", 
@@ -2011,72 +2640,16 @@ const linkButtonStyle = {
 
   padding: "8px 12px", 
 
-  borderRadius: 6, 
+  borderRadius: 8, 
 
-  textDecoration: "none", 
+  background: "#fff", 
 
   border: "1px solid #d1d5db", 
 
-  background: "#fff", 
+  textDecoration: "none", 
 
   color: "#111827", 
 
   fontSize: 14, 
-
-}; 
-
- 
-
-const tableHead = { 
-
-  textAlign: "left", 
-
-  borderBottom: "1px solid #d1d5db", 
-
-  background: "#f9fafb", 
-
-  padding: 10, 
-
-  whiteSpace: "nowrap", 
-
-}; 
-
- 
-
-const tableCell = { 
-
-  borderBottom: "1px solid #e5e7eb", 
-
-  padding: 10, 
-
-  verticalAlign: "top", 
-
-}; 
-
- 
-
-const tableCellEmpty = { 
-
-  borderBottom: "1px solid #e5e7eb", 
-
-  padding: 16, 
-
-  textAlign: "center", 
-
-}; 
-
- 
-
-const detailCardStyle = { 
-
-  marginTop: 12, 
-
-  border: "1px solid #e5e7eb", 
-
-  borderRadius: 12, 
-
-  padding: 16, 
-
-  background: "#fff", 
 
 }; 
