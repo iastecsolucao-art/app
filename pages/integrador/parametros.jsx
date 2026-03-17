@@ -1,343 +1,475 @@
+import { useEffect, useState } from "react";
 
-const connectionString = process.env.DATABASE_URL_VENDEDORES;
+const initialState = {
+  empresa_id: "",
+  ativo: true,
+  utiliza_integrador: true,
+  verificar_pedido_compra: true,
+  verificar_fornecedor: true,
+  enviar_sem_pedido_para_stage: true,
+  enviar_sem_fornecedor_para_stage: true,
+  registrar_depara_sempre: true,
+  validar_itens_erp: true,
+  bloquear_sem_itens: true,
+  integrar_status_erp: true,
+  status_inicial_fila: "PENDENTE",
+  status_sucesso: "PROCESSADO",
+  status_erro: "ERRO",
+  status_sem_pedido: "SEM_PEDIDO",
+  status_fornecedor_divergente: "FORNECEDOR_DIVERGENTE",
+  status_depara_pendente: "DEPARA_PENDENTE",
+  status_entrada_realizada: "ENTRADA_REALIZADA",
+  observacoes: "",
+};
 
-if (!connectionString) {
-  throw new Error("DATABASE_URL_VENDEDORES não está definida");
-}
+export default function IntegradorParametrosPage() {
+  const [empresas, setEmpresas] = useState([]);
+  const [form, setForm] = useState(initialState);
+  const [loadingEmpresas, setLoadingEmpresas] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState("info");
 
-let pool = global._erpPgPool;
+  async function loadEmpresas() {
+    setLoadingEmpresas(true);
+    setMessage("");
 
-if (!pool) {
-  pool = new Pool({
-    connectionString,
-    ssl:
-      process.env.NODE_ENV === "production"
-        ? { rejectUnauthorized: false }
-        : false,
-    max: 5,
-    idleTimeoutMillis: 10000,
-    connectionTimeoutMillis: 10000,
-  });
-
-  global._erpPgPool = pool;
-}
-
-const BOOLEAN_FIELDS = [
-  "ativo",
-  "utiliza_integrador",
-  "verificar_pedido_compra",
-  "verificar_fornecedor",
-  "enviar_sem_pedido_para_stage",
-  "enviar_sem_fornecedor_para_stage",
-  "registrar_depara_sempre",
-  "validar_itens_erp",
-  "bloquear_sem_itens",
-  "integrar_status_erp",
-];
-
-const STATUS_FIELDS = [
-  "status_inicial_fila",
-  "status_sucesso",
-  "status_erro",
-  "status_sem_pedido",
-  "status_fornecedor_divergente",
-  "status_depara_pendente",
-  "status_entrada_realizada",
-];
-
-function toBoolean(value, defaultValue = false) {
-  if (typeof value === "boolean") return value;
-  if (value === "true" || value === "1" || value === 1) return true;
-  if (value === "false" || value === "0" || value === 0) return false;
-  return defaultValue;
-}
-
-function normalizeString(value, fallback = null) {
-  if (value == null) return fallback;
-  const text = String(value).trim();
-  return text || fallback;
-}
-
-function normalizeInteger(value) {
-  const n = Number(value);
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
-
-function normalizeBody(body = {}) {
-  const data = {
-    empresa_id: normalizeInteger(body.empresa_id),
-    observacoes: normalizeString(body.observacoes, null),
-  };
-
-  for (const field of BOOLEAN_FIELDS) {
-    data[field] = toBoolean(body[field], true);
-  }
-
-  for (const field of STATUS_FIELDS) {
-    data[field] = normalizeString(body[field], null);
-  }
-
-  return data;
-}
-
-export default async function handler(req, res) {
-  if (req.method === "GET") {
     try {
-      const empresaId = normalizeInteger(req.query.empresa_id);
+      const response = await fetch("/api/integrador/parametros", {
+        method: "PUT",
+      });
 
-      if (!empresaId) {
-        return res.status(400).json({
-          error: "empresa_id é obrigatório",
-        });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Erro ao buscar empresas");
       }
 
-      const result = await pool.query(
-        `
-        SELECT
-          p.id,
-          p.empresa_id,
-          e.nome AS empresa_nome,
-          e.cliente_codigo,
-          p.ativo,
-          p.utiliza_integrador,
-          p.verificar_pedido_compra,
-          p.verificar_fornecedor,
-          p.enviar_sem_pedido_para_stage,
-          p.enviar_sem_fornecedor_para_stage,
-          p.registrar_depara_sempre,
-          p.validar_itens_erp,
-          p.bloquear_sem_itens,
-          p.integrar_status_erp,
-          p.status_inicial_fila,
-          p.status_sucesso,
-          p.status_erro,
-          p.status_sem_pedido,
-          p.status_fornecedor_divergente,
-          p.status_depara_pendente,
-          p.status_entrada_realizada,
-          p.observacoes,
-          p.created_at,
-          p.updated_at
-        FROM public.integrador_parametros p
-        INNER JOIN public.empresa e
-          ON e.id = p.empresa_id
-        WHERE p.empresa_id = $1
-        LIMIT 1
-        `,
-        [empresaId]
-      );
+      const rows = data.rows || [];
+      setEmpresas(rows);
 
-      if (!result.rowCount) {
-        return res.status(404).json({
-          error: "Parâmetros não encontrados para a empresa",
-        });
+      if (rows.length > 0) {
+        setForm((prev) => ({
+          ...prev,
+          empresa_id: prev.empresa_id || String(rows[0].id),
+        }));
       }
-
-      return res.status(200).json({
-        row: result.rows[0],
-      });
-    } catch (e) {
-      console.error("Erro em GET /api/integrador/parametros:", {
-        message: e?.message,
-        stack: e?.stack,
-        code: e?.code,
-        detail: e?.detail,
-        hint: e?.hint,
-        table: e?.table,
-      });
-
-      return res.status(500).json({
-        error: "Erro ao buscar parâmetros do integrador",
-        details: e?.message || String(e),
-      });
+    } catch (error) {
+      setMessage(error.message || "Erro ao buscar empresas");
+      setMessageType("error");
+    } finally {
+      setLoadingEmpresas(false);
     }
   }
 
-  if (req.method === "POST") {
+  async function loadData(empresaId) {
+    if (!empresaId) return;
+
+    setLoading(true);
+    setMessage("");
+
     try {
-      const data = normalizeBody(req.body);
-
-      if (!data.empresa_id) {
-        return res.status(400).json({
-          error: "empresa_id é obrigatório",
-        });
-      }
-
-      for (const field of STATUS_FIELDS) {
-        if (!data[field]) {
-          return res.status(400).json({
-            error: `Campo obrigatório: ${field}`,
-          });
-        }
-      }
-
-      const empresaResult = await pool.query(
-        `
-        SELECT id, nome, cliente_codigo
-        FROM public.empresa
-        WHERE id = $1
-        LIMIT 1
-        `,
-        [data.empresa_id]
+      const response = await fetch(
+        `/api/integrador/parametros?empresa_id=${encodeURIComponent(empresaId)}`
       );
 
-      if (!empresaResult.rowCount) {
-        return res.status(404).json({
-          error: "Empresa não encontrada",
-        });
+      if (response.status === 404) {
+        setForm((prev) => ({
+          ...initialState,
+          empresa_id: String(empresaId),
+        }));
+        setMessage("Empresa sem parâmetros cadastrados. Preencha e salve.");
+        setMessageType("info");
+        setLoading(false);
+        return;
       }
 
-      const result = await pool.query(
-        `
-        INSERT INTO public.integrador_parametros (
-          empresa_id,
-          ativo,
-          utiliza_integrador,
-          verificar_pedido_compra,
-          verificar_fornecedor,
-          enviar_sem_pedido_para_stage,
-          enviar_sem_fornecedor_para_stage,
-          registrar_depara_sempre,
-          validar_itens_erp,
-          bloquear_sem_itens,
-          integrar_status_erp,
-          status_inicial_fila,
-          status_sucesso,
-          status_erro,
-          status_sem_pedido,
-          status_fornecedor_divergente,
-          status_depara_pendente,
-          status_entrada_realizada,
-          observacoes,
-          created_at,
-          updated_at
-        )
-        VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-          $11,$12,$13,$14,$15,$16,$17,$18,$19,
-          NOW(),NOW()
-        )
-        ON CONFLICT (empresa_id)
-        DO UPDATE SET
-          ativo = EXCLUDED.ativo,
-          utiliza_integrador = EXCLUDED.utiliza_integrador,
-          verificar_pedido_compra = EXCLUDED.verificar_pedido_compra,
-          verificar_fornecedor = EXCLUDED.verificar_fornecedor,
-          enviar_sem_pedido_para_stage = EXCLUDED.enviar_sem_pedido_para_stage,
-          enviar_sem_fornecedor_para_stage = EXCLUDED.enviar_sem_fornecedor_para_stage,
-          registrar_depara_sempre = EXCLUDED.registrar_depara_sempre,
-          validar_itens_erp = EXCLUDED.validar_itens_erp,
-          bloquear_sem_itens = EXCLUDED.bloquear_sem_itens,
-          integrar_status_erp = EXCLUDED.integrar_status_erp,
-          status_inicial_fila = EXCLUDED.status_inicial_fila,
-          status_sucesso = EXCLUDED.status_sucesso,
-          status_erro = EXCLUDED.status_erro,
-          status_sem_pedido = EXCLUDED.status_sem_pedido,
-          status_fornecedor_divergente = EXCLUDED.status_fornecedor_divergente,
-          status_depara_pendente = EXCLUDED.status_depara_pendente,
-          status_entrada_realizada = EXCLUDED.status_entrada_realizada,
-          observacoes = EXCLUDED.observacoes,
-          updated_at = NOW()
-        RETURNING
-          id,
-          empresa_id,
-          ativo,
-          utiliza_integrador,
-          verificar_pedido_compra,
-          verificar_fornecedor,
-          enviar_sem_pedido_para_stage,
-          enviar_sem_fornecedor_para_stage,
-          registrar_depara_sempre,
-          validar_itens_erp,
-          bloquear_sem_itens,
-          integrar_status_erp,
-          status_inicial_fila,
-          status_sucesso,
-          status_erro,
-          status_sem_pedido,
-          status_fornecedor_divergente,
-          status_depara_pendente,
-          status_entrada_realizada,
-          observacoes,
-          created_at,
-          updated_at
-        `,
-        [
-          data.empresa_id,
-          data.ativo,
-          data.utiliza_integrador,
-          data.verificar_pedido_compra,
-          data.verificar_fornecedor,
-          data.enviar_sem_pedido_para_stage,
-          data.enviar_sem_fornecedor_para_stage,
-          data.registrar_depara_sempre,
-          data.validar_itens_erp,
-          data.bloquear_sem_itens,
-          data.integrar_status_erp,
-          data.status_inicial_fila,
-          data.status_sucesso,
-          data.status_erro,
-          data.status_sem_pedido,
-          data.status_fornecedor_divergente,
-          data.status_depara_pendente,
-          data.status_entrada_realizada,
-          data.observacoes,
-        ]
-      );
+      const data = await response.json();
 
-      return res.status(200).json({
-        success: true,
-        row: {
-          ...result.rows[0],
-          empresa_nome: empresaResult.rows[0].nome,
-          cliente_codigo: empresaResult.rows[0].cliente_codigo,
+      if (!response.ok) {
+        throw new Error(data?.error || "Erro ao buscar parâmetros");
+      }
+
+      setForm({
+        ...initialState,
+        ...data.row,
+        empresa_id: String(data.row.empresa_id),
+      });
+    } catch (error) {
+      setMessage(error.message || "Erro ao carregar parâmetros");
+      setMessageType("error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadEmpresas();
+  }, []);
+
+  useEffect(() => {
+    if (form.empresa_id) {
+      loadData(form.empresa_id);
+    }
+  }, [form.empresa_id]);
+
+  function handleChange(event) {
+    const { name, value, type, checked } = event.target;
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const payload = {
+        ...form,
+        empresa_id: Number(form.empresa_id),
+      };
+
+      const response = await fetch("/api/integrador/parametros", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      });
-    } catch (e) {
-      console.error("Erro em POST /api/integrador/parametros:", {
-        message: e?.message,
-        stack: e?.stack,
-        code: e?.code,
-        detail: e?.detail,
-        hint: e?.hint,
-        table: e?.table,
+        body: JSON.stringify(payload),
       });
 
-      return res.status(500).json({
-        error: "Erro ao salvar parâmetros do integrador",
-        details: e?.message || String(e),
-      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Erro ao salvar");
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        ...data.row,
+        empresa_id: String(data.row.empresa_id),
+      }));
+
+      setMessage("Parâmetros salvos com sucesso.");
+      setMessageType("success");
+    } catch (error) {
+      setMessage(error.message || "Erro ao salvar parâmetros");
+      setMessageType("error");
+    } finally {
+      setSaving(false);
     }
   }
 
-  if (req.method === "PUT") {
-    try {
-      const result = await pool.query(
-        `
-        SELECT id, nome, cliente_codigo
-        FROM public.empresa
-        ORDER BY nome ASC, id ASC
-        `
-      );
-
-      return res.status(200).json({
-        rows: result.rows,
-      });
-    } catch (e) {
-      console.error("Erro em PUT /api/integrador/parametros:", {
-        message: e?.message,
-        stack: e?.stack,
-      });
-
-      return res.status(500).json({
-        error: "Erro ao buscar empresas",
-        details: e?.message || String(e),
-      });
-    }
+  function renderCheckbox(name, label) {
+    return (
+      <label style={styles.checkboxLabel}>
+        <input
+          type="checkbox"
+          name={name}
+          checked={!!form[name]}
+          onChange={handleChange}
+        />
+        <span>{label}</span>
+      </label>
+    );
   }
 
-  res.setHeader("Allow", ["GET", "POST", "PUT"]);
-  return res.status(405).json({
-    error: `Método ${req.method} não permitido`,
-  });
+  return (
+    <div style={styles.page}>
+      <div style={styles.container}>
+        <h1 style={styles.title}>Parâmetros do Integrador</h1>
+
+        <form onSubmit={handleSubmit} style={styles.form}>
+          <div style={styles.section}>
+            <h2 style={styles.sectionTitle}>Empresa</h2>
+
+            <div style={styles.field}>
+              <label style={styles.label}>Selecione a empresa</label>
+              <select
+                name="empresa_id"
+                value={form.empresa_id}
+                onChange={handleChange}
+                style={styles.input}
+                disabled={loadingEmpresas}
+              >
+                <option value="">Selecione</option>
+                {empresas.map((empresa) => (
+                  <option key={empresa.id} value={empresa.id}>
+                    {empresa.nome}
+                    {empresa.cnpj ? ` - ${empresa.cnpj}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => loadData(form.empresa_id)}
+              disabled={loading || !form.empresa_id}
+              style={styles.secondaryButton}
+            >
+              {loading ? "Carregando..." : "Buscar parâmetros"}
+            </button>
+          </div>
+
+          <div style={styles.section}>
+            <h2 style={styles.sectionTitle}>Regras do processo</h2>
+
+            <div style={styles.checkboxGrid}>
+              {renderCheckbox("ativo", "Ativo")}
+              {renderCheckbox("utiliza_integrador", "Utiliza integrador")}
+              {renderCheckbox("verificar_pedido_compra", "Verificar pedido de compra")}
+              {renderCheckbox("verificar_fornecedor", "Verificar fornecedor")}
+              {renderCheckbox("enviar_sem_pedido_para_stage", "Enviar sem pedido para stage")}
+              {renderCheckbox("enviar_sem_fornecedor_para_stage", "Enviar sem fornecedor para stage")}
+              {renderCheckbox("registrar_depara_sempre", "Registrar de/para sempre")}
+              {renderCheckbox("validar_itens_erp", "Validar itens no ERP")}
+              {renderCheckbox("bloquear_sem_itens", "Bloquear quando não houver itens")}
+              {renderCheckbox("integrar_status_erp", "Integrar status ERP")}
+            </div>
+          </div>
+
+          <div style={styles.section}>
+            <h2 style={styles.sectionTitle}>Status do fluxo</h2>
+
+            <div style={styles.grid2}>
+              <div style={styles.field}>
+                <label style={styles.label}>Status inicial fila</label>
+                <input
+                  type="text"
+                  name="status_inicial_fila"
+                  value={form.status_inicial_fila}
+                  onChange={handleChange}
+                  style={styles.input}
+                />
+              </div>
+
+              <div style={styles.field}>
+                <label style={styles.label}>Status sucesso</label>
+                <input
+                  type="text"
+                  name="status_sucesso"
+                  value={form.status_sucesso}
+                  onChange={handleChange}
+                  style={styles.input}
+                />
+              </div>
+
+              <div style={styles.field}>
+                <label style={styles.label}>Status erro</label>
+                <input
+                  type="text"
+                  name="status_erro"
+                  value={form.status_erro}
+                  onChange={handleChange}
+                  style={styles.input}
+                />
+              </div>
+
+              <div style={styles.field}>
+                <label style={styles.label}>Status sem pedido</label>
+                <input
+                  type="text"
+                  name="status_sem_pedido"
+                  value={form.status_sem_pedido}
+                  onChange={handleChange}
+                  style={styles.input}
+                />
+              </div>
+
+              <div style={styles.field}>
+                <label style={styles.label}>Status fornecedor divergente</label>
+                <input
+                  type="text"
+                  name="status_fornecedor_divergente"
+                  value={form.status_fornecedor_divergente}
+                  onChange={handleChange}
+                  style={styles.input}
+                />
+              </div>
+
+              <div style={styles.field}>
+                <label style={styles.label}>Status de/para pendente</label>
+                <input
+                  type="text"
+                  name="status_depara_pendente"
+                  value={form.status_depara_pendente}
+                  onChange={handleChange}
+                  style={styles.input}
+                />
+              </div>
+
+              <div style={styles.field}>
+                <label style={styles.label}>Status entrada realizada</label>
+                <input
+                  type="text"
+                  name="status_entrada_realizada"
+                  value={form.status_entrada_realizada}
+                  onChange={handleChange}
+                  style={styles.input}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div style={styles.section}>
+            <h2 style={styles.sectionTitle}>Observações</h2>
+
+            <div style={styles.field}>
+              <label style={styles.label}>Observações</label>
+              <textarea
+                name="observacoes"
+                value={form.observacoes || ""}
+                onChange={handleChange}
+                rows={5}
+                style={styles.textarea}
+              />
+            </div>
+          </div>
+
+          <div style={styles.actions}>
+            <button
+              type="submit"
+              disabled={saving || !form.empresa_id}
+              style={styles.primaryButton}
+            >
+              {saving ? "Salvando..." : "Salvar parâmetros"}
+            </button>
+          </div>
+
+          {message ? (
+            <div
+              style={{
+                ...styles.message,
+                ...(messageType === "error" ? styles.messageError : {}),
+                ...(messageType === "success" ? styles.messageSuccess : {}),
+              }}
+            >
+              {message}
+            </div>
+          ) : null}
+        </form>
+      </div>
+    </div>
+  );
 }
+
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background: "#f5f7fb",
+    padding: 24,
+    fontFamily: "Arial, sans-serif",
+  },
+  container: {
+    maxWidth: 1000,
+    margin: "0 auto",
+    background: "#fff",
+    borderRadius: 12,
+    padding: 24,
+    boxShadow: "0 2px 14px rgba(0,0,0,0.08)",
+  },
+  title: {
+    marginBottom: 24,
+    color: "#1d3557",
+  },
+  form: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 24,
+  },
+  section: {
+    border: "1px solid #e5e7eb",
+    borderRadius: 10,
+    padding: 20,
+  },
+  sectionTitle: {
+    marginTop: 0,
+    marginBottom: 16,
+    color: "#243b53",
+    fontSize: 20,
+  },
+  field: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    marginBottom: 14,
+  },
+  label: {
+    fontWeight: 600,
+    color: "#334e68",
+  },
+  input: {
+    height: 42,
+    borderRadius: 8,
+    border: "1px solid #cbd5e1",
+    padding: "0 12px",
+    fontSize: 14,
+  },
+  textarea: {
+    borderRadius: 8,
+    border: "1px solid #cbd5e1",
+    padding: 12,
+    fontSize: 14,
+    resize: "vertical",
+  },
+  checkboxGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gap: 12,
+  },
+  checkboxLabel: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: 10,
+    border: "1px solid #e5e7eb",
+    borderRadius: 8,
+  },
+  grid2: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gap: 16,
+  },
+  actions: {
+    display: "flex",
+    justifyContent: "flex-end",
+  },
+  primaryButton: {
+    height: 44,
+    padding: "0 18px",
+    borderRadius: 8,
+    border: "none",
+    background: "#1d4ed8",
+    color: "#fff",
+    cursor: "pointer",
+    fontWeight: 600,
+  },
+  secondaryButton: {
+    height: 42,
+    padding: "0 16px",
+    borderRadius: 8,
+    border: "1px solid #cbd5e1",
+    background: "#fff",
+    cursor: "pointer",
+    fontWeight: 600,
+  },
+  message: {
+    padding: 12,
+    borderRadius: 8,
+    background: "#eff6ff",
+    color: "#1e3a8a",
+  },
+  messageError: {
+    background: "#fef2f2",
+    color: "#991b1b",
+  },
+  messageSuccess: {
+    background: "#ecfdf5",
+    color: "#166534",
+  },
+};

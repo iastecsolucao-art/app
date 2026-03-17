@@ -1,27 +1,4 @@
-import { Pool } from "pg";
-
-const connectionString = process.env.DATABASE_URL  ;
-
-if (!connectionString) {
-  throw new Error("DATABASE_URL não está definida");
-}
-
-let pool = global._erpPgPool;
-
-if (!pool) {
-  pool = new Pool({
-    connectionString,
-    ssl:
-      process.env.NODE_ENV === "production"
-        ? { rejectUnauthorized: false }
-        : false,
-    max: 5,
-    idleTimeoutMillis: 10000,
-    connectionTimeoutMillis: 10000,
-  });
-
-  global._erpPgPool = pool;
-}
+import { dbQuery } from "../../../lib/db";
 
 const BOOLEAN_FIELDS = [
   "ativo",
@@ -92,13 +69,14 @@ export default async function handler(req, res) {
         });
       }
 
-      const result = await pool.query(
+      const result = await dbQuery(
         `
         SELECT
           p.id,
           p.empresa_id,
           e.nome AS empresa_nome,
-          e.cliente_codigo,
+          e.cnpj,
+          e.email,
           p.ativo,
           p.utiliza_integrador,
           p.verificar_pedido_compra,
@@ -141,10 +119,6 @@ export default async function handler(req, res) {
       console.error("Erro em GET /api/integrador/parametros:", {
         message: e?.message,
         stack: e?.stack,
-        code: e?.code,
-        detail: e?.detail,
-        hint: e?.hint,
-        table: e?.table,
       });
 
       return res.status(500).json({
@@ -172,9 +146,9 @@ export default async function handler(req, res) {
         }
       }
 
-      const empresaResult = await pool.query(
+      const empresaResult = await dbQuery(
         `
-        SELECT id, nome, cliente_codigo
+        SELECT id, nome, cnpj, email
         FROM public.empresa
         WHERE id = $1
         LIMIT 1
@@ -188,7 +162,7 @@ export default async function handler(req, res) {
         });
       }
 
-      const result = await pool.query(
+      const result = await dbQuery(
         `
         INSERT INTO public.integrador_parametros (
           empresa_id,
@@ -291,17 +265,14 @@ export default async function handler(req, res) {
         row: {
           ...result.rows[0],
           empresa_nome: empresaResult.rows[0].nome,
-          cliente_codigo: empresaResult.rows[0].cliente_codigo,
+          cnpj: empresaResult.rows[0].cnpj,
+          email: empresaResult.rows[0].email,
         },
       });
     } catch (e) {
       console.error("Erro em POST /api/integrador/parametros:", {
         message: e?.message,
         stack: e?.stack,
-        code: e?.code,
-        detail: e?.detail,
-        hint: e?.hint,
-        table: e?.table,
       });
 
       return res.status(500).json({
@@ -313,9 +284,9 @@ export default async function handler(req, res) {
 
   if (req.method === "PUT") {
     try {
-      const result = await pool.query(
+      const result = await dbQuery(
         `
-        SELECT id, nome, cliente_codigo
+        SELECT id, nome, cnpj, email
         FROM public.empresa
         ORDER BY nome ASC, id ASC
         `
