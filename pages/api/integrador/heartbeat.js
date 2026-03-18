@@ -7,7 +7,7 @@ if (!connectionString) {
   throw new Error("DATABASE_URL_VENDEDORES não está definida");
 }
 
-let pool = global._integradorImportLogPgPool;
+let pool = global._integradorHeartbeatPgPool;
 
 if (!pool) {
   pool = new Pool({
@@ -18,7 +18,7 @@ if (!pool) {
     connectionTimeoutMillis: 10000,
   });
 
-  global._integradorImportLogPgPool = pool;
+  global._integradorHeartbeatPgPool = pool;
 }
 
 function checkAuth(req) {
@@ -54,29 +54,34 @@ export default async function handler(req, res) {
   const {
     empresa_id,
     cliente_codigo,
-    tipo_importacao,
-    referencia,
+    versao_integrador,
+    hostname,
+    ip_local,
     status,
     mensagem,
-    detalhes,
+    nfe_processadas,
+    compras_processadas,
+    tempo_ciclo_ms,
   } = req.body || {};
 
   const empresaId = toNullableNumber(empresa_id);
   const clienteCodigo = normalizeText(cliente_codigo);
-  const tipoImportacao = normalizeText(tipo_importacao);
+  const versaoIntegrador = normalizeText(versao_integrador);
+  const hostnameNorm = normalizeText(hostname);
+  const ipLocalNorm = normalizeText(ip_local);
   const statusNorm = normalizeText(status);
-  const referenciaNorm = normalizeText(referencia);
   const mensagemNorm = normalizeText(mensagem);
+  const nfeProcessadas = toNullableNumber(nfe_processadas) ?? 0;
+  const comprasProcessadas = toNullableNumber(compras_processadas) ?? 0;
+  const tempoCicloMs = toNullableNumber(tempo_ciclo_ms);
 
   if (!empresaId || empresaId <= 0) {
-    return res.status(400).json({
-      error: "empresa_id é obrigatório",
-    });
+    return res.status(400).json({ error: "empresa_id é obrigatório" });
   }
 
-  if (!clienteCodigo || !tipoImportacao || !statusNorm) {
+  if (!clienteCodigo || !statusNorm) {
     return res.status(400).json({
-      error: "empresa_id, cliente_codigo, tipo_importacao e status são obrigatórios",
+      error: "empresa_id, cliente_codigo e status são obrigatórios",
     });
   }
 
@@ -85,27 +90,33 @@ export default async function handler(req, res) {
   try {
     const result = await client.query(
       `
-      INSERT INTO public.integrador_import_log (
+      INSERT INTO public.integrador_heartbeat (
         empresa_id,
         cliente_codigo,
-        tipo_importacao,
-        referencia,
+        versao_integrador,
+        hostname,
+        ip_local,
         status,
         mensagem,
-        detalhes,
+        nfe_processadas,
+        compras_processadas,
+        tempo_ciclo_ms,
         created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
       RETURNING id
       `,
       [
         empresaId,
         clienteCodigo,
-        tipoImportacao.toUpperCase(),
-        referenciaNorm,
+        versaoIntegrador,
+        hostnameNorm,
+        ipLocalNorm,
         statusNorm.toUpperCase(),
         mensagemNorm,
-        JSON.stringify(detalhes || {}),
+        nfeProcessadas,
+        comprasProcessadas,
+        tempoCicloMs,
       ]
     );
 
@@ -115,7 +126,7 @@ export default async function handler(req, res) {
       empresa_id: empresaId,
     });
   } catch (e) {
-    console.error("Erro em /api/integrador/import-log:", {
+    console.error("Erro em /api/integrador/heartbeat:", {
       message: e?.message,
       stack: e?.stack,
       code: e?.code,
@@ -123,7 +134,7 @@ export default async function handler(req, res) {
     });
 
     return res.status(500).json({
-      error: "Erro ao gravar log de importação",
+      error: "Erro ao gravar heartbeat",
       details: e?.message || String(e),
     });
   } finally {
