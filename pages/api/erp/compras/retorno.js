@@ -88,8 +88,8 @@ export default async function handler(req, res) {
           pedido = COALESCE($2, pedido),
           status_integracao = $3,
           mensagem_integracao = $4,
-          reserved_by = NULL,
-          reserved_at = NULL,
+          reservado_por = NULL,
+          reservado_em = NULL,
           updated_at = NOW()
         WHERE id = $1
         RETURNING
@@ -98,8 +98,8 @@ export default async function handler(req, res) {
           pedido,
           status_integracao,
           mensagem_integracao,
-          reserved_by,
-          reserved_at,
+          reservado_em,
+          reservado_por,
           updated_at
         `,
         [data.queue_id, data.pedido, data.status, data.message]
@@ -111,8 +111,8 @@ export default async function handler(req, res) {
         SET
           status_integracao = $1,
           mensagem_integracao = $2,
-          reserved_by = NULL,
-          reserved_at = NULL,
+          reservado_em = NULL,
+          reservado_por = NULL,
           updated_at = NOW()
         WHERE pedido = $3
         RETURNING
@@ -121,8 +121,8 @@ export default async function handler(req, res) {
           pedido,
           status_integracao,
           mensagem_integracao,
-          reserved_by,
-          reserved_at,
+          reservado_em,
+          reservado_por,
           updated_at
         `,
         [data.status, data.message, data.pedido]
