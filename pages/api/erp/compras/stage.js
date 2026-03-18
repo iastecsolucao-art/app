@@ -1,4 +1,4 @@
-import { pool } from "../../../../lib/dbBCK";
+import { pool } from "../../../../lib/dbbck";
 
 export default async function handler(req, res) {
   try {
