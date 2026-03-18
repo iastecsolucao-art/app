@@ -27,6 +27,20 @@ function checkAuth(req) {
   return !!API_TOKEN && token === API_TOKEN;
 }
 
+function normalizeText(value) {
+  const s = String(value || "").trim();
+  return s || null;
+}
+
+function toNullableNumber(value) {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return null;
+  }
+
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
@@ -38,6 +52,7 @@ export default async function handler(req, res) {
   }
 
   const {
+    empresa_id,
     cliente_codigo,
     tipo_importacao,
     referencia,
@@ -46,9 +61,22 @@ export default async function handler(req, res) {
     detalhes,
   } = req.body || {};
 
-  if (!cliente_codigo || !tipo_importacao || !status) {
+  const empresaId = toNullableNumber(empresa_id);
+  const clienteCodigo = normalizeText(cliente_codigo);
+  const tipoImportacao = normalizeText(tipo_importacao);
+  const statusNorm = normalizeText(status);
+  const referenciaNorm = normalizeText(referencia);
+  const mensagemNorm = normalizeText(mensagem);
+
+  if (!empresaId || empresaId <= 0) {
     return res.status(400).json({
-      error: "cliente_codigo, tipo_importacao e status são obrigatórios",
+      error: "empresa_id é obrigatório",
+    });
+  }
+
+  if (!clienteCodigo || !tipoImportacao || !statusNorm) {
+    return res.status(400).json({
+      error: "empresa_id, cliente_codigo, tipo_importacao e status são obrigatórios",
     });
   }
 
@@ -58,6 +86,7 @@ export default async function handler(req, res) {
     const result = await client.query(
       `
       INSERT INTO public.integrador_import_log (
+        empresa_id,
         cliente_codigo,
         tipo_importacao,
         referencia,
@@ -66,22 +95,33 @@ export default async function handler(req, res) {
         detalhes,
         created_at
       )
-      VALUES ($1,$2,$3,$4,$5,$6::jsonb,NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())
       RETURNING id
       `,
       [
-        String(cliente_codigo).trim(),
-        String(tipo_importacao).trim().toUpperCase(),
-        referencia ? String(referencia) : null,
-        String(status).trim().toUpperCase(),
-        mensagem ? String(mensagem) : null,
+        empresaId,
+        clienteCodigo,
+        tipoImportacao.toUpperCase(),
+        referenciaNorm,
+        statusNorm.toUpperCase(),
+        mensagemNorm,
         JSON.stringify(detalhes || {}),
       ]
     );
 
-    return res.status(200).json({ success: true, id: result.rows[0]?.id || null });
+    return res.status(200).json({
+      success: true,
+      id: result.rows[0]?.id || null,
+      empresa_id: empresaId,
+    });
   } catch (e) {
-    console.error("Erro em /api/integrador/import-log:", e);
+    console.error("Erro em /api/integrador/import-log:", {
+      message: e?.message,
+      stack: e?.stack,
+      code: e?.code,
+      detail: e?.detail,
+    });
+
     return res.status(500).json({
       error: "Erro ao gravar log de importação",
       details: e?.message || String(e),
