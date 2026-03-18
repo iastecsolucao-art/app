@@ -1,4 +1,4 @@
-import { pool } from "../../../../lib/dbbck";
+import { pool } from "../../../../lib/db";
 
 function getEmpresaIdFromRequest(req) {
   const authHeader = req.headers.authorization || "";

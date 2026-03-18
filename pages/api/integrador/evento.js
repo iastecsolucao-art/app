@@ -1,6 +1,6 @@
 import { Pool } from "pg";
 
-const connectionString = process.env.DATABASE_URL_VENDEDORES;
+const connectionString = process.env.DATABASE_URL;
 const API_TOKEN = process.env.ERP_INTEGRACAO_TOKEN || "";
 
 if (!connectionString) {

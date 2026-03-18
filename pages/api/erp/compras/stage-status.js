@@ -1,6 +1,6 @@
 import { Pool } from "pg";
 
-const connectionString = process.env.DATABASE_URL_VENDEDORES;
+const connectionString = process.env.DATABASE_URL;
 
 let pool = global._erpPgPool;
 
