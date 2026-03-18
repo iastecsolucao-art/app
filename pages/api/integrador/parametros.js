@@ -18,6 +18,7 @@ const STATUS_FIELDS = [
   "status_sucesso",
   "status_erro",
   "status_sem_pedido",
+  "status_sem_fornecedor",
   "status_fornecedor_divergente",
   "status_depara_pendente",
   "status_entrada_realizada",
@@ -39,6 +40,38 @@ function normalizeString(value, fallback = null) {
 function normalizeInteger(value) {
   const n = Number(value);
   return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+function buildDefaultRow(empresa) {
+  return {
+    id: null,
+    empresa_id: empresa?.id ?? null,
+    empresa_nome: empresa?.nome ?? null,
+    cnpj: empresa?.cnpj ?? null,
+    email: empresa?.email ?? null,
+    ativo: true,
+    utiliza_integrador: true,
+    verificar_pedido_compra: true,
+    verificar_fornecedor: true,
+    enviar_sem_pedido_para_stage: true,
+    enviar_sem_fornecedor_para_stage: true,
+    registrar_depara_sempre: true,
+    validar_itens_erp: true,
+    bloquear_sem_itens: true,
+    integrar_status_erp: true,
+    status_inicial_fila: "PENDENTE",
+    status_sucesso: "PROCESSADO",
+    status_erro: "ERRO",
+    status_sem_pedido: "SEM_PEDIDO",
+    status_sem_fornecedor: "SEM_FORNECEDOR",
+    status_fornecedor_divergente: "FORNECEDOR_DIVERGENTE",
+    status_depara_pendente: "DEPARA_PENDENTE",
+    status_entrada_realizada: "ENTRADA_REALIZADA",
+    observacoes: null,
+    created_at: null,
+    updated_at: null,
+    is_default: true,
+  };
 }
 
 function normalizeBody(body = {}) {
@@ -69,6 +102,22 @@ export default async function handler(req, res) {
         });
       }
 
+      const empresaResult = await dbQuery(
+        `
+        SELECT id, nome, cnpj, email
+        FROM public.empresa
+        WHERE id = $1
+        LIMIT 1
+        `,
+        [empresaId]
+      );
+
+      if (!empresaResult.rowCount) {
+        return res.status(404).json({
+          error: "Empresa não encontrada",
+        });
+      }
+
       const result = await dbQuery(
         `
         SELECT
@@ -91,6 +140,7 @@ export default async function handler(req, res) {
           p.status_sucesso,
           p.status_erro,
           p.status_sem_pedido,
+          p.status_sem_fornecedor,
           p.status_fornecedor_divergente,
           p.status_depara_pendente,
           p.status_entrada_realizada,
@@ -107,13 +157,16 @@ export default async function handler(req, res) {
       );
 
       if (!result.rowCount) {
-        return res.status(404).json({
-          error: "Parâmetros não encontrados para a empresa",
+        return res.status(200).json({
+          row: buildDefaultRow(empresaResult.rows[0]),
         });
       }
 
       return res.status(200).json({
-        row: result.rows[0],
+        row: {
+          ...result.rows[0],
+          is_default: false,
+        },
       });
     } catch (e) {
       console.error("Erro em GET /api/integrador/parametros:", {
@@ -180,6 +233,7 @@ export default async function handler(req, res) {
           status_sucesso,
           status_erro,
           status_sem_pedido,
+          status_sem_fornecedor,
           status_fornecedor_divergente,
           status_depara_pendente,
           status_entrada_realizada,
@@ -189,7 +243,7 @@ export default async function handler(req, res) {
         )
         VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-          $11,$12,$13,$14,$15,$16,$17,$18,$19,
+          $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
           NOW(),NOW()
         )
         ON CONFLICT (empresa_id)
@@ -208,6 +262,7 @@ export default async function handler(req, res) {
           status_sucesso = EXCLUDED.status_sucesso,
           status_erro = EXCLUDED.status_erro,
           status_sem_pedido = EXCLUDED.status_sem_pedido,
+          status_sem_fornecedor = EXCLUDED.status_sem_fornecedor,
           status_fornecedor_divergente = EXCLUDED.status_fornecedor_divergente,
           status_depara_pendente = EXCLUDED.status_depara_pendente,
           status_entrada_realizada = EXCLUDED.status_entrada_realizada,
@@ -230,6 +285,7 @@ export default async function handler(req, res) {
           status_sucesso,
           status_erro,
           status_sem_pedido,
+          status_sem_fornecedor,
           status_fornecedor_divergente,
           status_depara_pendente,
           status_entrada_realizada,
@@ -253,6 +309,7 @@ export default async function handler(req, res) {
           data.status_sucesso,
           data.status_erro,
           data.status_sem_pedido,
+          data.status_sem_fornecedor,
           data.status_fornecedor_divergente,
           data.status_depara_pendente,
           data.status_entrada_realizada,
@@ -267,6 +324,7 @@ export default async function handler(req, res) {
           empresa_nome: empresaResult.rows[0].nome,
           cnpj: empresaResult.rows[0].cnpj,
           email: empresaResult.rows[0].email,
+          is_default: false,
         },
       });
     } catch (e) {
