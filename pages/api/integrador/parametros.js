@@ -1,4 +1,4 @@
-import { dbQuery } from "../../../lib/db";
+import { dbQuery } from "../../../lib/dbbck";
 
 const BOOLEAN_FIELDS = [
   "ativo",
