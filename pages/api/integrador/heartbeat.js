@@ -7,27 +7,38 @@ if (!connectionString) {
   throw new Error("DATABASE_URL_VENDEDORES não está definida");
 }
 
-let pool = global._integradorPgPool;
+let pool = global._integradorImportLogPgPool;
 
 if (!pool) {
   pool = new Pool({
     connectionString,
-    ssl:
-      process.env.NODE_ENV === "production"
-        ? { rejectUnauthorized: false }
-        : false,
+    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
     max: 5,
     idleTimeoutMillis: 10000,
     connectionTimeoutMillis: 10000,
   });
 
-  global._integradorPgPool = pool;
+  global._integradorImportLogPgPool = pool;
 }
 
 function checkAuth(req) {
   const auth = req.headers.authorization || "";
   const token = auth.replace(/^Bearer\s+/i, "").trim();
   return !!API_TOKEN && token === API_TOKEN;
+}
+
+function normalizeText(value) {
+  const s = String(value || "").trim();
+  return s || null;
+}
+
+function toNullableNumber(value) {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return null;
+  }
+
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 export default async function handler(req, res) {
@@ -41,23 +52,32 @@ export default async function handler(req, res) {
   }
 
   const {
+    empresa_id,
     cliente_codigo,
-    versao_integrador,
-    hostname,
-    ip_local,
+    tipo_importacao,
+    referencia,
     status,
     mensagem,
-    nfe_processadas,
-    compras_processadas,
-    tempo_ciclo_ms,
+    detalhes,
   } = req.body || {};
 
-  if (!cliente_codigo || !String(cliente_codigo).trim()) {
-    return res.status(400).json({ error: "cliente_codigo é obrigatório" });
+  const empresaId = toNullableNumber(empresa_id);
+  const clienteCodigo = normalizeText(cliente_codigo);
+  const tipoImportacao = normalizeText(tipo_importacao);
+  const statusNorm = normalizeText(status);
+  const referenciaNorm = normalizeText(referencia);
+  const mensagemNorm = normalizeText(mensagem);
+
+  if (!empresaId || empresaId <= 0) {
+    return res.status(400).json({
+      error: "empresa_id é obrigatório",
+    });
   }
 
-  if (!status || !String(status).trim()) {
-    return res.status(400).json({ error: "status é obrigatório" });
+  if (!clienteCodigo || !tipoImportacao || !statusNorm) {
+    return res.status(400).json({
+      error: "empresa_id, cliente_codigo, tipo_importacao e status são obrigatórios",
+    });
   }
 
   const client = await pool.connect();
@@ -65,42 +85,37 @@ export default async function handler(req, res) {
   try {
     const result = await client.query(
       `
-      INSERT INTO public.integrador_heartbeat (
+      INSERT INTO public.integrador_import_log (
+        empresa_id,
         cliente_codigo,
-        versao_integrador,
-        hostname,
-        ip_local,
+        tipo_importacao,
+        referencia,
         status,
         mensagem,
-        nfe_processadas,
-        compras_processadas,
-        tempo_ciclo_ms,
+        detalhes,
         created_at
       )
-      VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,NOW()
-      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())
       RETURNING id
       `,
       [
-        String(cliente_codigo).trim(),
-        versao_integrador ? String(versao_integrador).trim() : null,
-        hostname ? String(hostname).trim() : null,
-        ip_local ? String(ip_local).trim() : null,
-        String(status).trim().toUpperCase(),
-        mensagem ? String(mensagem) : null,
-        Number.isFinite(Number(nfe_processadas)) ? Number(nfe_processadas) : 0,
-        Number.isFinite(Number(compras_processadas)) ? Number(compras_processadas) : 0,
-        Number.isFinite(Number(tempo_ciclo_ms)) ? Number(tempo_ciclo_ms) : null,
+        empresaId,
+        clienteCodigo,
+        tipoImportacao.toUpperCase(),
+        referenciaNorm,
+        statusNorm.toUpperCase(),
+        mensagemNorm,
+        JSON.stringify(detalhes || {}),
       ]
     );
 
     return res.status(200).json({
       success: true,
       id: result.rows[0]?.id || null,
+      empresa_id: empresaId,
     });
   } catch (e) {
-    console.error("Erro em /api/integrador/heartbeat:", {
+    console.error("Erro em /api/integrador/import-log:", {
       message: e?.message,
       stack: e?.stack,
       code: e?.code,
@@ -108,7 +123,7 @@ export default async function handler(req, res) {
     });
 
     return res.status(500).json({
-      error: "Erro ao gravar heartbeat",
+      error: "Erro ao gravar log de importação",
       details: e?.message || String(e),
     });
   } finally {
