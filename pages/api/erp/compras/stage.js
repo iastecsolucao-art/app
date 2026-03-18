@@ -1,10 +1,23 @@
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "../../auth/[...nextauth]";
 import { pool } from "../../../../lib/dbbck";
 
 export default async function handler(req, res) {
   try {
+    const session = await getServerSession(req, res, authOptions);
+
+    if (!session) {
+      return res.status(401).json({ error: "Não autenticado" });
+    }
+
+    const empresa_id = session?.user?.empresa_id;
+
+    if (!empresa_id) {
+      return res.status(403).json({ error: "empresa_id não encontrado na sessão" });
+    }
+
     if (req.method === "POST") {
       const {
-        empresa_id,
         queue_id,
         nfe_id,
         chave_nfe,
@@ -13,7 +26,8 @@ export default async function handler(req, res) {
         fornecedor_nome_origem,
         itens_origem,
         payload_origem,
-      } = req.body;
+        status_stage,
+      } = req.body || {};
 
       const result = await pool.query(
         `
@@ -29,19 +43,20 @@ export default async function handler(req, res) {
           payload_origem,
           status_stage
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'PENDENTE')
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
         RETURNING *
         `,
         [
           empresa_id,
-          queue_id,
-          nfe_id,
-          chave_nfe,
-          pedido_origem,
-          fornecedor_cnpj_origem,
-          fornecedor_nome_origem,
-          JSON.stringify(itens_origem),
-          JSON.stringify(payload_origem),
+          queue_id || null,
+          nfe_id || null,
+          chave_nfe || null,
+          pedido_origem || null,
+          fornecedor_cnpj_origem || null,
+          fornecedor_nome_origem || null,
+          JSON.stringify(itens_origem || []),
+          JSON.stringify(payload_origem || {}),
+          status_stage || "PENDENTE",
         ]
       );
 
@@ -49,21 +64,46 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "PUT") {
-      const { id, status_stage, mensagem_status, pedido_erp, fornecedor_erp } = req.body;
+      const {
+        id,
+        status_stage,
+        mensagem_status,
+        pedido_erp,
+        fornecedor_erp,
+        resposta_erp,
+      } = req.body || {};
+
+      if (!id) {
+        return res.status(400).json({ error: "id é obrigatório" });
+      }
 
       const result = await pool.query(
         `
         UPDATE public.compras_stage
-        SET status_stage = $1,
-            mensagem_status = $2,
-            pedido_erp = $3,
-            fornecedor_erp = $4,
+        SET status_stage = COALESCE($1, status_stage),
+            mensagem_status = COALESCE($2, mensagem_status),
+            pedido_erp = COALESCE($3, pedido_erp),
+            fornecedor_erp = COALESCE($4, fornecedor_erp),
+            resposta_erp = COALESCE($5, resposta_erp),
             updated_at = NOW()
-        WHERE id = $5
+        WHERE id = $6
+          AND empresa_id = $7
         RETURNING *
         `,
-        [status_stage, mensagem_status, pedido_erp, fornecedor_erp, id]
+        [
+          status_stage || null,
+          mensagem_status || null,
+          pedido_erp || null,
+          fornecedor_erp || null,
+          resposta_erp ? JSON.stringify(resposta_erp) : null,
+          id,
+          empresa_id,
+        ]
       );
+
+      if (!result.rows.length) {
+        return res.status(404).json({ error: "Stage não encontrada para esta empresa" });
+      }
 
       return res.status(200).json({ row: result.rows[0] });
     }

@@ -1,26 +1,63 @@
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "../../auth/[...nextauth]";
 import { pool } from "../../../../lib/dbbck";
 
 export default async function handler(req, res) {
   try {
+    const session = await getServerSession(req, res, authOptions);
+
+    if (!session) {
+      return res.status(401).json({ error: "Não autenticado" });
+    }
+
+    const empresa_id = session?.user?.empresa_id;
+
+    if (!empresa_id) {
+      return res.status(403).json({ error: "empresa_id não encontrado na sessão" });
+    }
+
     if (req.method === "POST") {
-      const { empresa_id, cnpj_fornecedor, itens } = req.body;
+      const {
+        cnpj_fornecedor,
+        queue_id,
+        nfe_id,
+        chave_nfe,
+        pedido_origem,
+        pedido_erp,
+        stage_id,
+        itens,
+      } = req.body || {};
+
+      if (!Array.isArray(itens)) {
+        return res.status(400).json({ error: "itens deve ser um array" });
+      }
 
       const results = [];
 
       for (const item of itens) {
-        const { cprod_origem, xprod_origem, ncm_origem, cfop_origem, n_item } = item;
+        const {
+          cprod_origem,
+          xprod_origem,
+          ncm_origem,
+          cfop_origem,
+          n_item,
+          codigo_produto_erp,
+          status_map,
+          item_ok,
+        } = item || {};
 
-        // 🔍 BUSCA MAP EXISTENTE
         const existing = await pool.query(
           `
           SELECT *
           FROM public.nfe_item_erp_map
-          WHERE cnpj_fornecedor = $1
-            AND cprod_origem = $2
+          WHERE empresa_id = $1
+            AND COALESCE(cnpj_fornecedor, '') = COALESCE($2, '')
+            AND COALESCE(cprod_origem, '') = COALESCE($3, '')
             AND ativo = TRUE
+          ORDER BY id DESC
           LIMIT 1
           `,
-          [cnpj_fornecedor, cprod_origem]
+          [empresa_id, cnpj_fornecedor || null, cprod_origem || null]
         );
 
         if (existing.rows.length > 0) {
@@ -30,40 +67,97 @@ export default async function handler(req, res) {
             ...item,
             codigo_produto_erp: map.codigo_produto_erp,
             map_aplicado: true,
+            status_map: "MAP_APLICADO",
           });
+
+          await pool.query(
+            `
+            UPDATE public.nfe_item_erp_map
+            SET
+              queue_id = COALESCE($1, queue_id),
+              nfe_id = COALESCE($2, nfe_id),
+              chave_nfe = COALESCE($3, chave_nfe),
+              pedido_origem = COALESCE($4, pedido_origem),
+              pedido_erp = COALESCE($5, pedido_erp),
+              n_item = COALESCE($6, n_item),
+              stage_id = COALESCE($7, stage_id),
+              item_ok = COALESCE($8, item_ok),
+              origem_aplicacao = COALESCE($9, origem_aplicacao),
+              map_aplicado_automaticamente = TRUE,
+              updated_at = NOW()
+            WHERE id = $10
+              AND empresa_id = $11
+            `,
+            [
+              queue_id || null,
+              nfe_id || null,
+              chave_nfe || null,
+              pedido_origem || null,
+              pedido_erp || null,
+              n_item || null,
+              stage_id || null,
+              item_ok ?? null,
+              "COMPRA",
+              map.id,
+              empresa_id,
+            ]
+          );
 
           continue;
         }
 
-        // 🔴 NÃO TEM MAP → REGISTRA PENDENTE
         await pool.query(
           `
           INSERT INTO public.nfe_item_erp_map (
             empresa_id,
+            queue_id,
+            nfe_id,
+            chave_nfe,
+            pedido_origem,
+            pedido_erp,
+            stage_id,
             cnpj_fornecedor,
             cprod_origem,
             xprod_origem,
             ncm_origem,
             cfop_origem,
             n_item,
-            status_map
+            codigo_produto_erp,
+            status_map,
+            item_ok,
+            origem_aplicacao,
+            map_aplicado_automaticamente
           )
-          VALUES ($1,$2,$3,$4,$5,$6,$7,'PENDENTE')
+          VALUES (
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,FALSE
+          )
+          RETURNING *
           `,
           [
             empresa_id,
-            cnpj_fornecedor,
-            cprod_origem,
-            xprod_origem,
-            ncm_origem,
-            cfop_origem,
-            n_item,
+            queue_id || null,
+            nfe_id || null,
+            chave_nfe || null,
+            pedido_origem || null,
+            pedido_erp || null,
+            stage_id || null,
+            cnpj_fornecedor || null,
+            cprod_origem || null,
+            xprod_origem || null,
+            ncm_origem || null,
+            cfop_origem || null,
+            n_item || null,
+            codigo_produto_erp || null,
+            status_map || "PENDENTE",
+            item_ok ?? null,
+            "COMPRA",
           ]
         );
 
         results.push({
           ...item,
           map_aplicado: false,
+          status_map: status_map || "PENDENTE",
         });
       }
 
