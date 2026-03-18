@@ -1,20 +1,40 @@
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "../../auth/[...nextauth]";
-import { pool } from "../../../../lib/dbbck";
+import { pool } from "../../../../lib/db";
+
+function getEmpresaIdFromRequest(req) {
+  const authHeader = req.headers.authorization || "";
+  const expectedToken = process.env.API_TOKEN;
+
+  if (!authHeader.startsWith("Bearer ")) {
+    return { error: "Token não informado" };
+  }
+
+  const token = authHeader.replace("Bearer ", "").trim();
+
+  if (!expectedToken || token !== expectedToken) {
+    return { error: "Token inválido" };
+  }
+
+  const empresaId =
+    req.body?.empresa_id ||
+    req.query?.empresa_id ||
+    req.headers["x-empresa-id"];
+
+  if (!empresaId) {
+    return { error: "empresa_id não informado" };
+  }
+
+  return { empresa_id: Number(empresaId) };
+}
 
 export default async function handler(req, res) {
   try {
-    const session = await getServerSession(req, res, authOptions);
+    const auth = getEmpresaIdFromRequest(req);
 
-    if (!session) {
-      return res.status(401).json({ error: "Não autenticado" });
+    if (auth.error) {
+      return res.status(401).json({ error: auth.error });
     }
 
-    const empresa_id = session?.user?.empresa_id;
-
-    if (!empresa_id) {
-      return res.status(403).json({ error: "empresa_id não encontrado na sessão" });
-    }
+    const { empresa_id } = auth;
 
     if (req.method === "POST") {
       const {
@@ -66,7 +86,10 @@ export default async function handler(req, res) {
         ]
       );
 
-      return res.status(200).json({ row: result.rows[0] });
+      return res.status(200).json({
+        id: result.rows[0].id,
+        row: result.rows[0],
+      });
     }
 
     return res.status(405).json({ error: "Método não permitido" });
