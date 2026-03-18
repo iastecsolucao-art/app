@@ -23,6 +23,10 @@ if (!pool) {
   global._nfePgPool = pool;
 }
 
+function firstValue(v) {
+  return Array.isArray(v) ? v[0] : v;
+}
+
 function extractPedidos(texto) {
   const s = String(texto || "");
   const patterns = [
@@ -60,8 +64,19 @@ export default async function handler(req, res) {
     const rawId = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
     const id = Number.parseInt(String(rawId), 10);
 
+    const rawEmpresaId =
+      req.body?.empresa_id ??
+      req.query?.empresa_id ??
+      firstValue(req.query.empresa_id);
+
+    const empresaId = Number.parseInt(String(rawEmpresaId), 10);
+
     if (!Number.isInteger(id) || id <= 0) {
       return res.status(400).json({ error: "ID inválido" });
+    }
+
+    if (!Number.isInteger(empresaId) || empresaId <= 0) {
+      return res.status(400).json({ error: "empresa_id inválido" });
     }
 
     await client.query("BEGIN");
@@ -70,6 +85,7 @@ export default async function handler(req, res) {
       `
       SELECT
         id,
+        empresa_id,
         chave_nfe,
         n_nf,
         serie,
@@ -77,14 +93,15 @@ export default async function handler(req, res) {
         COALESCE(status_erp, 2) AS status_erp
       FROM public.nfe_document
       WHERE id = $1
+        AND empresa_id = $2
       FOR UPDATE
       `,
-      [id]
+      [id, empresaId]
     );
 
     if (!docRes.rowCount) {
       await client.query("ROLLBACK");
-      return res.status(404).json({ error: "NFe não encontrada" });
+      return res.status(404).json({ error: "NFe não encontrada para esta empresa" });
     }
 
     const doc = docRes.rows[0];
@@ -101,6 +118,7 @@ export default async function handler(req, res) {
     const queueRes = await client.query(
       `
       INSERT INTO public.nfe_erp_queue (
+        empresa_id,
         nfe_id,
         status,
         tentativas,
@@ -113,6 +131,7 @@ export default async function handler(req, res) {
       )
       VALUES (
         $1,
+        $2,
         'PENDENTE',
         0,
         NULL,
@@ -124,15 +143,16 @@ export default async function handler(req, res) {
       )
       ON CONFLICT (nfe_id)
       DO UPDATE SET
+        empresa_id = EXCLUDED.empresa_id,
         status = 'PENDENTE',
         last_error = NULL,
         integrado_em = NULL,
         reservado_em = NULL,
         reservado_por = NULL,
         updated_at = NOW()
-      RETURNING id, nfe_id, status
+      RETURNING id, empresa_id, nfe_id, status
       `,
-      [id]
+      [empresaId, id]
     );
 
     await client.query(
@@ -140,8 +160,9 @@ export default async function handler(req, res) {
       UPDATE public.nfe_document
       SET status_erp = 1
       WHERE id = $1
+        AND empresa_id = $2
       `,
-      [id]
+      [id, empresaId]
     );
 
     const pedidos = extractPedidos(doc.infcpl);
@@ -154,11 +175,12 @@ export default async function handler(req, res) {
           `
           SELECT id
           FROM public.erp_compra_queue
-          WHERE nfe_id = $1
-            AND pedido = $2
+          WHERE empresa_id = $1
+            AND nfe_id = $2
+            AND pedido = $3
           LIMIT 1
           `,
-          [id, pedido]
+          [empresaId, id, pedido]
         );
 
         if (existingRes.rowCount > 0) {
@@ -166,7 +188,7 @@ export default async function handler(req, res) {
             `
             UPDATE public.erp_compra_queue
             SET
-              origem_texto = $3,
+              origem_texto = $2,
               status_integracao = 'PENDENTE',
               mensagem_integracao = 'Reenfileirado automaticamente no envio ao ERP',
               tentativas = 0,
@@ -176,13 +198,14 @@ export default async function handler(req, res) {
               updated_at = NOW()
             WHERE id = $1
             `,
-            [existingRes.rows[0].id, pedido, doc.infcpl || null]
+            [existingRes.rows[0].id, doc.infcpl || null]
           );
           comprasAtualizadas += 1;
         } else {
           await client.query(
             `
             INSERT INTO public.erp_compra_queue (
+              empresa_id,
               nfe_id,
               pedido,
               origem_texto,
@@ -199,6 +222,7 @@ export default async function handler(req, res) {
               $1,
               $2,
               $3,
+              $4,
               'PENDENTE',
               'Criado automaticamente no envio ao ERP',
               0,
@@ -209,7 +233,7 @@ export default async function handler(req, res) {
               NOW()
             )
             `,
-            [id, pedido, doc.infcpl || null]
+            [empresaId, id, pedido, doc.infcpl || null]
           );
           comprasCriadas += 1;
         }
@@ -219,11 +243,12 @@ export default async function handler(req, res) {
         `
         SELECT id
         FROM public.erp_compra_queue
-        WHERE nfe_id = $1
+        WHERE empresa_id = $1
+          AND nfe_id = $2
           AND pedido IS NULL
         LIMIT 1
         `,
-        [id]
+        [empresaId, id]
       );
 
       if (existingNoPedidoRes.rowCount > 0) {
@@ -248,6 +273,7 @@ export default async function handler(req, res) {
         await client.query(
           `
           INSERT INTO public.erp_compra_queue (
+            empresa_id,
             nfe_id,
             pedido,
             origem_texto,
@@ -262,8 +288,9 @@ export default async function handler(req, res) {
           )
           VALUES (
             $1,
-            NULL,
             $2,
+            NULL,
+            $3,
             'SEM_PEDIDO',
             'NF enviada ao ERP sem número de pedido identificado na observação',
             0,
@@ -274,7 +301,7 @@ export default async function handler(req, res) {
             NOW()
           )
           `,
-          [id, doc.infcpl || null]
+          [empresaId, id, doc.infcpl || null]
         );
         comprasCriadas += 1;
       }
@@ -284,6 +311,7 @@ export default async function handler(req, res) {
       .query(
         `
         INSERT INTO public.nfe_erp_log (
+          empresa_id,
           nfe_id,
           tipo_evento,
           mensagem,
@@ -292,22 +320,25 @@ export default async function handler(req, res) {
         )
         VALUES (
           $1,
-          'REENVIO_FILA',
           $2,
+          'REENVIO_FILA',
           $3,
+          $4,
           NOW()
         )
         `,
         [
+          empresaId,
           id,
-          'NF enviada para fila do ERP',
+          "NF enviada para fila do ERP",
           JSON.stringify({
+            empresa_id: empresaId,
             chave_nfe: doc.chave_nfe,
             n_nf: doc.n_nf,
             serie: doc.serie,
             status_anterior: statusAtual,
             pedidos_encontrados: pedidos,
-            compra_status: pedidos.length > 0 ? 'PENDENTE' : 'SEM_PEDIDO',
+            compra_status: pedidos.length > 0 ? "PENDENTE" : "SEM_PEDIDO",
           }),
         ]
       )
@@ -318,6 +349,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       message: "NF enviada para fila do ERP com sucesso.",
+      empresa_id: empresaId,
       nfe_id: id,
       chave_nfe: doc.chave_nfe,
       n_nf: doc.n_nf,
