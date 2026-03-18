@@ -33,7 +33,14 @@ function normalizeText(v) {
 }
 
 function normalizeCode(v) {
-  return String(v || "").trim();
+  const s = String(v || "").trim();
+  return s || null;
+}
+
+function toNullableNumber(v) {
+  if (v === undefined || v === null || String(v).trim() === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 export default async function handler(req, res) {
@@ -48,14 +55,16 @@ export default async function handler(req, res) {
 
   try {
     const body = req.body || {};
-    const cliente_codigo = normalizeText(body.cliente_codigo);
-    const nfe_id =
-      body.nfe_id !== undefined && body.nfe_id !== null && String(body.nfe_id).trim() !== ""
-        ? Number(body.nfe_id)
-        : null;
 
+    const empresa_id = toNullableNumber(body.empresa_id);
+    const cliente_codigo = normalizeText(body.cliente_codigo);
+    const nfe_id = toNullableNumber(body.nfe_id);
     const fornecedor_cnpj = normalizeDigits(body.fornecedor_cnpj);
     const itens = Array.isArray(body.itens_pendentes) ? body.itens_pendentes : [];
+
+    if (!empresa_id || empresa_id <= 0) {
+      return res.status(400).json({ error: "empresa_id é obrigatório" });
+    }
 
     if (!cliente_codigo) {
       return res.status(400).json({ error: "cliente_codigo é obrigatório" });
@@ -85,6 +94,8 @@ export default async function handler(req, res) {
       const sugestao_codigo_erp = normalizeText(rawItem?.sugestao_codigo_erp);
       const sugestao_descricao_erp = normalizeText(rawItem?.sugestao_descricao_erp);
       const n_item = rawItem?.n_item ?? null;
+      const chave_nfe = normalizeText(rawItem?.chave_nfe || body?.chave_nfe);
+      const pedido_origem = normalizeText(rawItem?.pedido_origem || body?.pedido_origem);
 
       if (!cprod_origem) {
         ignored += 1;
@@ -108,11 +119,14 @@ export default async function handler(req, res) {
           cfop_origem,
           tipo_item_origem
         FROM public.nfe_item_erp_map
-        WHERE cnpj_fornecedor = $1
-          AND cprod_origem = $2
+        WHERE empresa_id = $1
+          AND cnpj_fornecedor = $2
+          AND cprod_origem = $3
+          AND COALESCE(sistema_destino, 'ERP') = 'ERP'
+        ORDER BY id DESC
         LIMIT 1
         `,
-        [fornecedor_cnpj, cprod_origem]
+        [empresa_id, fornecedor_cnpj, cprod_origem]
       );
 
       if (existsRes.rowCount > 0) {
@@ -122,20 +136,31 @@ export default async function handler(req, res) {
           `
           UPDATE public.nfe_item_erp_map
           SET
-            xprod_origem      = COALESCE(xprod_origem, $2),
-            ncm_origem        = COALESCE(ncm_origem, $3),
-            cfop_origem       = COALESCE(cfop_origem, $4),
-            tipo_item_origem  = COALESCE(tipo_item_origem, $5),
+            xprod_origem = COALESCE(public.nfe_item_erp_map.xprod_origem, $2),
+            ncm_origem = COALESCE(public.nfe_item_erp_map.ncm_origem, $3),
+            cfop_origem = COALESCE(public.nfe_item_erp_map.cfop_origem, $4),
+            tipo_item_origem = COALESCE(public.nfe_item_erp_map.tipo_item_origem, $5),
+
             codigo_produto_erp = CASE
-              WHEN codigo_produto_erp IS NULL OR TRIM(codigo_produto_erp) = ''
-                THEN $6
-              ELSE codigo_produto_erp
+              WHEN public.nfe_item_erp_map.codigo_produto_erp IS NULL
+                   OR TRIM(public.nfe_item_erp_map.codigo_produto_erp) = ''
+              THEN $6
+              ELSE public.nfe_item_erp_map.codigo_produto_erp
             END,
+
             descricao_erp = CASE
-              WHEN descricao_erp IS NULL OR TRIM(descricao_erp) = ''
-                THEN $7
-              ELSE descricao_erp
+              WHEN public.nfe_item_erp_map.descricao_erp IS NULL
+                   OR TRIM(public.nfe_item_erp_map.descricao_erp) = ''
+              THEN $7
+              ELSE public.nfe_item_erp_map.descricao_erp
             END,
+
+            nfe_id = COALESCE(public.nfe_item_erp_map.nfe_id, $8),
+            chave_nfe = COALESCE(public.nfe_item_erp_map.chave_nfe, $9),
+            pedido_origem = COALESCE(public.nfe_item_erp_map.pedido_origem, $10),
+            n_item = COALESCE(public.nfe_item_erp_map.n_item, $11),
+            origem_aplicacao = COALESCE(public.nfe_item_erp_map.origem_aplicacao, $12),
+
             updated_at = NOW()
           WHERE id = $1
           `,
@@ -147,6 +172,11 @@ export default async function handler(req, res) {
             tipo_item_origem,
             sugestao_codigo_erp,
             sugestao_descricao_erp,
+            nfe_id,
+            chave_nfe,
+            pedido_origem,
+            n_item != null ? String(n_item) : null,
+            "INTEGRADOR",
           ]
         );
 
@@ -167,6 +197,7 @@ export default async function handler(req, res) {
         `
         INSERT INTO public.nfe_item_erp_map
         (
+          empresa_id,
           participante_id,
           sistema_destino,
           cnpj_fornecedor,
@@ -179,14 +210,20 @@ export default async function handler(req, res) {
           descricao_erp,
           status_map,
           ativo,
+          nfe_id,
+          chave_nfe,
+          pedido_origem,
+          n_item,
+          origem_aplicacao,
+          map_aplicado_automaticamente,
           created_at,
           updated_at
         )
         VALUES
         (
+          $1,
           NULL,
           'ERP',
-          $1,
           $2,
           $3,
           $4,
@@ -194,14 +231,22 @@ export default async function handler(req, res) {
           $6,
           $7,
           $8,
+          $9,
           'PENDENTE',
           true,
+          $10,
+          $11,
+          $12,
+          $13,
+          $14,
+          false,
           NOW(),
           NOW()
         )
         RETURNING id
         `,
         [
+          empresa_id,
           fornecedor_cnpj,
           cprod_origem,
           xprod_origem,
@@ -210,6 +255,11 @@ export default async function handler(req, res) {
           tipo_item_origem,
           sugestao_codigo_erp,
           sugestao_descricao_erp,
+          nfe_id,
+          chave_nfe,
+          pedido_origem,
+          n_item != null ? String(n_item) : null,
+          "INTEGRADOR",
         ]
       );
 
@@ -227,6 +277,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
+      empresa_id,
       cliente_codigo,
       nfe_id,
       fornecedor_cnpj,
@@ -237,7 +288,9 @@ export default async function handler(req, res) {
       processed,
     });
   } catch (e) {
-    await client.query("ROLLBACK");
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
 
     console.error("Erro em POST /api/nfe/item-map/pending:", {
       message: e?.message,
