@@ -2,7 +2,7 @@ import { Pool } from "pg";
 import { XMLParser } from "fast-xml-parser";
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL_VENDEDORES,
+  connectionString: process.env.DATABASE_URL,
 });
 
 const parser = new XMLParser({

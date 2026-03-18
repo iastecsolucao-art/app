@@ -1,9 +1,9 @@
 import { Pool } from "pg";
 
-const connectionString = process.env.DATABASE_URL_VENDEDORES;
+const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
-  throw new Error("DATABASE_URL_VENDEDORES não está definida");
+  throw new Error("DATABASE_URL não está definida");
 }
 
 let pool = global._nfePgPool;
@@ -36,6 +36,10 @@ function normalizeValidationStatus(v) {
   return s;
 }
 
+function getSingleQueryParam(value) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]);
@@ -45,17 +49,25 @@ export default async function handler(req, res) {
   }
 
   try {
-    const rawId = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
+    const rawId = getSingleQueryParam(req.query.id);
+    const rawEmpresaId = getSingleQueryParam(req.query.empresa_id);
+
     const idInt = Number.parseInt(String(rawId), 10);
+    const empresaIdInt = Number.parseInt(String(rawEmpresaId), 10);
 
     if (!Number.isInteger(idInt) || idInt <= 0) {
       return res.status(400).json({ error: "ID inválido" });
+    }
+
+    if (!Number.isInteger(empresaIdInt) || empresaIdInt <= 0) {
+      return res.status(400).json({ error: "empresa_id inválido" });
     }
 
     const docRes = await pool.query(
       `
       SELECT
         d.id,
+        d.empresa_id,
         d.chave_nfe,
         d.n_nf,
         d.serie,
@@ -108,6 +120,12 @@ export default async function handler(req, res) {
         d.vol_pesob,
         d.xml_raw,
         d.created_at,
+        d.situacao,
+        d.cancelada,
+        d.cancelada_em,
+        d.cancelamento_motivo,
+        d.cancelamento_protocolo,
+        d.cancelamento_codigo,
         COALESCE(d.status_erp, 2) AS status_erp,
 
         d.erp_stage_status,
@@ -124,14 +142,15 @@ export default async function handler(req, res) {
         d.erp_itens_ok
       FROM public.nfe_document d
       WHERE d.id = $1
+        AND d.empresa_id = $2
       LIMIT 1
       `,
-      [idInt]
+      [idInt, empresaIdInt]
     );
 
     if (docRes.rowCount === 0) {
       return res.status(404).json({
-        error: "Documento não encontrado",
+        error: "Documento não encontrado para esta empresa",
       });
     }
 
@@ -141,6 +160,7 @@ export default async function handler(req, res) {
       `
       SELECT
         id,
+        empresa_id,
         nfe_id,
         n_item,
         c_prod       AS cprod,
@@ -195,9 +215,10 @@ export default async function handler(req, res) {
         infadprod
       FROM public.nfe_item
       WHERE nfe_id = $1
+        AND empresa_id = $2
       ORDER BY n_item ASC, id ASC
       `,
-      [idInt]
+      [idInt, empresaIdInt]
     );
 
     const items = Array.isArray(itemRes.rows) ? itemRes.rows : [];
@@ -206,6 +227,7 @@ export default async function handler(req, res) {
       `
       SELECT
         id,
+        empresa_id,
         nfe_id,
         tpag,
         vpag,
@@ -216,9 +238,10 @@ export default async function handler(req, res) {
         card_caut
       FROM public.nfe_payment
       WHERE nfe_id = $1
+        AND empresa_id = $2
       ORDER BY id ASC
       `,
-      [idInt]
+      [idInt, empresaIdInt]
     );
 
     const payments = Array.isArray(payRes.rows) ? payRes.rows : [];
@@ -227,6 +250,7 @@ export default async function handler(req, res) {
       `
       SELECT
         q.id,
+        q.empresa_id,
         q.status,
         q.tentativas,
         q.last_error,
@@ -238,10 +262,11 @@ export default async function handler(req, res) {
         q.updated_at
       FROM public.nfe_erp_queue q
       WHERE q.nfe_id = $1
+        AND q.empresa_id = $2
       ORDER BY q.id DESC
       LIMIT 1
       `,
-      [idInt]
+      [idInt, empresaIdInt]
     );
 
     const queue = queueRes.rows[0] || null;
@@ -250,6 +275,7 @@ export default async function handler(req, res) {
       `
       SELECT
         v.id,
+        v.empresa_id,
         v.status_validacao,
         v.mensagem,
         v.payload_json,
@@ -257,10 +283,11 @@ export default async function handler(req, res) {
         v.updated_at
       FROM public.nfe_erp_validacao v
       WHERE v.nfe_id = $1
+        AND v.empresa_id = $2
       ORDER BY v.created_at DESC, v.id DESC
       LIMIT 1
       `,
-      [idInt]
+      [idInt, empresaIdInt]
     );
 
     const validacao = validacaoRes.rows[0] || null;
@@ -272,6 +299,7 @@ export default async function handler(req, res) {
       `
       SELECT
         id,
+        empresa_id,
         tipo,
         cnpj,
         xnome,
@@ -279,9 +307,10 @@ export default async function handler(req, res) {
         uf,
         municipio
       FROM public.nfe_participante
-      WHERE cnpj IN ($1, $2)
+      WHERE empresa_id = $1
+        AND cnpj IN ($2, $3)
       `,
-      [cnpjEmit || "", cnpjDest || ""]
+      [empresaIdInt, cnpjEmit || "", cnpjDest || ""]
     );
 
     const participantes = Array.isArray(partRes.rows) ? partRes.rows : [];
@@ -316,6 +345,7 @@ export default async function handler(req, res) {
         `
         SELECT
           id,
+          empresa_id,
           participante_id,
           cnpj_fornecedor,
           cprod_origem,
@@ -325,10 +355,11 @@ export default async function handler(req, res) {
           status_map,
           ativo
         FROM public.nfe_item_erp_map
-        WHERE cnpj_fornecedor = $1
+        WHERE empresa_id = $1
+          AND cnpj_fornecedor = $2
           AND COALESCE(ativo, true) = true
         `,
-        [cnpjEmit]
+        [empresaIdInt, cnpjEmit]
       );
 
       const itemMaps = Array.isArray(itemMapRes.rows) ? itemMapRes.rows : [];
@@ -347,12 +378,7 @@ export default async function handler(req, res) {
 
           if (mapCprod && cprod && mapCprod === cprod) return true;
 
-          if (
-            !mapCprod &&
-            mapXprod &&
-            xprod &&
-            mapXprod === xprod
-          ) {
+          if (!mapCprod && mapXprod && xprod && mapXprod === xprod) {
             return true;
           }
 

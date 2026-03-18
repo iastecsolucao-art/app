@@ -1,9 +1,9 @@
 import { Pool } from "pg";
 
-const connectionString = process.env.DATABASE_URL_VENDEDORES;
+const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
-  throw new Error("DATABASE_URL_VENDEDORES não está definida");
+  throw new Error("DATABASE_URL não está definida");
 }
 
 let pool = global._nfePgPool;
@@ -40,6 +40,21 @@ function normalizeValidationStatus(v) {
   return s;
 }
 
+function parseStatusList(rawStatus) {
+  const txt = String(rawStatus || "").trim();
+  if (!txt) return [];
+
+  const values = txt
+    .split(",")
+    .map((v) => Number.parseInt(String(v).trim(), 10))
+    .filter((v) => Number.isInteger(v));
+
+  const allowed = [1, 2, 3, 4, 5];
+  const unique = [...new Set(values)].filter((v) => allowed.includes(v));
+
+  return unique;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]);
@@ -49,6 +64,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    const rawEmpresaId = firstValue(req.query.empresa_id);
     const rawChave = firstValue(req.query.chave_nfe);
     const rawNNf = firstValue(req.query.n_nf);
     const rawSerie = firstValue(req.query.serie);
@@ -57,7 +73,20 @@ export default async function handler(req, res) {
     const rawNatureza = firstValue(req.query.natureza_operacao);
     const rawCfop = firstValue(req.query.cfop);
     const rawStatus = firstValue(req.query.status_erp);
+    const rawSituacaoNota = firstValue(req.query.situacao_nota);
+    const rawDhEmiIni = firstValue(req.query.dh_emi_ini);
+    const rawDhEmiFim = firstValue(req.query.dh_emi_fim);
+    const rawMod = firstValue(req.query.mod);
     const rawLimit = firstValue(req.query.limit);
+    const rawPage = firstValue(req.query.page);
+
+    const empresaId = Number.parseInt(String(rawEmpresaId), 10);
+
+    if (!Number.isInteger(empresaId) || empresaId <= 0) {
+      return res.status(400).json({
+        error: "empresa_id inválido",
+      });
+    }
 
     const chave_nfe = String(rawChave || "").trim();
     const n_nf = String(rawNNf || "").trim();
@@ -66,14 +95,47 @@ export default async function handler(req, res) {
     const destinatario = String(rawDestinatario || "").trim();
     const natureza_operacao = String(rawNatureza || "").trim();
     const cfop = String(rawCfop || "").trim();
+    const situacao_nota = String(rawSituacaoNota || "").trim().toLowerCase();
+    const dh_emi_ini = String(rawDhEmiIni || "").trim();
+    const dh_emi_fim = String(rawDhEmiFim || "").trim();
+    const mod = String(rawMod || "").trim().toUpperCase();
 
-    const lim = Math.min(
-      Math.max(parseInt(String(rawLimit || "50"), 10) || 50, 1),
+    const limit = Math.min(
+      Math.max(parseInt(String(rawLimit || "10"), 10) || 10, 1),
       200
     );
 
+    const page = Math.max(parseInt(String(rawPage || "1"), 10) || 1, 1);
+    const offset = (page - 1) * limit;
+
+    const statusList = parseStatusList(rawStatus);
+
+    if (String(rawStatus || "").trim() && statusList.length === 0) {
+      return res.status(400).json({
+        error: "status_erp inválido",
+      });
+    }
+
+    if (
+      situacao_nota &&
+      !["autorizada", "cancelada"].includes(situacao_nota)
+    ) {
+      return res.status(400).json({
+        error: "situacao_nota inválida",
+      });
+    }
+
+    if (mod && !["NFE", "NFSE"].includes(mod)) {
+      return res.status(400).json({
+        error: "mod inválido",
+      });
+    }
+
     const params = [];
     const where = [];
+
+    params.push(empresaId);
+    where.push(`d.empresa_id = $${params.length}`);
 
     if (chave_nfe) {
       params.push(`%${chave_nfe}%`);
@@ -137,45 +199,78 @@ export default async function handler(req, res) {
 
     if (cfop) {
       params.push(`%${cfop}%`);
+      const pCfop = `$${params.length}`;
+
+      params.push(empresaId);
+      const pEmpresaCfop = `$${params.length}`;
+
       where.push(`
         EXISTS (
           SELECT 1
           FROM public.nfe_item fi
           WHERE fi.nfe_id = d.id
-            AND COALESCE(fi.cfop, '') ILIKE $${params.length}
+            AND fi.empresa_id = ${pEmpresaCfop}
+            AND COALESCE(fi.cfop, '') ILIKE ${pCfop}
         )
       `);
     }
 
-    if (
-      rawStatus !== undefined &&
-      rawStatus !== null &&
-      String(rawStatus).trim() !== ""
-    ) {
-      const statusInt = parseInt(String(rawStatus), 10);
+    if (statusList.length > 0) {
+      params.push(statusList);
+      where.push(`COALESCE(d.status_erp, 2) = ANY($${params.length}::int[])`);
+    }
 
-      if (!Number.isInteger(statusInt) || ![1, 2, 3, 4, 5].includes(statusInt)) {
-        return res.status(400).json({
-          error: "status_erp inválido",
-        });
-      }
+    if (situacao_nota === "cancelada") {
+      where.push(`COALESCE(d.cancelada, false) = true`);
+    } else if (situacao_nota === "autorizada") {
+      where.push(`COALESCE(d.cancelada, false) = false`);
+    }
 
-      params.push(statusInt);
-      where.push(`COALESCE(d.status_erp, 2) = $${params.length}`);
+    if (dh_emi_ini) {
+      params.push(dh_emi_ini);
+      where.push(`d.dh_emi::date >= $${params.length}::date`);
+    }
+
+    if (dh_emi_fim) {
+      params.push(dh_emi_fim);
+      where.push(`d.dh_emi::date <= $${params.length}::date`);
+    }
+
+    if (mod) {
+      params.push(mod);
+      where.push(`COALESCE(UPPER(d.mod), '') = $${params.length}`);
     }
 
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    params.push(lim);
-    const limitParam = `$${params.length}`;
+    const countParams = [...params];
+    const countResult = await pool.query(
+      `
+      SELECT COUNT(*)::bigint AS total
+      FROM public.nfe_document d
+      ${whereSql}
+      `,
+      countParams
+    );
+
+    const total = Number(countResult.rows?.[0]?.total || 0);
+
+    const listParams = [...params];
+    listParams.push(limit);
+    const limitParam = `$${listParams.length}`;
+
+    listParams.push(offset);
+    const offsetParam = `$${listParams.length}`;
 
     const result = await pool.query(
       `
       SELECT
         d.id,
+        d.empresa_id,
         d.chave_nfe,
         d.n_nf,
         d.serie,
+        d.mod,
         d.dh_emi,
         d.xnome_emit,
         d.cnpj_emit,
@@ -186,6 +281,9 @@ export default async function handler(req, res) {
         d.nat_op AS natureza_operacao,
         d.infcpl,
         d.infadfisco,
+        d.situacao,
+        d.cancelada,
+        d.cancelada_em,
         COALESCE(d.status_erp, 2) AS status_erp,
 
         d.erp_stage_status,
@@ -220,6 +318,7 @@ export default async function handler(req, res) {
           qq.mensagem_integracao
         FROM public.nfe_erp_queue qq
         WHERE qq.nfe_id = d.id
+          AND qq.empresa_id = d.empresa_id
         ORDER BY qq.id DESC
         LIMIT 1
       ) q ON TRUE
@@ -230,20 +329,27 @@ export default async function handler(req, res) {
           vv.created_at
         FROM public.nfe_erp_validacao vv
         WHERE vv.nfe_id = d.id
+          AND vv.empresa_id = d.empresa_id
         ORDER BY vv.created_at DESC, vv.id DESC
         LIMIT 1
       ) v ON TRUE
       ${whereSql}
-      ORDER BY d.created_at DESC, d.id DESC
+      ORDER BY d.dh_emi DESC NULLS LAST, d.id DESC
       LIMIT ${limitParam}
+      OFFSET ${offsetParam}
       `,
-      params
+      listParams
     );
 
     const rows = Array.isArray(result.rows) ? result.rows : [];
 
     if (rows.length === 0) {
-      return res.status(200).json({ rows: [] });
+      return res.status(200).json({
+        rows: [],
+        total,
+        page,
+        limit,
+      });
     }
 
     const cnpjsEmit = [
@@ -257,12 +363,14 @@ export default async function handler(req, res) {
             `
             SELECT
               id,
+              empresa_id,
               cnpj,
               xnome
             FROM public.nfe_participante
-            WHERE cnpj = ANY($1::varchar[])
+            WHERE empresa_id = $1
+              AND cnpj = ANY($2::varchar[])
             `,
-            [cnpjsEmit]
+            [empresaId, cnpjsEmit]
           )
         : { rows: [] };
 
@@ -276,6 +384,7 @@ export default async function handler(req, res) {
             `
             SELECT
               i.nfe_id,
+              i.empresa_id,
               i.n_item,
               i.c_prod AS cprod,
               i.x_prod AS xprod,
@@ -287,8 +396,10 @@ export default async function handler(req, res) {
             FROM public.nfe_item i
             INNER JOIN public.nfe_document d
               ON d.id = i.nfe_id
+             AND d.empresa_id = i.empresa_id
             LEFT JOIN public.nfe_item_erp_map m
-              ON m.cnpj_fornecedor = d.cnpj_emit
+              ON m.empresa_id = d.empresa_id
+             AND m.cnpj_fornecedor = d.cnpj_emit
              AND (
                m.cprod_origem = i.c_prod
                OR (
@@ -296,10 +407,11 @@ export default async function handler(req, res) {
                  AND UPPER(COALESCE(m.xprod_origem, '')) = UPPER(COALESCE(i.x_prod, ''))
                )
              )
-            WHERE i.nfe_id = ANY($1::bigint[])
+            WHERE i.empresa_id = $1
+              AND i.nfe_id = ANY($2::bigint[])
             ORDER BY i.nfe_id, i.n_item, i.id
             `,
-            [rowIds]
+            [empresaId, rowIds]
           )
         : { rows: [] };
 
@@ -393,14 +505,17 @@ export default async function handler(req, res) {
           normalizedValidationStatus === "OK"
             ? true
             : row.erp_fornecedor_existe ?? fallbackFornecedorOk,
+
         map_destinatario_ok:
           normalizedValidationStatus === "OK"
             ? true
             : row.erp_destinatario_existe ?? true,
+
         map_itens_ok:
           normalizedValidationStatus === "OK"
             ? true
             : row.erp_itens_ok ?? fallbackItensOk,
+
         map_status: mapStatus,
         map_pendencias: mapPendencias,
         participante_emit_id: participanteEmit?.id || null,
@@ -409,6 +524,9 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       rows: enrichedRows,
+      total,
+      page,
+      limit,
     });
   } catch (e) {
     console.error("Erro em GET /api/nfe:", {

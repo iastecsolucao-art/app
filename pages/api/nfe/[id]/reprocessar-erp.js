@@ -1,9 +1,9 @@
 import { Pool } from "pg";
 
-const connectionString = process.env.DATABASE_URL_VENDEDORES;
+const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
-  throw new Error("DATABASE_URL_VENDEDORES não está definida");
+  throw new Error("DATABASE_URL não está definida");
 }
 
 let pool = global._nfePgPool;
@@ -23,6 +23,10 @@ if (!pool) {
   global._nfePgPool = pool;
 }
 
+function firstValue(v) {
+  return Array.isArray(v) ? v[0] : v;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
@@ -34,12 +38,23 @@ export default async function handler(req, res) {
   const client = await pool.connect();
 
   try {
-    const rawId = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
+    const rawId = firstValue(req.query.id);
+    const rawEmpresaId =
+      firstValue(req.query.empresa_id) ??
+      req.body?.empresa_id;
+
     const idInt = Number.parseInt(String(rawId), 10);
+    const empresaIdInt = Number.parseInt(String(rawEmpresaId), 10);
 
     if (!Number.isInteger(idInt) || idInt <= 0) {
       return res.status(400).json({
         error: "ID inválido",
+      });
+    }
+
+    if (!Number.isInteger(empresaIdInt) || empresaIdInt <= 0) {
+      return res.status(400).json({
+        error: "empresa_id inválido",
       });
     }
 
@@ -49,21 +64,23 @@ export default async function handler(req, res) {
       `
       SELECT
         id,
+        empresa_id,
         chave_nfe,
         n_nf,
         serie,
         COALESCE(status_erp, 2) AS status_erp
       FROM public.nfe_document
       WHERE id = $1
+        AND empresa_id = $2
       FOR UPDATE
       `,
-      [idInt]
+      [idInt, empresaIdInt]
     );
 
     if (!docRes.rowCount) {
       await client.query("ROLLBACK");
       return res.status(404).json({
-        error: "Documento não encontrado",
+        error: "Documento não encontrado para esta empresa",
       });
     }
 
@@ -73,19 +90,22 @@ export default async function handler(req, res) {
       `
       SELECT
         id,
+        empresa_id,
         status,
         tentativas
       FROM public.nfe_erp_queue
       WHERE nfe_id = $1
+        AND empresa_id = $2
       FOR UPDATE
       `,
-      [idInt]
+      [idInt, empresaIdInt]
     );
 
     if (!queueRes.rowCount) {
       await client.query(
         `
         INSERT INTO public.nfe_erp_queue (
+          empresa_id,
           nfe_id,
           status,
           tentativas,
@@ -98,6 +118,7 @@ export default async function handler(req, res) {
         )
         VALUES (
           $1,
+          $2,
           'PENDENTE',
           0,
           NULL,
@@ -108,7 +129,7 @@ export default async function handler(req, res) {
           NOW()
         )
         `,
-        [idInt]
+        [empresaIdInt, idInt]
       );
     } else {
       await client.query(
@@ -117,27 +138,35 @@ export default async function handler(req, res) {
         SET
           status = 'PENDENTE',
           last_error = NULL,
+          integrado_em = NULL,
           reservado_em = NULL,
           reservado_por = NULL,
           updated_at = NOW()
         WHERE nfe_id = $1
+          AND empresa_id = $2
         `,
-        [idInt]
+        [idInt, empresaIdInt]
       );
     }
 
     await client.query(
       `
       UPDATE public.nfe_document
-      SET status_erp = 2
+      SET
+        status_erp = 2,
+        erp_stage_status = NULL,
+        erp_stage_msg = NULL,
+        erp_stage_updated_at = NOW()
       WHERE id = $1
+        AND empresa_id = $2
       `,
-      [idInt]
+      [idInt, empresaIdInt]
     );
 
     await client.query(
       `
       INSERT INTO public.nfe_erp_log (
+        empresa_id,
         nfe_id,
         tipo_evento,
         mensagem,
@@ -146,13 +175,15 @@ export default async function handler(req, res) {
       )
       VALUES (
         $1,
-        'REPROCESSAR',
         $2,
+        'REPROCESSAR',
         $3,
+        $4,
         NOW()
       )
       `,
       [
+        empresaIdInt,
         idInt,
         "NF marcada para reprocessamento ERP",
         `Chave ${document.chave_nfe || "-"} | NF ${document.n_nf || "-"} série ${document.serie || "-"}`,
@@ -164,6 +195,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       message: "NF marcada para reprocessamento com sucesso.",
+      empresa_id: empresaIdInt,
       nfe_id: idInt,
       chave_nfe: document.chave_nfe,
       status_erp: 2,
