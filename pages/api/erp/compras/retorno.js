@@ -25,13 +25,16 @@ if (!pool) {
 
 const ALLOWED_STATUS = new Set([
   "PENDENTE",
+  "PROCESSANDO",
+  "PRONTO_PARA_INTEGRAR",
   "PROCESSADO",
   "ERRO",
   "SEM_PEDIDO",
+  "SEM_FORNECEDOR",
   "FORNECEDOR_DIVERGENTE",
   "DEPARA_PENDENTE",
   "ENTRADA_REALIZADA",
-  "PEDIDO_NAO_ENCONTRADO",
+  "PEDIDO_NAO_LOCALIZADO",
   "FORNECEDOR_NAO_ENCONTRADO",
 ]);
 
@@ -70,6 +73,7 @@ export default async function handler(req, res) {
     if (!ALLOWED_STATUS.has(data.status)) {
       return res.status(400).json({
         error: "status inválido",
+        received: data.status,
         allowed: Array.from(ALLOWED_STATUS),
       });
     }
@@ -84,6 +88,8 @@ export default async function handler(req, res) {
           pedido = COALESCE($2, pedido),
           status_integracao = $3,
           mensagem_integracao = $4,
+          reserved_by = NULL,
+          reserved_at = NULL,
           updated_at = NOW()
         WHERE id = $1
         RETURNING
@@ -92,6 +98,8 @@ export default async function handler(req, res) {
           pedido,
           status_integracao,
           mensagem_integracao,
+          reserved_by,
+          reserved_at,
           updated_at
         `,
         [data.queue_id, data.pedido, data.status, data.message]
@@ -103,6 +111,8 @@ export default async function handler(req, res) {
         SET
           status_integracao = $1,
           mensagem_integracao = $2,
+          reserved_by = NULL,
+          reserved_at = NULL,
           updated_at = NOW()
         WHERE pedido = $3
         RETURNING
@@ -111,6 +121,8 @@ export default async function handler(req, res) {
           pedido,
           status_integracao,
           mensagem_integracao,
+          reserved_by,
+          reserved_at,
           updated_at
         `,
         [data.status, data.message, data.pedido]
