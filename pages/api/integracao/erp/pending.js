@@ -39,6 +39,16 @@ function normalizeText(v) {
   return s || null;
 }
 
+function toNullableInt(v) {
+  if (v === undefined || v === null || String(v).trim() === "") return null;
+  const n = Number.parseInt(String(v), 10);
+  return Number.isInteger(n) ? n : null;
+}
+
+function firstValue(v) {
+  return Array.isArray(v) ? v[0] : v;
+}
+
 function extractPedidoFromText(text) {
   const raw = String(text || "").trim();
   if (!raw) return null;
@@ -85,12 +95,28 @@ export default async function handler(req, res) {
   const client = await pool.connect();
 
   try {
+    const rawEmpresaId = firstValue(req.query.empresa_id);
+    const rawLimit = firstValue(req.query.limit);
+
+    const empresaId = toNullableInt(rawEmpresaId);
+    const limit = Math.min(
+      Math.max(toNullableInt(rawLimit) || 20, 1),
+      100
+    );
+
+    if (!empresaId || empresaId <= 0) {
+      return res.status(400).json({
+        error: "empresa_id é obrigatório",
+      });
+    }
+
     await client.query("BEGIN");
 
     const queueRes = await client.query(
       `
       SELECT
         q.id,
+        q.empresa_id,
         q.nfe_id,
         q.status,
         q.tentativas,
@@ -98,10 +124,12 @@ export default async function handler(req, res) {
         q.updated_at
       FROM public.nfe_erp_queue q
       WHERE q.status = 'PENDENTE'
+        AND q.empresa_id = $1
       ORDER BY q.created_at ASC, q.id ASC
-      LIMIT 20
+      LIMIT $2
       FOR UPDATE SKIP LOCKED
-      `
+      `,
+      [empresaId, limit]
     );
 
     const queueRows = queueRes.rows || [];
@@ -121,37 +149,43 @@ export default async function handler(req, res) {
         reservado_em = NOW(),
         reservado_por = $1,
         updated_at = NOW()
-      WHERE nfe_id = ANY($2::bigint[])
+      WHERE empresa_id = $2
+        AND nfe_id = ANY($3::bigint[])
       `,
-      [req.headers["x-client-name"] || "PYTHON_CLIENT", nfeIds]
+      [req.headers["x-client-name"] || "PYTHON_CLIENT", empresaId, nfeIds]
     );
 
     const docRes = await client.query(
       `
       SELECT
         d.id AS nfe_id,
+        d.empresa_id,
         d.chave_nfe,
         d.n_nf,
         d.serie,
+        d.mod,
         d.dh_emi,
         d.vnf,
+        d.infcpl,
+        d.infadfisco,
+        d.obscont_xtexto,
+
         d.cnpj_emit,
         d.xnome_emit,
         d.ie_emit,
         d.uf_emit,
         d.municipio_emit,
+
         d.cnpj_dest,
         d.xnome_dest,
         d.ie_dest,
         d.uf_dest,
-        d.municipio_dest,
-        d.infcpl,
-        d.infadfisco,
-        d.obscont_xtexto
+        d.municipio_dest
       FROM public.nfe_document d
-      WHERE d.id = ANY($1::bigint[])
+      WHERE d.empresa_id = $1
+        AND d.id = ANY($2::bigint[])
       `,
-      [nfeIds]
+      [empresaId, nfeIds]
     );
 
     const itemRes = await client.query(
@@ -159,13 +193,16 @@ export default async function handler(req, res) {
       WITH docs AS (
         SELECT
           d.id,
+          d.empresa_id,
           regexp_replace(COALESCE(d.cnpj_emit, ''), '\\D', '', 'g') AS cnpj_emit_digits
         FROM public.nfe_document d
-        WHERE d.id = ANY($1::bigint[])
+        WHERE d.empresa_id = $1
+          AND d.id = ANY($2::bigint[])
       ),
       item_map_ranked AS (
         SELECT
           i.nfe_id,
+          i.empresa_id,
           i.n_item,
           i.id AS item_row_id,
           i.c_prod AS cprod,
@@ -194,8 +231,10 @@ export default async function handler(req, res) {
         FROM public.nfe_item i
         INNER JOIN docs d
           ON d.id = i.nfe_id
+         AND d.empresa_id = i.empresa_id
         LEFT JOIN public.nfe_item_erp_map m
-          ON regexp_replace(COALESCE(m.cnpj_fornecedor, ''), '\\D', '', 'g') = d.cnpj_emit_digits
+          ON m.empresa_id = d.empresa_id
+         AND regexp_replace(COALESCE(m.cnpj_fornecedor, ''), '\\D', '', 'g') = d.cnpj_emit_digits
          AND COALESCE(m.ativo, true) = true
          AND (
               m.cprod_origem = i.c_prod
@@ -208,9 +247,12 @@ export default async function handler(req, res) {
                 )
               )
          )
+        WHERE i.empresa_id = $1
+          AND i.nfe_id = ANY($2::bigint[])
       )
       SELECT
         nfe_id,
+        empresa_id,
         n_item,
         cprod,
         xprod,
@@ -231,13 +273,14 @@ export default async function handler(req, res) {
       WHERE rn = 1
       ORDER BY nfe_id ASC, n_item ASC, item_row_id ASC
       `,
-      [nfeIds]
+      [empresaId, nfeIds]
     );
 
     const payRes = await client.query(
       `
       SELECT
         p.nfe_id,
+        p.empresa_id,
         p.tpag,
         p.vpag,
         p.indpag,
@@ -246,15 +289,17 @@ export default async function handler(req, res) {
         p.card_tpintegra,
         p.card_caut
       FROM public.nfe_payment p
-      WHERE p.nfe_id = ANY($1::bigint[])
+      WHERE p.empresa_id = $1
+        AND p.nfe_id = ANY($2::bigint[])
       ORDER BY p.nfe_id ASC, p.id ASC
       `,
-      [nfeIds]
+      [empresaId, nfeIds]
     );
 
     const partMapRes = await client.query(
       `
       SELECT
+        m.empresa_id,
         m.participante_id,
         m.codigo_erp,
         regexp_replace(COALESCE(p.cnpj, ''), '\\D', '', 'g') AS cnpj_digits,
@@ -262,14 +307,17 @@ export default async function handler(req, res) {
       FROM public.nfe_participante_erp_map m
       INNER JOIN public.nfe_participante p
         ON p.id = m.participante_id
+       AND p.empresa_id = m.empresa_id
       WHERE COALESCE(m.ativo, true) = true
-      `
+        AND m.empresa_id = $1
+      `,
+      [empresaId]
     );
 
     const mapByTipoCnpj = new Map();
     for (const r of partMapRes.rows || []) {
       mapByTipoCnpj.set(
-        `${String(r.tipo || "").toUpperCase()}|${String(r.cnpj_digits || "")}`,
+        `${r.empresa_id}|${String(r.tipo || "").toUpperCase()}|${String(r.cnpj_digits || "")}`,
         r
       );
     }
@@ -280,8 +328,11 @@ export default async function handler(req, res) {
       const emitDigits = normalizeDigits(d.cnpj_emit);
       const destDigits = normalizeDigits(d.cnpj_dest);
 
-      const emitMap = mapByTipoCnpj.get(`EMITENTE|${emitDigits}`) || null;
-      const destMap = mapByTipoCnpj.get(`DESTINATARIO|${destDigits}`) || null;
+      const emitMap =
+        mapByTipoCnpj.get(`${d.empresa_id}|EMITENTE|${emitDigits}`) || null;
+
+      const destMap =
+        mapByTipoCnpj.get(`${d.empresa_id}|DESTINATARIO|${destDigits}`) || null;
 
       const origem_texto =
         normalizeText(d.obscont_xtexto) ||
@@ -292,10 +343,12 @@ export default async function handler(req, res) {
       const pedido_relacionado = extractPedidoFromText(origem_texto);
 
       docsById.set(Number(d.nfe_id), {
+        empresa_id: Number(d.empresa_id),
         nfe_id: Number(d.nfe_id),
         chave_nfe: d.chave_nfe,
         n_nf: d.n_nf,
         serie: d.serie,
+        mod: d.mod || null,
         dh_emi: d.dh_emi,
         vnf: d.vnf,
         infcpl: d.infcpl || null,
@@ -328,6 +381,7 @@ export default async function handler(req, res) {
       if (!row) continue;
 
       row.itens.push({
+        empresa_id: Number(it.empresa_id),
         n_item: it.n_item,
         cprod: it.cprod,
         xprod: it.xprod,
@@ -348,6 +402,7 @@ export default async function handler(req, res) {
       if (!row) continue;
 
       row.pagamentos.push({
+        empresa_id: Number(pg.empresa_id),
         tpag: pg.tpag,
         vpag: pg.vpag,
         indpag: pg.indpag,
@@ -361,7 +416,9 @@ export default async function handler(req, res) {
     await client.query("COMMIT");
 
     return res.status(200).json({
-      rows: nfeIds.map((id) => docsById.get(Number(id))).filter(Boolean),
+      rows: nfeIds
+        .map((id) => docsById.get(Number(id)))
+        .filter(Boolean),
     });
   } catch (e) {
     try {
