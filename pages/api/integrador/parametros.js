@@ -42,6 +42,29 @@ function normalizeInteger(value) {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
+function onlyDigits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function normalizeCnpjsDestinatarios(value) {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map((item) => onlyDigits(item)).filter(Boolean))];
+  }
+
+  if (typeof value === "string") {
+    return [
+      ...new Set(
+        value
+          .split(/\r?\n|,|;/)
+          .map((item) => onlyDigits(item))
+          .filter(Boolean)
+      ),
+    ];
+  }
+
+  return [];
+}
+
 function buildDefaultRow(empresa) {
   return {
     id: null,
@@ -68,6 +91,7 @@ function buildDefaultRow(empresa) {
     status_depara_pendente: "DEPARA_PENDENTE",
     status_entrada_realizada: "ENTRADA_REALIZADA",
     observacoes: null,
+    cnpjs_destinatarios: [],
     created_at: null,
     updated_at: null,
     is_default: true,
@@ -78,6 +102,7 @@ function normalizeBody(body = {}) {
   const data = {
     empresa_id: normalizeInteger(body.empresa_id),
     observacoes: normalizeString(body.observacoes, null),
+    cnpjs_destinatarios: normalizeCnpjsDestinatarios(body.cnpjs_destinatarios),
   };
 
   for (const field of BOOLEAN_FIELDS) {
@@ -145,6 +170,7 @@ export default async function handler(req, res) {
           p.status_depara_pendente,
           p.status_entrada_realizada,
           p.observacoes,
+          COALESCE(p.cnpjs_destinatarios, '{}') AS cnpjs_destinatarios,
           p.created_at,
           p.updated_at
         FROM public.integrador_parametros p
@@ -165,6 +191,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         row: {
           ...result.rows[0],
+          cnpjs_destinatarios: result.rows[0].cnpjs_destinatarios || [],
           is_default: false,
         },
       });
@@ -238,13 +265,14 @@ export default async function handler(req, res) {
           status_depara_pendente,
           status_entrada_realizada,
           observacoes,
+          cnpjs_destinatarios,
           created_at,
           updated_at
         )
         VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
           $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-          NOW(),NOW()
+          $21,NOW(),NOW()
         )
         ON CONFLICT (empresa_id)
         DO UPDATE SET
@@ -267,6 +295,7 @@ export default async function handler(req, res) {
           status_depara_pendente = EXCLUDED.status_depara_pendente,
           status_entrada_realizada = EXCLUDED.status_entrada_realizada,
           observacoes = EXCLUDED.observacoes,
+          cnpjs_destinatarios = EXCLUDED.cnpjs_destinatarios,
           updated_at = NOW()
         RETURNING
           id,
@@ -290,6 +319,7 @@ export default async function handler(req, res) {
           status_depara_pendente,
           status_entrada_realizada,
           observacoes,
+          COALESCE(cnpjs_destinatarios, '{}') AS cnpjs_destinatarios,
           created_at,
           updated_at
         `,
@@ -314,6 +344,7 @@ export default async function handler(req, res) {
           data.status_depara_pendente,
           data.status_entrada_realizada,
           data.observacoes,
+          data.cnpjs_destinatarios,
         ]
       );
 
@@ -321,6 +352,7 @@ export default async function handler(req, res) {
         success: true,
         row: {
           ...result.rows[0],
+          cnpjs_destinatarios: result.rows[0].cnpjs_destinatarios || [],
           empresa_nome: empresaResult.rows[0].nome,
           cnpj: empresaResult.rows[0].cnpj,
           email: empresaResult.rows[0].email,

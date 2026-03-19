@@ -20,7 +20,31 @@ const initialState = {
   status_depara_pendente: "DEPARA_PENDENTE",
   status_entrada_realizada: "ENTRADA_REALIZADA",
   observacoes: "",
+  cnpjs_destinatarios: "",
 };
+
+function onlyDigits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function normalizeCnpjsInput(value) {
+  return String(value || "")
+    .split(/\r?\n|,|;/)
+    .map((item) => onlyDigits(item))
+    .filter(Boolean);
+}
+
+function formatCnpjsForTextarea(value) {
+  if (Array.isArray(value)) {
+    return value.join("\n");
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return "";
+}
 
 export default function IntegradorParametrosPage() {
   const [empresas, setEmpresas] = useState([]);
@@ -75,10 +99,10 @@ export default function IntegradorParametrosPage() {
       );
 
       if (response.status === 404) {
-        setForm((prev) => ({
+        setForm({
           ...initialState,
           empresa_id: String(empresaId),
-        }));
+        });
         setMessage("Empresa sem parâmetros cadastrados. Preencha e salve.");
         setMessageType("info");
         setLoading(false);
@@ -95,6 +119,9 @@ export default function IntegradorParametrosPage() {
         ...initialState,
         ...data.row,
         empresa_id: String(data.row.empresa_id),
+        cnpjs_destinatarios: formatCnpjsForTextarea(
+          data.row.cnpjs_destinatarios
+        ),
       });
     } catch (error) {
       setMessage(error.message || "Erro ao carregar parâmetros");
@@ -132,6 +159,7 @@ export default function IntegradorParametrosPage() {
       const payload = {
         ...form,
         empresa_id: Number(form.empresa_id),
+        cnpjs_destinatarios: normalizeCnpjsInput(form.cnpjs_destinatarios),
       };
 
       const response = await fetch("/api/integrador/parametros", {
@@ -152,6 +180,9 @@ export default function IntegradorParametrosPage() {
         ...prev,
         ...data.row,
         empresa_id: String(data.row.empresa_id),
+        cnpjs_destinatarios: formatCnpjsForTextarea(
+          data.row.cnpjs_destinatarios
+        ),
       }));
 
       setMessage("Parâmetros salvos com sucesso.");
@@ -230,6 +261,30 @@ export default function IntegradorParametrosPage() {
               {renderCheckbox("validar_itens_erp", "Validar itens no ERP")}
               {renderCheckbox("bloquear_sem_itens", "Bloquear quando não houver itens")}
               {renderCheckbox("integrar_status_erp", "Integrar status ERP")}
+            </div>
+          </div>
+
+          <div style={styles.section}>
+            <h2 style={styles.sectionTitle}>Destinatários permitidos</h2>
+
+            <div style={styles.field}>
+              <label style={styles.label}>
+                CNPJs dos destinatários participantes da integração
+              </label>
+
+              <textarea
+                name="cnpjs_destinatarios"
+                value={form.cnpjs_destinatarios}
+                onChange={handleChange}
+                rows={6}
+                style={styles.textarea}
+                placeholder={`Informe um CNPJ por linha, ou separado por vírgula.\n\nExemplo:\n12345678000199\n11222333000144`}
+              />
+
+              <small style={styles.helperText}>
+                Aceita um CNPJ por linha, vírgula ou ponto e vírgula. Os caracteres
+                não numéricos serão removidos automaticamente ao salvar.
+              </small>
             </div>
           </div>
 
@@ -416,6 +471,11 @@ const styles = {
     padding: 12,
     fontSize: 14,
     resize: "vertical",
+  },
+  helperText: {
+    color: "#64748b",
+    fontSize: 12,
+    lineHeight: 1.5,
   },
   checkboxGrid: {
     display: "grid",
