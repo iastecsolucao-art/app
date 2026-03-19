@@ -16,6 +16,7 @@ const initialState = {
   status_sucesso: "PROCESSADO",
   status_erro: "ERRO",
   status_sem_pedido: "SEM_PEDIDO",
+  status_sem_fornecedor: "SEM_FORNECEDOR",
   status_fornecedor_divergente: "FORNECEDOR_DIVERGENTE",
   status_depara_pendente: "DEPARA_PENDENTE",
   status_entrada_realizada: "ENTRADA_REALIZADA",
@@ -118,9 +119,27 @@ export default function IntegradorParametrosPage() {
       setForm({
         ...initialState,
         ...data.row,
-        empresa_id: String(data.row.empresa_id),
+        empresa_id: String(data.row?.empresa_id || empresaId),
+        status_inicial_fila:
+          data.row?.status_inicial_fila || initialState.status_inicial_fila,
+        status_sucesso: data.row?.status_sucesso || initialState.status_sucesso,
+        status_erro: data.row?.status_erro || initialState.status_erro,
+        status_sem_pedido:
+          data.row?.status_sem_pedido || initialState.status_sem_pedido,
+        status_sem_fornecedor:
+          data.row?.status_sem_fornecedor || initialState.status_sem_fornecedor,
+        status_fornecedor_divergente:
+          data.row?.status_fornecedor_divergente ||
+          initialState.status_fornecedor_divergente,
+        status_depara_pendente:
+          data.row?.status_depara_pendente ||
+          initialState.status_depara_pendente,
+        status_entrada_realizada:
+          data.row?.status_entrada_realizada ||
+          initialState.status_entrada_realizada,
+        observacoes: data.row?.observacoes || "",
         cnpjs_destinatarios: formatCnpjsForTextarea(
-          data.row.cnpjs_destinatarios
+          data.row?.cnpjs_destinatarios
         ),
       });
     } catch (error) {
@@ -179,9 +198,27 @@ export default function IntegradorParametrosPage() {
       setForm((prev) => ({
         ...prev,
         ...data.row,
-        empresa_id: String(data.row.empresa_id),
+        empresa_id: String(data.row?.empresa_id || form.empresa_id),
+        status_inicial_fila:
+          data.row?.status_inicial_fila || initialState.status_inicial_fila,
+        status_sucesso: data.row?.status_sucesso || initialState.status_sucesso,
+        status_erro: data.row?.status_erro || initialState.status_erro,
+        status_sem_pedido:
+          data.row?.status_sem_pedido || initialState.status_sem_pedido,
+        status_sem_fornecedor:
+          data.row?.status_sem_fornecedor || initialState.status_sem_fornecedor,
+        status_fornecedor_divergente:
+          data.row?.status_fornecedor_divergente ||
+          initialState.status_fornecedor_divergente,
+        status_depara_pendente:
+          data.row?.status_depara_pendente ||
+          initialState.status_depara_pendente,
+        status_entrada_realizada:
+          data.row?.status_entrada_realizada ||
+          initialState.status_entrada_realizada,
+        observacoes: data.row?.observacoes || "",
         cnpjs_destinatarios: formatCnpjsForTextarea(
-          data.row.cnpjs_destinatarios
+          data.row?.cnpjs_destinatarios
         ),
       }));
 
@@ -253,13 +290,28 @@ export default function IntegradorParametrosPage() {
             <div style={styles.checkboxGrid}>
               {renderCheckbox("ativo", "Ativo")}
               {renderCheckbox("utiliza_integrador", "Utiliza integrador")}
-              {renderCheckbox("verificar_pedido_compra", "Verificar pedido de compra")}
+              {renderCheckbox(
+                "verificar_pedido_compra",
+                "Verificar pedido de compra"
+              )}
               {renderCheckbox("verificar_fornecedor", "Verificar fornecedor")}
-              {renderCheckbox("enviar_sem_pedido_para_stage", "Enviar sem pedido para stage")}
-              {renderCheckbox("enviar_sem_fornecedor_para_stage", "Enviar sem fornecedor para stage")}
-              {renderCheckbox("registrar_depara_sempre", "Registrar de/para sempre")}
+              {renderCheckbox(
+                "enviar_sem_pedido_para_stage",
+                "Enviar sem pedido para stage"
+              )}
+              {renderCheckbox(
+                "enviar_sem_fornecedor_para_stage",
+                "Enviar sem fornecedor para stage"
+              )}
+              {renderCheckbox(
+                "registrar_depara_sempre",
+                "Registrar de/para sempre"
+              )}
               {renderCheckbox("validar_itens_erp", "Validar itens no ERP")}
-              {renderCheckbox("bloquear_sem_itens", "Bloquear quando não houver itens")}
+              {renderCheckbox(
+                "bloquear_sem_itens",
+                "Bloquear quando não houver itens"
+              )}
               {renderCheckbox("integrar_status_erp", "Integrar status ERP")}
             </div>
           </div>
@@ -282,8 +334,9 @@ export default function IntegradorParametrosPage() {
               />
 
               <small style={styles.helperText}>
-                Aceita um CNPJ por linha, vírgula ou ponto e vírgula. Os caracteres
-                não numéricos serão removidos automaticamente ao salvar.
+                Aceita um CNPJ por linha, vírgula ou ponto e vírgula. Os
+                caracteres não numéricos serão removidos automaticamente ao
+                salvar.
               </small>
             </div>
           </div>
@@ -331,6 +384,17 @@ export default function IntegradorParametrosPage() {
                   type="text"
                   name="status_sem_pedido"
                   value={form.status_sem_pedido}
+                  onChange={handleChange}
+                  style={styles.input}
+                />
+              </div>
+
+              <div style={styles.field}>
+                <label style={styles.label}>Status sem fornecedor</label>
+                <input
+                  type="text"
+                  name="status_sem_fornecedor"
+                  value={form.status_sem_fornecedor}
                   onChange={handleChange}
                   style={styles.input}
                 />
@@ -401,7 +465,9 @@ export default function IntegradorParametrosPage() {
               style={{
                 ...styles.message,
                 ...(messageType === "error" ? styles.messageError : {}),
-                ...(messageType === "success" ? styles.messageSuccess : {}),
+                ...(messageType === "success"
+                  ? styles.messageSuccess
+                  : {}),
               }}
             >
               {message}
