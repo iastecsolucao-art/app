@@ -27,17 +27,27 @@ function firstValue(v) {
   return Array.isArray(v) ? v[0] : v;
 }
 
+function toPositiveInt(value) {
+  const n = Number.parseInt(String(value ?? ""), 10);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 function normalizeBody(body = {}) {
   return {
+    empresa_id: toPositiveInt(body.empresa_id),
     participante_id: body.participante_id ? Number(body.participante_id) : null,
     sistema_destino: String(body.sistema_destino || "ERP").trim(),
-    cnpj_fornecedor: body.cnpj_fornecedor ? String(body.cnpj_fornecedor).replace(/\D/g, "") : null,
+    cnpj_fornecedor: body.cnpj_fornecedor
+      ? String(body.cnpj_fornecedor).replace(/\D/g, "")
+      : null,
     cprod_origem: body.cprod_origem ? String(body.cprod_origem).trim() : null,
     xprod_origem: body.xprod_origem ? String(body.xprod_origem).trim() : null,
     ncm_origem: body.ncm_origem ? String(body.ncm_origem).trim() : null,
     cfop_origem: body.cfop_origem ? String(body.cfop_origem).trim() : null,
     unidade_origem: body.unidade_origem ? String(body.unidade_origem).trim() : null,
-    codigo_produto_erp: body.codigo_produto_erp ? String(body.codigo_produto_erp).trim() : null,
+    codigo_produto_erp: body.codigo_produto_erp
+      ? String(body.codigo_produto_erp).trim()
+      : null,
     sku_erp: body.sku_erp ? String(body.sku_erp).trim() : null,
     descricao_erp: body.descricao_erp ? String(body.descricao_erp).trim() : null,
     unidade_erp: body.unidade_erp ? String(body.unidade_erp).trim() : null,
@@ -53,6 +63,7 @@ const STATUS_VALIDOS = ["PENDENTE", "MAPEADO", "ENVIADO", "ERRO", "IGNORADO"];
 export default async function handler(req, res) {
   if (req.method === "GET") {
     try {
+      const empresa_id = toPositiveInt(firstValue(req.query.empresa_id));
       const q = String(firstValue(req.query.q) || "").trim();
       const cnpj_fornecedor = String(firstValue(req.query.cnpj_fornecedor) || "").replace(/\D/g, "");
       const status_map = String(firstValue(req.query.status_map) || "").trim().toUpperCase();
@@ -63,8 +74,15 @@ export default async function handler(req, res) {
         200
       );
 
+      if (!empresa_id) {
+        return res.status(400).json({ error: "empresa_id é obrigatório" });
+      }
+
       const params = [];
       const where = [];
+
+      params.push(empresa_id);
+      where.push(`empresa_id = $${params.length}`);
 
       if (q) {
         params.push(`%${q}%`);
@@ -99,6 +117,7 @@ export default async function handler(req, res) {
         `
         SELECT
           id,
+          empresa_id,
           participante_id,
           sistema_destino,
           cnpj_fornecedor,
@@ -139,6 +158,10 @@ export default async function handler(req, res) {
     try {
       const data = normalizeBody(req.body);
 
+      if (!data.empresa_id) {
+        return res.status(400).json({ error: "empresa_id é obrigatório" });
+      }
+
       if (!data.sistema_destino) {
         return res.status(400).json({ error: "sistema_destino é obrigatório" });
       }
@@ -158,6 +181,7 @@ export default async function handler(req, res) {
       const result = await pool.query(
         `
         INSERT INTO public.nfe_item_erp_map (
+          empresa_id,
           participante_id,
           sistema_destino,
           cnpj_fornecedor,
@@ -176,11 +200,12 @@ export default async function handler(req, res) {
           status_map
         )
         VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17
         )
         RETURNING *
         `,
         [
+          data.empresa_id,
           data.participante_id,
           data.sistema_destino,
           data.cnpj_fornecedor,
@@ -206,7 +231,7 @@ export default async function handler(req, res) {
 
       if (e?.code === "23505") {
         return res.status(409).json({
-          error: "Já existe um mapeamento para esse fornecedor/código origem/sistema",
+          error: "Já existe um mapeamento para essa empresa/fornecedor/código origem/sistema",
           details: e?.detail || e?.message,
         });
       }

@@ -23,17 +23,31 @@ if (!pool) {
   global._nfePgPool = pool;
 }
 
+function toPositiveInt(value) {
+  const n = Number.parseInt(String(value ?? ""), 10);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+function firstValue(v) {
+  return Array.isArray(v) ? v[0] : v;
+}
+
 function normalizeBody(body = {}) {
   return {
+    empresa_id: toPositiveInt(body.empresa_id),
     participante_id: body.participante_id ? Number(body.participante_id) : null,
     sistema_destino: String(body.sistema_destino || "ERP").trim(),
-    cnpj_fornecedor: body.cnpj_fornecedor ? String(body.cnpj_fornecedor).replace(/\D/g, "") : null,
+    cnpj_fornecedor: body.cnpj_fornecedor
+      ? String(body.cnpj_fornecedor).replace(/\D/g, "")
+      : null,
     cprod_origem: body.cprod_origem ? String(body.cprod_origem).trim() : null,
     xprod_origem: body.xprod_origem ? String(body.xprod_origem).trim() : null,
     ncm_origem: body.ncm_origem ? String(body.ncm_origem).trim() : null,
     cfop_origem: body.cfop_origem ? String(body.cfop_origem).trim() : null,
     unidade_origem: body.unidade_origem ? String(body.unidade_origem).trim() : null,
-    codigo_produto_erp: body.codigo_produto_erp ? String(body.codigo_produto_erp).trim() : null,
+    codigo_produto_erp: body.codigo_produto_erp
+      ? String(body.codigo_produto_erp).trim()
+      : null,
     sku_erp: body.sku_erp ? String(body.sku_erp).trim() : null,
     descricao_erp: body.descricao_erp ? String(body.descricao_erp).trim() : null,
     unidade_erp: body.unidade_erp ? String(body.unidade_erp).trim() : null,
@@ -56,10 +70,17 @@ export default async function handler(req, res) {
 
   if (req.method === "GET") {
     try {
+      const empresa_id = toPositiveInt(firstValue(req.query.empresa_id));
+
+      if (!empresa_id) {
+        return res.status(400).json({ error: "empresa_id é obrigatório" });
+      }
+
       const result = await pool.query(
         `
         SELECT
           id,
+          empresa_id,
           participante_id,
           sistema_destino,
           cnpj_fornecedor,
@@ -80,9 +101,10 @@ export default async function handler(req, res) {
           updated_at
         FROM public.nfe_item_erp_map
         WHERE id = $1
+          AND empresa_id = $2
         LIMIT 1
         `,
-        [id]
+        [id, empresa_id]
       );
 
       if (!result.rowCount) {
@@ -102,6 +124,10 @@ export default async function handler(req, res) {
   if (req.method === "PUT") {
     try {
       const data = normalizeBody(req.body);
+
+      if (!data.empresa_id) {
+        return res.status(400).json({ error: "empresa_id é obrigatório" });
+      }
 
       if (!data.sistema_destino) {
         return res.status(400).json({ error: "sistema_destino é obrigatório" });
@@ -141,6 +167,7 @@ export default async function handler(req, res) {
           status_map = $16,
           updated_at = NOW()
         WHERE id = $17
+          AND empresa_id = $18
         RETURNING *
         `,
         [
@@ -161,6 +188,7 @@ export default async function handler(req, res) {
           data.observacao,
           data.status_map,
           id,
+          data.empresa_id,
         ]
       );
 
@@ -174,7 +202,7 @@ export default async function handler(req, res) {
 
       if (e?.code === "23505") {
         return res.status(409).json({
-          error: "Já existe um mapeamento para esse fornecedor/código origem/sistema",
+          error: "Já existe um mapeamento para essa empresa/fornecedor/código origem/sistema",
           details: e?.detail || e?.message,
         });
       }
@@ -188,13 +216,22 @@ export default async function handler(req, res) {
 
   if (req.method === "DELETE") {
     try {
+      const empresa_id = toPositiveInt(
+        firstValue(req.query.empresa_id) ?? req.body?.empresa_id
+      );
+
+      if (!empresa_id) {
+        return res.status(400).json({ error: "empresa_id é obrigatório" });
+      }
+
       const result = await pool.query(
         `
         DELETE FROM public.nfe_item_erp_map
         WHERE id = $1
+          AND empresa_id = $2
         RETURNING id
         `,
-        [id]
+        [id, empresa_id]
       );
 
       if (!result.rowCount) {
