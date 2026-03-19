@@ -7,7 +7,7 @@ if (!connectionString) {
   throw new Error("DATABASE_URL_VENDEDORES não está definida");
 }
 
-let pool = global._nfePgPool;
+let pool = global._nfePgPoolStageResult;
 
 if (!pool) {
   pool = new Pool({
@@ -21,7 +21,7 @@ if (!pool) {
     connectionTimeoutMillis: 10000,
   });
 
-  global._nfePgPool = pool;
+  global._nfePgPoolStageResult = pool;
 }
 
 function checkAuth(req) {
@@ -33,6 +33,15 @@ function checkAuth(req) {
 function normalizeText(v) {
   const s = String(v || "").trim();
   return s || null;
+}
+
+function toNullableInt(v) {
+  if (v === undefined || v === null || String(v).trim() === "") {
+    return null;
+  }
+
+  const n = Number(v);
+  return Number.isInteger(n) ? n : null;
 }
 
 function mapStatusErp(statusStage, currentStatusErp) {
@@ -65,6 +74,7 @@ function mapStatusErp(statusStage, currentStatusErp) {
 
 function isIntegratedStatus(statusStage) {
   const s = String(statusStage || "").trim().toUpperCase();
+
   return (
     s === "INTEGRADO" ||
     s === "INTEGRADO_DIVERGENCIA" ||
@@ -91,16 +101,17 @@ export default async function handler(req, res) {
   try {
     const body = req.body || {};
 
-    const nfe_id =
-      body.nfe_id !== undefined && body.nfe_id !== null && String(body.nfe_id).trim() !== ""
-        ? Number(body.nfe_id)
-        : null;
-
+    const empresa_id = toNullableInt(body.empresa_id);
+    const nfe_id = toNullableInt(body.nfe_id);
     const integracao_id = normalizeText(body.integracao_id);
     const status_stage = normalizeText(body.status_stage);
     const mensagem_retorno = normalizeText(body.mensagem_retorno);
 
-    if (!Number.isInteger(nfe_id) || nfe_id <= 0) {
+    if (!empresa_id || empresa_id <= 0) {
+      return res.status(400).json({ error: "empresa_id inválido" });
+    }
+
+    if (!nfe_id || nfe_id <= 0) {
       return res.status(400).json({ error: "nfe_id inválido" });
     }
 
@@ -114,6 +125,8 @@ export default async function handler(req, res) {
       `
       SELECT
         id,
+        empresa_id,
+        chave_nfe,
         status_erp,
         erp_stage_status,
         erp_stage_msg,
@@ -122,15 +135,16 @@ export default async function handler(req, res) {
         erp_integrado_em
       FROM public.nfe_document
       WHERE id = $1
+        AND empresa_id = $2
       LIMIT 1
       `,
-      [nfe_id]
+      [nfe_id, empresa_id]
     );
 
     if (currentRes.rowCount === 0) {
       await client.query("ROLLBACK");
       return res.status(404).json({
-        error: "NF-e não encontrada em nfe_document",
+        error: "NF-e não encontrada em nfe_document para esta empresa",
       });
     }
 
@@ -142,18 +156,20 @@ export default async function handler(req, res) {
       `
       UPDATE public.nfe_document
       SET
-        status_erp = $2,
-        erp_stage_status = $3,
-        erp_stage_msg = $4,
-        erp_integracao_id = COALESCE($5, erp_integracao_id),
+        status_erp = $3,
+        erp_stage_status = $4,
+        erp_stage_msg = $5,
+        erp_integracao_id = COALESCE($6, erp_integracao_id),
         erp_stage_updated_at = NOW(),
         erp_integrado_em = CASE
-          WHEN $6 = true THEN NOW()
+          WHEN $7 = true THEN NOW()
           ELSE erp_integrado_em
         END
       WHERE id = $1
+        AND empresa_id = $2
       RETURNING
         id,
+        empresa_id,
         chave_nfe,
         status_erp,
         erp_stage_status,
@@ -164,6 +180,7 @@ export default async function handler(req, res) {
       `,
       [
         nfe_id,
+        empresa_id,
         novo_status_erp,
         status_stage,
         mensagem_retorno,
@@ -171,6 +188,35 @@ export default async function handler(req, res) {
         integrated,
       ]
     );
+
+    await client
+      .query(
+        `
+        INSERT INTO public.nfe_erp_log (
+          empresa_id,
+          nfe_id,
+          tipo_evento,
+          mensagem,
+          detalhes,
+          created_at
+        )
+        VALUES (
+          $1,
+          $2,
+          'STAGE_RESULT',
+          $3,
+          $4,
+          NOW()
+        )
+        `,
+        [
+          empresa_id,
+          nfe_id,
+          `Retorno da stage: ${status_stage}`,
+          mensagem_retorno || integracao_id || null,
+        ]
+      )
+      .catch(() => null);
 
     await client.query("COMMIT");
 

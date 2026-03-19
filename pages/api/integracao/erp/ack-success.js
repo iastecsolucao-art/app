@@ -7,7 +7,7 @@ if (!connectionString) {
   throw new Error("DATABASE_URL_VENDEDORES não está definida");
 }
 
-let pool = global._nfePgPool;
+let pool = global._nfePgPoolAckSuccess;
 
 if (!pool) {
   pool = new Pool({
@@ -21,13 +21,27 @@ if (!pool) {
     connectionTimeoutMillis: 10000,
   });
 
-  global._nfePgPool = pool;
+  global._nfePgPoolAckSuccess = pool;
 }
 
 function checkAuth(req) {
   const auth = req.headers.authorization || "";
   const token = auth.replace(/^Bearer\s+/i, "").trim();
   return !!API_TOKEN && token === API_TOKEN;
+}
+
+function toNullableInt(value) {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return null;
+  }
+
+  const n = Number(value);
+  return Number.isInteger(n) ? n : null;
+}
+
+function normalizeText(value) {
+  const s = String(value || "").trim();
+  return s || null;
 }
 
 export default async function handler(req, res) {
@@ -45,18 +59,41 @@ export default async function handler(req, res) {
   const client = await pool.connect();
 
   try {
-    const { nfe_id, mensagem, protocolo_cliente } = req.body || {};
-    const nfeId = Number(nfe_id);
+    const { empresa_id, nfe_id, mensagem, protocolo_cliente } = req.body || {};
 
-    if (!Number.isInteger(nfeId) || nfeId <= 0) {
+    const empresaId = toNullableInt(empresa_id);
+    const nfeId = toNullableInt(nfe_id);
+    const msg = normalizeText(mensagem) || "Integração concluída com sucesso";
+    const protocolo = normalizeText(protocolo_cliente);
+
+    if (!empresaId || empresaId <= 0) {
+      return res.status(400).json({ error: "empresa_id inválido" });
+    }
+
+    if (!nfeId || nfeId <= 0) {
       return res.status(400).json({ error: "nfe_id inválido" });
     }
 
-    const msg = mensagem || "Integração concluída com sucesso";
-
     await client.query("BEGIN");
 
-    // Atualiza fila ERP
+    const docCheck = await client.query(
+      `
+      SELECT id, empresa_id, chave_nfe, n_nf, serie
+      FROM public.nfe_document
+      WHERE id = $1
+        AND empresa_id = $2
+      LIMIT 1
+      `,
+      [nfeId, empresaId]
+    );
+
+    if (docCheck.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        error: "NF-e não encontrada para esta empresa",
+      });
+    }
+
     const queueRes = await client.query(
       `
       UPDATE public.nfe_erp_queue
@@ -68,26 +105,32 @@ export default async function handler(req, res) {
         reservado_em = NULL,
         reservado_por = NULL
       WHERE nfe_id = $1
-      RETURNING id
+        AND empresa_id = $2
+      RETURNING id, nfe_id, empresa_id
       `,
-      [nfeId]
+      [nfeId, empresaId]
     );
 
-    // Atualiza documento
     await client.query(
       `
       UPDATE public.nfe_document
-      SET status_erp = 3
+      SET
+        status_erp = 3,
+        erp_stage_status = 'INTEGRADO',
+        erp_stage_msg = $3,
+        erp_integrado_em = NOW(),
+        erp_stage_updated_at = NOW()
       WHERE id = $1
+        AND empresa_id = $2
       `,
-      [nfeId]
+      [nfeId, empresaId, msg]
     );
 
-    // Log da integração (não quebra o fluxo se falhar)
     await client
       .query(
         `
         INSERT INTO public.nfe_erp_log (
+          empresa_id,
           nfe_id,
           tipo_evento,
           mensagem,
@@ -96,13 +139,14 @@ export default async function handler(req, res) {
         )
         VALUES (
           $1,
-          'SUCESSO',
           $2,
+          'SUCESSO',
           $3,
+          $4,
           NOW()
         )
         `,
-        [nfeId, msg, protocolo_cliente || null]
+        [empresaId, nfeId, msg, protocolo]
       )
       .catch(() => null);
 
@@ -110,6 +154,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
+      empresa_id: empresaId,
       nfe_id: nfeId,
       status: "INTEGRADO",
       status_erp: 3,

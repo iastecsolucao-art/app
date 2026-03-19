@@ -7,7 +7,7 @@ if (!connectionString) {
   throw new Error("DATABASE_URL_VENDEDORES não está definida");
 }
 
-let pool = global._nfePgPool;
+let pool = global._nfePgPoolAckError;
 
 if (!pool) {
   pool = new Pool({
@@ -21,13 +21,27 @@ if (!pool) {
     connectionTimeoutMillis: 10000,
   });
 
-  global._nfePgPool = pool;
+  global._nfePgPoolAckError = pool;
 }
 
 function checkAuth(req) {
   const auth = req.headers.authorization || "";
   const token = auth.replace(/^Bearer\s+/i, "").trim();
   return !!API_TOKEN && token === API_TOKEN;
+}
+
+function toNullableInt(value) {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return null;
+  }
+
+  const n = Number(value);
+  return Number.isInteger(n) ? n : null;
+}
+
+function normalizeText(value) {
+  const s = String(value || "").trim();
+  return s || null;
 }
 
 export default async function handler(req, res) {
@@ -45,68 +59,106 @@ export default async function handler(req, res) {
   const client = await pool.connect();
 
   try {
-    const { nfe_id, erro, detalhes } = req.body || {};
-    const nfeId = Number(nfe_id);
+    const { empresa_id, nfe_id, erro, detalhes } = req.body || {};
 
-    if (!Number.isInteger(nfeId) || nfeId <= 0) {
+    const empresaId = toNullableInt(empresa_id);
+    const nfeId = toNullableInt(nfe_id);
+
+    if (!empresaId || empresaId <= 0) {
+      return res.status(400).json({ error: "empresa_id inválido" });
+    }
+
+    if (!nfeId || nfeId <= 0) {
       return res.status(400).json({ error: "nfe_id inválido" });
     }
 
+    const erroTxt = normalizeText(erro) || "Erro na integração ERP";
+    const detalhesTxt = normalizeText(detalhes);
+
     const mensagemErro =
-      [erro, detalhes].filter(Boolean).join(" | ") ||
+      [erroTxt, detalhesTxt].filter(Boolean).join(" | ") ||
       "Erro desconhecido ao integrar no ERP";
 
     await client.query("BEGIN");
+
+    const docCheck = await client.query(
+      `
+      SELECT id, empresa_id, chave_nfe, n_nf, serie
+      FROM public.nfe_document
+      WHERE id = $1
+        AND empresa_id = $2
+      LIMIT 1
+      `,
+      [nfeId, empresaId]
+    );
+
+    if (docCheck.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        error: "NF-e não encontrada para esta empresa",
+      });
+    }
 
     const queueRes = await client.query(
       `
       UPDATE public.nfe_erp_queue
       SET
         status = 'ERRO',
-        last_error = $2,
+        last_error = $3,
         tentativas = COALESCE(tentativas, 0) + 1,
         updated_at = NOW(),
         reservado_em = NULL,
         reservado_por = NULL
       WHERE nfe_id = $1
-      RETURNING id, nfe_id, status, last_error
+        AND empresa_id = $2
+      RETURNING id, nfe_id, empresa_id, status, last_error
       `,
-      [nfeId, mensagemErro]
+      [nfeId, empresaId, mensagemErro]
     );
 
     await client.query(
       `
       UPDATE public.nfe_document
-      SET status_erp = 2
+      SET
+        status_erp = 2,
+        erp_stage_status = 'ERRO',
+        erp_stage_msg = $3,
+        erp_stage_updated_at = NOW()
       WHERE id = $1
+        AND empresa_id = $2
       `,
-      [nfeId]
+      [nfeId, empresaId, mensagemErro]
     );
 
-    await client.query(
-      `
-      INSERT INTO public.nfe_erp_log (
-        nfe_id,
-        tipo_evento,
-        mensagem,
-        detalhes,
-        created_at
+    await client
+      .query(
+        `
+        INSERT INTO public.nfe_erp_log (
+          empresa_id,
+          nfe_id,
+          tipo_evento,
+          mensagem,
+          detalhes,
+          created_at
+        )
+        VALUES (
+          $1,
+          $2,
+          'ERRO',
+          $3,
+          $4,
+          NOW()
+        )
+        `,
+        [empresaId, nfeId, erroTxt, detalhesTxt]
       )
-      VALUES (
-        $1,
-        'ERRO',
-        $2,
-        $3,
-        NOW()
-      )
-      `,
-      [nfeId, erro || "Erro na integração ERP", detalhes || null]
-    ).catch(() => null);
+      .catch(() => null);
 
     await client.query("COMMIT");
 
     return res.status(200).json({
       success: true,
+      empresa_id: empresaId,
       nfe_id: nfeId,
       queue_updated: queueRes.rowCount > 0,
       status: "ERRO",
