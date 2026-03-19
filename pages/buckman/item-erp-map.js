@@ -142,7 +142,11 @@ export default function ItemErpMapPage({ empresaId }) {
 
       if (f.q) params.set("q", f.q); 
 
-      if (f.cnpj_fornecedor) params.set("cnpj_fornecedor", onlyDigits(f.cnpj_fornecedor)); 
+      if (f.cnpj_fornecedor) { 
+
+        params.set("cnpj_fornecedor", onlyDigits(f.cnpj_fornecedor)); 
+
+      } 
 
       if (f.status_map) params.set("status_map", f.status_map); 
 
@@ -154,7 +158,11 @@ export default function ItemErpMapPage({ empresaId }) {
 
  
 
-      if (!res.ok) throw new Error(data?.error || data?.details || `Falha (${res.status})`); 
+      if (!res.ok) { 
+
+        throw new Error(data?.error || data?.details || `Falha (${res.status})`); 
+
+      } 
 
  
 
@@ -288,7 +296,15 @@ export default function ItemErpMapPage({ empresaId }) {
 
       const data = await res.json().catch(() => ({})); 
 
-      if (!res.ok) throw new Error(data?.error || data?.details || `Falha (${res.status})`); 
+ 
+
+      if (!res.ok) { 
+
+        throw new Error(data?.error || data?.details || `Falha (${res.status})`); 
+
+      } 
+
+ 
 
       preencherFormulario(data); 
 
@@ -388,7 +404,13 @@ export default function ItemErpMapPage({ empresaId }) {
 
       const data = await res.json().catch(() => ({})); 
 
-      if (!res.ok) throw new Error(data?.error || data?.details || `Falha (${res.status})`); 
+ 
+
+      if (!res.ok) { 
+
+        throw new Error(data?.error || data?.details || `Falha (${res.status})`); 
+
+      } 
 
  
 
@@ -401,6 +423,8 @@ export default function ItemErpMapPage({ empresaId }) {
           : "Mapeamento de item criado com sucesso." 
 
       ); 
+
+ 
 
       preencherFormulario(data); 
 
@@ -419,6 +443,8 @@ export default function ItemErpMapPage({ empresaId }) {
   async function excluir(id) { 
 
     if (!id) return; 
+
+ 
 
     if (!empresaId) { 
 
@@ -456,7 +482,13 @@ export default function ItemErpMapPage({ empresaId }) {
 
       const data = await res.json().catch(() => ({})); 
 
-      if (!res.ok) throw new Error(data?.error || data?.details || `Falha (${res.status})`); 
+ 
+
+      if (!res.ok) { 
+
+        throw new Error(data?.error || data?.details || `Falha (${res.status})`); 
+
+      } 
 
  
 
@@ -712,6 +744,8 @@ export default function ItemErpMapPage({ empresaId }) {
 
               </button> 
 
+ 
+
               <button 
 
                 onClick={() => { 
@@ -729,6 +763,8 @@ export default function ItemErpMapPage({ empresaId }) {
                 Novo 
 
               </button> 
+
+ 
 
               <button onClick={limparFiltros} style={secondaryButtonStyle}> 
 
@@ -1308,7 +1344,7 @@ export default function ItemErpMapPage({ empresaId }) {
 
             > 
 
-              ⬅ Anterior 
+              ← Anterior 
 
             </button> 
 
@@ -1338,7 +1374,7 @@ export default function ItemErpMapPage({ empresaId }) {
 
             > 
 
-              Próximo ➡ 
+              Próximo → 
 
             </button> 
 
@@ -1362,15 +1398,31 @@ function statusBadgeStyle(status) {
 
  
 
-  if (s === "MAPEADO" || s === "ENVIADO") { 
+  if (s === "MAPEADO") { 
 
     return { 
 
-      background: "#ecfdf3", 
+      background: "#dcfce7", 
 
       color: "#166534", 
 
-      border: "1px solid #bbf7d0", 
+      border: "1px solid #86efac", 
+
+    }; 
+
+  } 
+
+ 
+
+  if (s === "ENVIADO") { 
+
+    return { 
+
+      background: "#dbeafe", 
+
+      color: "#1d4ed8", 
+
+      border: "1px solid #93c5fd", 
 
     }; 
 
@@ -1382,11 +1434,11 @@ function statusBadgeStyle(status) {
 
     return { 
 
-      background: "#fef2f2", 
+      background: "#fee2e2", 
 
       color: "#b91c1c", 
 
-      border: "1px solid #fecaca", 
+      border: "1px solid #fca5a5", 
 
     }; 
 
@@ -1398,7 +1450,7 @@ function statusBadgeStyle(status) {
 
     return { 
 
-      background: "#f8fafc", 
+      background: "#f1f5f9", 
 
       color: "#475569", 
 
@@ -1412,11 +1464,11 @@ function statusBadgeStyle(status) {
 
   return { 
 
-    background: "#fffbeb", 
+    background: "#fef3c7", 
 
     color: "#92400e", 
 
-    border: "1px solid #fde68a", 
+    border: "1px solid #fcd34d", 
 
   }; 
 
@@ -1442,13 +1494,13 @@ const pageHeaderStyle = {
 
   justifyContent: "space-between", 
 
-  gap: 12, 
-
   alignItems: "center", 
 
-  flexWrap: "wrap", 
+  marginBottom: 16, 
 
-  marginBottom: 18, 
+  gap: 12, 
+
+  flexWrap: "wrap", 
 
 }; 
 
@@ -1458,15 +1510,51 @@ const empresaBadgeStyle = {
 
   background: "#eff6ff", 
 
-  border: "1px solid #bfdbfe", 
-
   color: "#1d4ed8", 
+
+  border: "1px solid #bfdbfe", 
 
   borderRadius: 999, 
 
   padding: "10px 14px", 
 
   fontSize: 14, 
+
+  fontWeight: 600, 
+
+}; 
+
+ 
+
+const messageBoxStyle = { 
+
+  marginBottom: 16, 
+
+  padding: "12px 14px", 
+
+  borderRadius: 10, 
+
+  border: "1px solid #e2e8f0", 
+
+  background: "#fff", 
+
+  color: "#334155", 
+
+  fontWeight: 500, 
+
+}; 
+
+ 
+
+const mainGridStyle = { 
+
+  display: "grid", 
+
+  gridTemplateColumns: "minmax(0, 1.5fr) minmax(380px, 520px)", 
+
+  gap: 18, 
+
+  alignItems: "start", 
 
 }; 
 
@@ -1478,13 +1566,13 @@ const cardStyle = {
 
   border: "1px solid #e2e8f0", 
 
-  borderRadius: 18, 
+  borderRadius: 14, 
 
-  padding: 18, 
+  padding: 16, 
 
-  marginBottom: 18, 
+  marginBottom: 16, 
 
-  boxShadow: "0 8px 24px rgba(15,23,42,0.05)", 
+  boxShadow: "0 1px 2px rgba(15,23,42,0.04)", 
 
 }; 
 
@@ -1496,13 +1584,15 @@ const detailCardStyle = {
 
   border: "1px solid #e2e8f0", 
 
-  borderRadius: 18, 
+  borderRadius: 14, 
 
-  padding: 18, 
+  padding: 16, 
 
-  minHeight: 320, 
+  boxShadow: "0 1px 2px rgba(15,23,42,0.04)", 
 
-  boxShadow: "0 8px 24px rgba(15,23,42,0.05)", 
+  position: "sticky", 
+
+  top: 12, 
 
 }; 
 
@@ -1510,97 +1600,7 @@ const detailCardStyle = {
 
 const cardHeaderStyle = { 
 
-  display: "flex", 
-
-  justifyContent: "space-between", 
-
-  alignItems: "center", 
-
-  gap: 12, 
-
-  flexWrap: "wrap", 
-
   marginBottom: 14, 
-
-}; 
-
- 
-
-const messageBoxStyle = { 
-
-  marginBottom: 16, 
-
-  padding: 14, 
-
-  borderRadius: 14, 
-
-  background: "#f8fafc", 
-
-  border: "1px solid #cbd5e1", 
-
-  whiteSpace: "pre-wrap", 
-
-  color: "#334155", 
-
-}; 
-
- 
-
-const mainGridStyle = { 
-
-  display: "grid", 
-
-  gridTemplateColumns: "1.35fr 1fr", 
-
-  gap: 18, 
-
-}; 
-
- 
-
-const tableStyle = { 
-
-  width: "100%", 
-
-  borderCollapse: "separate", 
-
-  borderSpacing: 0, 
-
-  fontSize: 13, 
-
-}; 
-
- 
-
-const tableHead = { 
-
-  textAlign: "left", 
-
-  padding: "12px 10px", 
-
-  borderBottom: "1px solid #e2e8f0", 
-
-  background: "#f8fafc", 
-
-  fontWeight: 700, 
-
-  whiteSpace: "nowrap", 
-
-  color: "#334155", 
-
-}; 
-
- 
-
-const tableCell = { 
-
-  padding: "12px 10px", 
-
-  borderBottom: "1px solid #f1f5f9", 
-
-  verticalAlign: "top", 
-
-  color: "#0f172a", 
 
 }; 
 
@@ -1610,13 +1610,13 @@ const labelStyle = {
 
   display: "block", 
 
-  fontSize: 12, 
+  fontSize: 13, 
 
   fontWeight: 600, 
 
-  marginBottom: 6, 
-
   color: "#334155", 
+
+  marginBottom: 6, 
 
 }; 
 
@@ -1626,19 +1626,19 @@ const inputStyle = {
 
   width: "100%", 
 
-  borderRadius: 12, 
+  height: 40, 
+
+  borderRadius: 10, 
 
   border: "1px solid #cbd5e1", 
 
-  padding: "10px 12px", 
+  padding: "0 12px", 
 
   fontSize: 14, 
 
   outline: "none", 
 
   background: "#fff", 
-
-  boxSizing: "border-box", 
 
 }; 
 
@@ -1650,19 +1650,19 @@ const textAreaStyle = {
 
   minHeight: 90, 
 
-  borderRadius: 12, 
+  borderRadius: 10, 
 
   border: "1px solid #cbd5e1", 
 
-  padding: "10px 12px", 
+  padding: 12, 
 
   fontSize: 14, 
 
   outline: "none", 
 
-  boxSizing: "border-box", 
-
   resize: "vertical", 
+
+  background: "#fff", 
 
 }; 
 
@@ -1670,15 +1670,19 @@ const textAreaStyle = {
 
 const sectionTitle = { 
 
+  fontSize: 14, 
+
   fontWeight: 700, 
 
-  fontSize: 15, 
+  color: "#0f172a", 
+
+  marginTop: 10, 
 
   marginBottom: 10, 
 
-  marginTop: 6, 
+  paddingBottom: 6, 
 
-  color: "#0f172a", 
+  borderBottom: "1px solid #e2e8f0", 
 
 }; 
 
@@ -1700,53 +1704,19 @@ const formGrid2 = {
 
 const primaryButtonStyle = { 
 
-  display: "inline-flex", 
+  height: 40, 
 
-  alignItems: "center", 
+  border: "none", 
 
-  justifyContent: "center", 
+  borderRadius: 10, 
 
-  padding: "10px 14px", 
-
-  borderRadius: 12, 
+  padding: "0 16px", 
 
   background: "#2563eb", 
 
-  border: "1px solid #2563eb", 
-
   color: "#fff", 
 
-  textDecoration: "none", 
-
-  fontSize: 14, 
-
-  cursor: "pointer", 
-
-}; 
-
- 
-
-const secondaryButtonStyle = { 
-
-  display: "inline-flex", 
-
-  alignItems: "center", 
-
-  justifyContent: "center", 
-
-  padding: "10px 14px", 
-
-  borderRadius: 12, 
-
-  background: "#fff", 
-
-  border: "1px solid #cbd5e1", 
-
-  color: "#0f172a", 
-
-  textDecoration: "none", 
-
-  fontSize: 14, 
+  fontWeight: 700, 
 
   cursor: "pointer", 
 
@@ -1756,25 +1726,41 @@ const secondaryButtonStyle = {
 
 const successButtonStyle = { 
 
-  display: "inline-flex", 
+  height: 40, 
 
-  alignItems: "center", 
+  border: "none", 
 
-  justifyContent: "center", 
+  borderRadius: 10, 
 
-  padding: "10px 14px", 
-
-  borderRadius: 12, 
+  padding: "0 16px", 
 
   background: "#16a34a", 
 
-  border: "1px solid #16a34a", 
-
   color: "#fff", 
 
-  textDecoration: "none", 
+  fontWeight: 700, 
 
-  fontSize: 14, 
+  cursor: "pointer", 
+
+}; 
+
+ 
+
+const secondaryButtonStyle = { 
+
+  height: 40, 
+
+  border: "1px solid #cbd5e1", 
+
+  borderRadius: 10, 
+
+  padding: "0 16px", 
+
+  background: "#fff", 
+
+  color: "#334155", 
+
+  fontWeight: 700, 
 
   cursor: "pointer", 
 
@@ -1784,25 +1770,19 @@ const successButtonStyle = {
 
 const dangerButtonStyle = { 
 
-  display: "inline-flex", 
+  height: 40, 
 
-  alignItems: "center", 
+  border: "none", 
 
-  justifyContent: "center", 
+  borderRadius: 10, 
 
-  padding: "10px 14px", 
-
-  borderRadius: 12, 
+  padding: "0 16px", 
 
   background: "#dc2626", 
 
-  border: "1px solid #dc2626", 
-
   color: "#fff", 
 
-  textDecoration: "none", 
-
-  fontSize: 14, 
+  fontWeight: 700, 
 
   cursor: "pointer", 
 
@@ -1812,15 +1792,17 @@ const dangerButtonStyle = {
 
 const miniBtn = { 
 
-  padding: "8px 10px", 
+  border: "none", 
 
-  borderRadius: 10, 
+  borderRadius: 8, 
+
+  padding: "6px 10px", 
 
   background: "#0ea5e9", 
 
-  border: "1px solid #0ea5e9", 
-
   color: "#fff", 
+
+  fontWeight: 700, 
 
   cursor: "pointer", 
 
@@ -1832,15 +1814,17 @@ const miniBtn = {
 
 const miniBtnDanger = { 
 
-  padding: "8px 10px", 
+  border: "none", 
 
-  borderRadius: 10, 
+  borderRadius: 8, 
+
+  padding: "6px 10px", 
 
   background: "#ef4444", 
 
-  border: "1px solid #ef4444", 
-
   color: "#fff", 
+
+  fontWeight: 700, 
 
   cursor: "pointer", 
 
@@ -1850,16 +1834,68 @@ const miniBtnDanger = {
 
  
 
-const badgeBase = { 
+const tableStyle = { 
 
-  borderRadius: 999, 
+  width: "100%", 
 
-  padding: "6px 10px", 
+  borderCollapse: "collapse", 
+
+  fontSize: 13, 
+
+}; 
+
+ 
+
+const tableHead = { 
+
+  textAlign: "left", 
+
+  padding: "12px 10px", 
+
+  background: "#f8fafc", 
+
+  color: "#334155", 
+
+  borderBottom: "1px solid #e2e8f0", 
 
   fontSize: 12, 
 
-  display: "inline-block", 
+  fontWeight: 700, 
 
-  fontWeight: 600, 
+  whiteSpace: "nowrap", 
+
+}; 
+
+ 
+
+const tableCell = { 
+
+  padding: "12px 10px", 
+
+  borderBottom: "1px solid #f1f5f9", 
+
+  verticalAlign: "top", 
+
+  color: "#0f172a", 
+
+}; 
+
+ 
+
+const badgeBase = { 
+
+  display: "inline-flex", 
+
+  alignItems: "center", 
+
+  padding: "4px 10px", 
+
+  borderRadius: 999, 
+
+  fontSize: 12, 
+
+  fontWeight: 700, 
+
+  whiteSpace: "nowrap", 
 
 }; 
