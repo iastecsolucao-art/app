@@ -1,3 +1,5 @@
+import { getSession, useSession } from "next-auth/react"; 
+
 import { useEffect, useMemo, useState } from "react"; 
 
  
@@ -156,7 +158,7 @@ function statusBadgeStyle(status) {
 
  
 
-export default function ItemErpMapPage({ empresaId }) { 
+function ItemErpMapPage({ empresaId }) { 
 
   const [rows, setRows] = useState([]); 
 
@@ -256,11 +258,7 @@ export default function ItemErpMapPage({ empresaId }) {
 
         const updated = nextRows.find((r) => r.id === form.id); 
 
-        if (!updated) { 
-
-          setForm(initialForm); 
-
-        } 
+        if (!updated) setForm(initialForm); 
 
       } 
 
@@ -369,8 +367,6 @@ export default function ItemErpMapPage({ empresaId }) {
     try { 
 
       setMsg(""); 
-
- 
 
       const params = new URLSearchParams(); 
 
@@ -926,7 +922,7 @@ export default function ItemErpMapPage({ empresaId }) {
 
                     {rows.map((r) => ( 
 
-                      <tr key={r.id} style={{ background: form.id === r.id ? "#eff6ff" : "#fff" }}> 
+                      <tr key={r.id} style={{ background: form.id === r.id ? "#f8fbff" : "#fff" }}> 
 
                         <td style={tableCell}>{r.id}</td> 
 
@@ -998,21 +994,27 @@ export default function ItemErpMapPage({ empresaId }) {
 
  
 
-          <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 10, marginBottom: 12 }}> 
+          <div 
+
+            style={{ 
+
+              display: "grid", 
+
+              gridTemplateColumns: "120px 1fr", 
+
+              gap: 10, 
+
+              marginBottom: 12, 
+
+            }} 
+
+          > 
 
             <div> 
 
               <label style={labelStyle}>ID mapa</label> 
 
-              <input 
-
-                value={form.id || ""} 
-
-                readOnly 
-
-                style={{ ...inputStyle, background: "#f1f5f9" }} 
-
-              /> 
+              <input value={form.id || ""} readOnly style={{ ...inputStyle, background: "#f1f5f9" }} /> 
 
             </div> 
 
@@ -1354,8 +1356,6 @@ export default function ItemErpMapPage({ empresaId }) {
 
             </button> 
 
- 
-
             <button 
 
               onClick={() => excluir(form.id)} 
@@ -1377,8 +1377,6 @@ export default function ItemErpMapPage({ empresaId }) {
               Excluir 
 
             </button> 
-
- 
 
             <button onClick={limparFormulario} style={secondaryButtonStyle}> 
 
@@ -1453,6 +1451,68 @@ export default function ItemErpMapPage({ empresaId }) {
     </div> 
 
   ); 
+
+} 
+
+ 
+
+export default function ItemErpMapRoute({ empresaId: empresaIdServer }) { 
+
+  const { data: session, status } = useSession(); 
+
+ 
+
+  const empresaId = 
+
+    session?.user?.empresa_id ?? 
+
+    session?.empresa_id ?? 
+
+    empresaIdServer ?? 
+
+    null; 
+
+ 
+
+  if (status === "loading" && !empresaIdServer) { 
+
+    return <div style={{ padding: 24 }}>Carregando...</div>; 
+
+  } 
+
+ 
+
+  return <ItemErpMapPage empresaId={empresaId} />; 
+
+} 
+
+ 
+
+export async function getServerSideProps(context) { 
+
+  const session = await getSession(context); 
+
+ 
+
+  const empresaId = 
+
+    session?.user?.empresa_id ?? 
+
+    session?.empresa_id ?? 
+
+    null; 
+
+ 
+
+  return { 
+
+    props: { 
+
+      empresaId: empresaId || null, 
+
+    }, 
+
+  }; 
 
 } 
 
