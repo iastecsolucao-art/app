@@ -32,28 +32,31 @@ function toPositiveInt(value) {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
+function normalizeNullableText(value) {
+  const s = String(value ?? "").trim();
+  return s || null;
+}
+
 function normalizeBody(body = {}) {
   return {
     empresa_id: toPositiveInt(body.empresa_id),
-    participante_id: body.participante_id ? Number(body.participante_id) : null,
+    participante_id: toPositiveInt(body.participante_id),
     sistema_destino: String(body.sistema_destino || "ERP").trim(),
     cnpj_fornecedor: body.cnpj_fornecedor
       ? String(body.cnpj_fornecedor).replace(/\D/g, "")
       : null,
-    cprod_origem: body.cprod_origem ? String(body.cprod_origem).trim() : null,
-    xprod_origem: body.xprod_origem ? String(body.xprod_origem).trim() : null,
-    ncm_origem: body.ncm_origem ? String(body.ncm_origem).trim() : null,
-    cfop_origem: body.cfop_origem ? String(body.cfop_origem).trim() : null,
-    unidade_origem: body.unidade_origem ? String(body.unidade_origem).trim() : null,
-    codigo_produto_erp: body.codigo_produto_erp
-      ? String(body.codigo_produto_erp).trim()
-      : null,
-    sku_erp: body.sku_erp ? String(body.sku_erp).trim() : null,
-    descricao_erp: body.descricao_erp ? String(body.descricao_erp).trim() : null,
-    unidade_erp: body.unidade_erp ? String(body.unidade_erp).trim() : null,
-    ncm_erp: body.ncm_erp ? String(body.ncm_erp).trim() : null,
+    cprod_origem: normalizeNullableText(body.cprod_origem),
+    xprod_origem: normalizeNullableText(body.xprod_origem),
+    ncm_origem: normalizeNullableText(body.ncm_origem),
+    cfop_origem: normalizeNullableText(body.cfop_origem),
+    unidade_origem: normalizeNullableText(body.unidade_origem),
+    codigo_produto_erp: normalizeNullableText(body.codigo_produto_erp),
+    sku_erp: normalizeNullableText(body.sku_erp),
+    descricao_erp: normalizeNullableText(body.descricao_erp),
+    unidade_erp: normalizeNullableText(body.unidade_erp),
+    ncm_erp: normalizeNullableText(body.ncm_erp),
     ativo: body.ativo === undefined ? true : !!body.ativo,
-    observacao: body.observacao ? String(body.observacao).trim() : null,
+    observacao: normalizeNullableText(body.observacao),
     status_map: String(body.status_map || "PENDENTE").trim().toUpperCase(),
   };
 }
@@ -82,23 +85,23 @@ export default async function handler(req, res) {
       const where = [];
 
       params.push(empresa_id);
-      where.push(`empresa_id = $${params.length}`);
+      where.push(`m.empresa_id = $${params.length}`);
 
       if (q) {
         params.push(`%${q}%`);
         const p = `$${params.length}`;
         where.push(`(
-          COALESCE(cprod_origem, '') ILIKE ${p}
-          OR COALESCE(xprod_origem, '') ILIKE ${p}
-          OR COALESCE(codigo_produto_erp, '') ILIKE ${p}
-          OR COALESCE(descricao_erp, '') ILIKE ${p}
-          OR COALESCE(sku_erp, '') ILIKE ${p}
+          COALESCE(m.cprod_origem, '') ILIKE ${p}
+          OR COALESCE(m.xprod_origem, '') ILIKE ${p}
+          OR COALESCE(m.codigo_produto_erp, '') ILIKE ${p}
+          OR COALESCE(m.descricao_erp, '') ILIKE ${p}
+          OR COALESCE(m.sku_erp, '') ILIKE ${p}
         )`);
       }
 
       if (cnpj_fornecedor) {
         params.push(cnpj_fornecedor);
-        where.push(`cnpj_fornecedor = $${params.length}`);
+        where.push(`m.cnpj_fornecedor = $${params.length}`);
       }
 
       if (status_map) {
@@ -106,7 +109,7 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: "status_map inválido" });
         }
         params.push(status_map);
-        where.push(`status_map = $${params.length}`);
+        where.push(`m.status_map = $${params.length}`);
       }
 
       params.push(limit);
@@ -116,37 +119,45 @@ export default async function handler(req, res) {
       const result = await pool.query(
         `
         SELECT
-          id,
-          empresa_id,
-          participante_id,
-          sistema_destino,
-          cnpj_fornecedor,
-          cprod_origem,
-          xprod_origem,
-          ncm_origem,
-          cfop_origem,
-          unidade_origem,
-          codigo_produto_erp,
-          sku_erp,
-          descricao_erp,
-          unidade_erp,
-          ncm_erp,
-          ativo,
-          observacao,
-          status_map,
-          created_at,
-          updated_at
-        FROM public.nfe_item_erp_map
+          m.id,
+          m.empresa_id,
+          m.participante_id,
+          m.sistema_destino,
+          m.cnpj_fornecedor,
+          m.cprod_origem,
+          m.xprod_origem,
+          m.ncm_origem,
+          m.cfop_origem,
+          m.unidade_origem,
+          m.codigo_produto_erp,
+          m.sku_erp,
+          m.descricao_erp,
+          m.unidade_erp,
+          m.ncm_erp,
+          m.ativo,
+          m.observacao,
+          m.status_map,
+          m.created_at,
+          m.updated_at
+        FROM public.nfe_item_erp_map m
         ${whereSql}
-        ORDER BY updated_at DESC, id DESC
+        ORDER BY m.updated_at DESC, m.id DESC
         LIMIT ${limitParam}
         `,
         params
       );
 
-      return res.status(200).json({ rows: result.rows || [] });
+      return res.status(200).json({
+        rows: result.rows || [],
+      });
     } catch (e) {
-      console.error("Erro em GET /api/item-erp-map:", e);
+      console.error("Erro em GET /api/item-erp-map:", {
+        message: e?.message,
+        stack: e?.stack,
+        code: e?.code,
+        detail: e?.detail,
+      });
+
       return res.status(500).json({
         error: "Erro ao listar mapeamento de itens",
         details: e?.message || String(e),
@@ -155,6 +166,8 @@ export default async function handler(req, res) {
   }
 
   if (req.method === "POST") {
+    const client = await pool.connect();
+
     try {
       const data = normalizeBody(req.body);
 
@@ -178,7 +191,29 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "status_map inválido" });
       }
 
-      const result = await pool.query(
+      await client.query("BEGIN");
+
+      if (data.participante_id) {
+        const participanteRes = await client.query(
+          `
+          SELECT id
+          FROM public.nfe_participante
+          WHERE id = $1
+            AND empresa_id = $2
+          LIMIT 1
+          `,
+          [data.participante_id, data.empresa_id]
+        );
+
+        if (!participanteRes.rowCount) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({
+            error: "participante_id inválido para esta empresa",
+          });
+        }
+      }
+
+      const result = await client.query(
         `
         INSERT INTO public.nfe_item_erp_map (
           empresa_id,
@@ -197,10 +232,12 @@ export default async function handler(req, res) {
           ncm_erp,
           ativo,
           observacao,
-          status_map
+          status_map,
+          created_at,
+          updated_at
         )
         VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW(),NOW()
         )
         RETURNING *
         `,
@@ -225,9 +262,20 @@ export default async function handler(req, res) {
         ]
       );
 
+      await client.query("COMMIT");
+
       return res.status(201).json(result.rows[0]);
     } catch (e) {
-      console.error("Erro em POST /api/item-erp-map:", e);
+      try {
+        await client.query("ROLLBACK");
+      } catch {}
+
+      console.error("Erro em POST /api/item-erp-map:", {
+        message: e?.message,
+        stack: e?.stack,
+        code: e?.code,
+        detail: e?.detail,
+      });
 
       if (e?.code === "23505") {
         return res.status(409).json({
@@ -240,9 +288,13 @@ export default async function handler(req, res) {
         error: "Erro ao cadastrar mapeamento de item",
         details: e?.message || String(e),
       });
+    } finally {
+      client.release();
     }
   }
 
   res.setHeader("Allow", ["GET", "POST"]);
-  return res.status(405).json({ error: `Método ${req.method} não permitido` });
+  return res.status(405).json({
+    error: `Método ${req.method} não permitido`,
+  });
 }

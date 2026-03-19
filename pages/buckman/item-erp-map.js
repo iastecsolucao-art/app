@@ -72,6 +72,90 @@ const initialForm = {
 
  
 
+function statusBadgeStyle(status) { 
+
+  const s = String(status || "").toUpperCase(); 
+
+ 
+
+  if (s === "MAPEADO") { 
+
+    return { 
+
+      background: "#e8f7e8", 
+
+      color: "#146c2e", 
+
+      border: "1px solid #b7e1c0", 
+
+    }; 
+
+  } 
+
+ 
+
+  if (s === "ENVIADO") { 
+
+    return { 
+
+      background: "#e8f0ff", 
+
+      color: "#1d4ed8", 
+
+      border: "1px solid #bfd3ff", 
+
+    }; 
+
+  } 
+
+ 
+
+  if (s === "ERRO") { 
+
+    return { 
+
+      background: "#ffe5e5", 
+
+      color: "#b00020", 
+
+      border: "1px solid #f2b8b5", 
+
+    }; 
+
+  } 
+
+ 
+
+  if (s === "IGNORADO") { 
+
+    return { 
+
+      background: "#f3f4f6", 
+
+      color: "#374151", 
+
+      border: "1px solid #d1d5db", 
+
+    }; 
+
+  } 
+
+ 
+
+  return { 
+
+    background: "#fff7d6", 
+
+    color: "#8a6700", 
+
+    border: "1px solid #f3d46b", 
+
+  }; 
+
+} 
+
+ 
+
 export default function ItemErpMapPage({ empresaId }) { 
 
   const [rows, setRows] = useState([]); 
@@ -112,7 +196,7 @@ export default function ItemErpMapPage({ empresaId }) {
 
     if (!empresaId) { 
 
-      setMsg("Empresa não identificada."); 
+      setMsg("Empresa não identificada. Selecione uma empresa antes de consultar os mapeamentos."); 
 
       setRows([]); 
 
@@ -142,11 +226,7 @@ export default function ItemErpMapPage({ empresaId }) {
 
       if (f.q) params.set("q", f.q); 
 
-      if (f.cnpj_fornecedor) { 
-
-        params.set("cnpj_fornecedor", onlyDigits(f.cnpj_fornecedor)); 
-
-      } 
+      if (f.cnpj_fornecedor) params.set("cnpj_fornecedor", onlyDigits(f.cnpj_fornecedor)); 
 
       if (f.status_map) params.set("status_map", f.status_map); 
 
@@ -176,7 +256,11 @@ export default function ItemErpMapPage({ empresaId }) {
 
         const updated = nextRows.find((r) => r.id === form.id); 
 
-        if (!updated) setForm(initialForm); 
+        if (!updated) { 
+
+          setForm(initialForm); 
+
+        } 
 
       } 
 
@@ -285,6 +369,8 @@ export default function ItemErpMapPage({ empresaId }) {
     try { 
 
       setMsg(""); 
+
+ 
 
       const params = new URLSearchParams(); 
 
@@ -624,11 +710,11 @@ export default function ItemErpMapPage({ empresaId }) {
 
             ...messageBoxStyle, 
 
-            background: msg.toLowerCase().includes("erro") ? "#fff1f2" : "#f0fdf4", 
+            background: msg.toLowerCase().includes("erro") ? "#fff1f2" : "#f8fafc", 
 
-            borderColor: msg.toLowerCase().includes("erro") ? "#fecdd3" : "#bbf7d0", 
+            borderColor: msg.toLowerCase().includes("erro") ? "#fecdd3" : "#e2e8f0", 
 
-            color: msg.toLowerCase().includes("erro") ? "#be123c" : "#166534", 
+            color: msg.toLowerCase().includes("erro") ? "#be123c" : "#334155", 
 
           }} 
 
@@ -840,7 +926,7 @@ export default function ItemErpMapPage({ empresaId }) {
 
                     {rows.map((r) => ( 
 
-                      <tr key={r.id} style={{ background: form.id === r.id ? "#f8fbff" : "#fff" }}> 
+                      <tr key={r.id} style={{ background: form.id === r.id ? "#eff6ff" : "#fff" }}> 
 
                         <td style={tableCell}>{r.id}</td> 
 
@@ -912,27 +998,21 @@ export default function ItemErpMapPage({ empresaId }) {
 
  
 
-          <div 
-
-            style={{ 
-
-              display: "grid", 
-
-              gridTemplateColumns: "120px 1fr", 
-
-              gap: 10, 
-
-              marginBottom: 12, 
-
-            }} 
-
-          > 
+          <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 10, marginBottom: 12 }}> 
 
             <div> 
 
               <label style={labelStyle}>ID mapa</label> 
 
-              <input value={form.id || ""} readOnly style={{ ...inputStyle, background: "#f1f5f9" }} /> 
+              <input 
+
+                value={form.id || ""} 
+
+                readOnly 
+
+                style={{ ...inputStyle, background: "#f1f5f9" }} 
+
+              /> 
 
             </div> 
 
@@ -1160,21 +1240,7 @@ export default function ItemErpMapPage({ empresaId }) {
 
  
 
-          <div 
-
-            style={{ 
-
-              display: "grid", 
-
-              gridTemplateColumns: "1fr 1fr 1fr", 
-
-              gap: 10, 
-
-              marginBottom: 10, 
-
-            }} 
-
-          > 
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}> 
 
             <div> 
 
@@ -1392,90 +1458,6 @@ export default function ItemErpMapPage({ empresaId }) {
 
  
 
-function statusBadgeStyle(status) { 
-
-  const s = String(status || "").toUpperCase(); 
-
- 
-
-  if (s === "MAPEADO") { 
-
-    return { 
-
-      background: "#dcfce7", 
-
-      color: "#166534", 
-
-      border: "1px solid #86efac", 
-
-    }; 
-
-  } 
-
- 
-
-  if (s === "ENVIADO") { 
-
-    return { 
-
-      background: "#dbeafe", 
-
-      color: "#1d4ed8", 
-
-      border: "1px solid #93c5fd", 
-
-    }; 
-
-  } 
-
- 
-
-  if (s === "ERRO") { 
-
-    return { 
-
-      background: "#fee2e2", 
-
-      color: "#b91c1c", 
-
-      border: "1px solid #fca5a5", 
-
-    }; 
-
-  } 
-
- 
-
-  if (s === "IGNORADO") { 
-
-    return { 
-
-      background: "#f1f5f9", 
-
-      color: "#475569", 
-
-      border: "1px solid #cbd5e1", 
-
-    }; 
-
-  } 
-
- 
-
-  return { 
-
-    background: "#fef3c7", 
-
-    color: "#92400e", 
-
-    border: "1px solid #fcd34d", 
-
-  }; 
-
-} 
-
- 
-
 const pageStyle = { 
 
   padding: 20, 
@@ -1494,13 +1476,13 @@ const pageHeaderStyle = {
 
   justifyContent: "space-between", 
 
-  alignItems: "center", 
+  alignItems: "flex-start", 
 
-  marginBottom: 16, 
-
-  gap: 12, 
+  gap: 16, 
 
   flexWrap: "wrap", 
+
+  marginBottom: 16, 
 
 }; 
 
@@ -1514,9 +1496,9 @@ const empresaBadgeStyle = {
 
   border: "1px solid #bfdbfe", 
 
-  borderRadius: 999, 
-
   padding: "10px 14px", 
+
+  borderRadius: 10, 
 
   fontSize: 14, 
 
@@ -1530,17 +1512,15 @@ const messageBoxStyle = {
 
   marginBottom: 16, 
 
-  padding: "12px 14px", 
+  padding: "14px 16px", 
 
   borderRadius: 10, 
 
   border: "1px solid #e2e8f0", 
 
-  background: "#fff", 
+  background: "#ffffff", 
 
-  color: "#334155", 
-
-  fontWeight: 500, 
+  fontWeight: 600, 
 
 }; 
 
@@ -1550,7 +1530,7 @@ const mainGridStyle = {
 
   display: "grid", 
 
-  gridTemplateColumns: "minmax(0, 1.5fr) minmax(380px, 520px)", 
+  gridTemplateColumns: "1.35fr 560px", 
 
   gap: 18, 
 
@@ -1566,13 +1546,13 @@ const cardStyle = {
 
   border: "1px solid #e2e8f0", 
 
-  borderRadius: 14, 
+  borderRadius: 16, 
 
   padding: 16, 
 
   marginBottom: 16, 
 
-  boxShadow: "0 1px 2px rgba(15,23,42,0.04)", 
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)", 
 
 }; 
 
@@ -1584,21 +1564,23 @@ const detailCardStyle = {
 
   border: "1px solid #e2e8f0", 
 
-  borderRadius: 14, 
+  borderRadius: 16, 
 
   padding: 16, 
 
-  boxShadow: "0 1px 2px rgba(15,23,42,0.04)", 
-
-  position: "sticky", 
-
-  top: 12, 
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)", 
 
 }; 
 
  
 
 const cardHeaderStyle = { 
+
+  display: "flex", 
+
+  justifyContent: "space-between", 
+
+  alignItems: "center", 
 
   marginBottom: 14, 
 
@@ -1610,13 +1592,13 @@ const labelStyle = {
 
   display: "block", 
 
+  marginBottom: 6, 
+
   fontSize: 13, 
 
   fontWeight: 600, 
 
   color: "#334155", 
-
-  marginBottom: 6, 
 
 }; 
 
@@ -1670,19 +1652,19 @@ const textAreaStyle = {
 
 const sectionTitle = { 
 
-  fontSize: 14, 
+  marginTop: 8, 
+
+  marginBottom: 12, 
 
   fontWeight: 700, 
 
+  fontSize: 15, 
+
   color: "#0f172a", 
 
-  marginTop: 10, 
-
-  marginBottom: 10, 
-
-  paddingBottom: 6, 
-
   borderBottom: "1px solid #e2e8f0", 
+
+  paddingBottom: 8, 
 
 }; 
 
@@ -1706,17 +1688,17 @@ const primaryButtonStyle = {
 
   height: 40, 
 
-  border: "none", 
-
   borderRadius: 10, 
 
-  padding: "0 16px", 
+  border: "none", 
 
   background: "#2563eb", 
 
   color: "#fff", 
 
   fontWeight: 700, 
+
+  padding: "0 16px", 
 
   cursor: "pointer", 
 
@@ -1728,17 +1710,17 @@ const successButtonStyle = {
 
   height: 40, 
 
-  border: "none", 
-
   borderRadius: 10, 
 
-  padding: "0 16px", 
+  border: "none", 
 
   background: "#16a34a", 
 
   color: "#fff", 
 
   fontWeight: 700, 
+
+  padding: "0 16px", 
 
   cursor: "pointer", 
 
@@ -1750,17 +1732,17 @@ const secondaryButtonStyle = {
 
   height: 40, 
 
-  border: "1px solid #cbd5e1", 
-
   borderRadius: 10, 
 
-  padding: "0 16px", 
+  border: "1px solid #cbd5e1", 
 
   background: "#fff", 
 
-  color: "#334155", 
+  color: "#0f172a", 
 
   fontWeight: 700, 
+
+  padding: "0 16px", 
 
   cursor: "pointer", 
 
@@ -1772,17 +1754,17 @@ const dangerButtonStyle = {
 
   height: 40, 
 
-  border: "none", 
-
   borderRadius: 10, 
 
-  padding: "0 16px", 
+  border: "none", 
 
   background: "#dc2626", 
 
   color: "#fff", 
 
   fontWeight: 700, 
+
+  padding: "0 16px", 
 
   cursor: "pointer", 
 
@@ -1794,19 +1776,17 @@ const miniBtn = {
 
   border: "none", 
 
-  borderRadius: 8, 
-
-  padding: "6px 10px", 
-
-  background: "#0ea5e9", 
+  background: "#38bdf8", 
 
   color: "#fff", 
 
-  fontWeight: 700, 
+  padding: "8px 12px", 
+
+  borderRadius: 8, 
 
   cursor: "pointer", 
 
-  fontSize: 12, 
+  fontWeight: 700, 
 
 }; 
 
@@ -1816,19 +1796,17 @@ const miniBtnDanger = {
 
   border: "none", 
 
-  borderRadius: 8, 
-
-  padding: "6px 10px", 
-
   background: "#ef4444", 
 
   color: "#fff", 
 
-  fontWeight: 700, 
+  padding: "8px 12px", 
+
+  borderRadius: 8, 
 
   cursor: "pointer", 
 
-  fontSize: 12, 
+  fontWeight: 700, 
 
 }; 
 
@@ -1850,15 +1828,13 @@ const tableHead = {
 
   textAlign: "left", 
 
-  padding: "12px 10px", 
-
   background: "#f8fafc", 
-
-  color: "#334155", 
 
   borderBottom: "1px solid #e2e8f0", 
 
-  fontSize: 12, 
+  padding: "12px 10px", 
+
+  color: "#334155", 
 
   fontWeight: 700, 
 
@@ -1876,8 +1852,6 @@ const tableCell = {
 
   verticalAlign: "top", 
 
-  color: "#0f172a", 
-
 }; 
 
  
@@ -1888,9 +1862,11 @@ const badgeBase = {
 
   alignItems: "center", 
 
-  padding: "4px 10px", 
+  justifyContent: "center", 
 
   borderRadius: 999, 
+
+  padding: "6px 12px", 
 
   fontSize: 12, 
 
