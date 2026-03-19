@@ -35,7 +35,7 @@ function toNullableInt(value) {
     return null;
   }
 
-  const n = Number(value);
+  const n = Number.parseInt(String(value), 10);
   return Number.isInteger(n) ? n : null;
 }
 
@@ -72,32 +72,12 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "nfe_id inválido" });
     }
 
-    const erroTxt = normalizeText(erro) || "Erro na integração ERP";
-    const detalhesTxt = normalizeText(detalhes);
-
     const mensagemErro =
-      [erroTxt, detalhesTxt].filter(Boolean).join(" | ") ||
-      "Erro desconhecido ao integrar no ERP";
+      [normalizeText(erro), normalizeText(detalhes)]
+        .filter(Boolean)
+        .join(" | ") || "Erro desconhecido ao integrar no ERP";
 
     await client.query("BEGIN");
-
-    const docCheck = await client.query(
-      `
-      SELECT id, empresa_id, chave_nfe, n_nf, serie
-      FROM public.nfe_document
-      WHERE id = $1
-        AND empresa_id = $2
-      LIMIT 1
-      `,
-      [nfeId, empresaId]
-    );
-
-    if (docCheck.rowCount === 0) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({
-        error: "NF-e não encontrada para esta empresa",
-      });
-    }
 
     const queueRes = await client.query(
       `
@@ -134,8 +114,8 @@ export default async function handler(req, res) {
       .query(
         `
         INSERT INTO public.nfe_erp_log (
-          empresa_id,
           nfe_id,
+          empresa_id,
           tipo_evento,
           mensagem,
           detalhes,
@@ -150,7 +130,12 @@ export default async function handler(req, res) {
           NOW()
         )
         `,
-        [empresaId, nfeId, erroTxt, detalhesTxt]
+        [
+          nfeId,
+          empresaId,
+          normalizeText(erro) || "Erro na integração ERP",
+          normalizeText(detalhes),
+        ]
       )
       .catch(() => null);
 
