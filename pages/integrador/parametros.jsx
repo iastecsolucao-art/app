@@ -22,6 +22,8 @@ const initialState = {
   status_entrada_realizada: "ENTRADA_REALIZADA",
   observacoes: "",
   cnpjs_destinatarios: "",
+  serie_nfe: "",
+  serie_nfse: "",
 };
 
 function onlyDigits(value) {
@@ -141,6 +143,8 @@ export default function IntegradorParametrosPage() {
         cnpjs_destinatarios: formatCnpjsForTextarea(
           data.row?.cnpjs_destinatarios
         ),
+        serie_nfe: data.row?.serie_nfe || "",
+        serie_nfse: data.row?.serie_nfse || "",
       });
     } catch (error) {
       setMessage(error.message || "Erro ao carregar parâmetros");
@@ -179,6 +183,8 @@ export default function IntegradorParametrosPage() {
         ...form,
         empresa_id: Number(form.empresa_id),
         cnpjs_destinatarios: normalizeCnpjsInput(form.cnpjs_destinatarios),
+        serie_nfe: String(form.serie_nfe || "").trim(),
+        serie_nfse: String(form.serie_nfse || "").trim(),
       };
 
       const response = await fetch("/api/integrador/parametros", {
@@ -220,6 +226,8 @@ export default function IntegradorParametrosPage() {
         cnpjs_destinatarios: formatCnpjsForTextarea(
           data.row?.cnpjs_destinatarios
         ),
+        serie_nfe: data.row?.serie_nfe || "",
+        serie_nfse: data.row?.serie_nfse || "",
       }));
 
       setMessage("Parâmetros salvos com sucesso.");
@@ -313,6 +321,36 @@ export default function IntegradorParametrosPage() {
                 "Bloquear quando não houver itens"
               )}
               {renderCheckbox("integrar_status_erp", "Integrar status ERP")}
+            </div>
+          </div>
+
+          <div style={styles.section}>
+            <h2 style={styles.sectionTitle}>Séries utilizadas pelo integrador</h2>
+
+            <div style={styles.grid2}>
+              <div style={styles.field}>
+                <label style={styles.label}>Série NFe</label>
+                <input
+                  type="text"
+                  name="serie_nfe"
+                  value={form.serie_nfe || ""}
+                  onChange={handleChange}
+                  style={styles.input}
+                  placeholder="Ex.: 1"
+                />
+              </div>
+
+              <div style={styles.field}>
+                <label style={styles.label}>Série NFSe</label>
+                <input
+                  type="text"
+                  name="serie_nfse"
+                  value={form.serie_nfse || ""}
+                  onChange={handleChange}
+                  style={styles.input}
+                  placeholder="Ex.: 1"
+                />
+              </div>
             </div>
           </div>
 

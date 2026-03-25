@@ -92,6 +92,8 @@ function buildDefaultRow(empresa) {
     status_entrada_realizada: "ENTRADA_REALIZADA",
     observacoes: null,
     cnpjs_destinatarios: [],
+    serie_nfe: null,
+    serie_nfse: null,
     created_at: null,
     updated_at: null,
     is_default: true,
@@ -103,6 +105,8 @@ function normalizeBody(body = {}) {
     empresa_id: normalizeInteger(body.empresa_id),
     observacoes: normalizeString(body.observacoes, null),
     cnpjs_destinatarios: normalizeCnpjsDestinatarios(body.cnpjs_destinatarios),
+    serie_nfe: normalizeString(body.serie_nfe, null),
+    serie_nfse: normalizeString(body.serie_nfse, null),
   };
 
   for (const field of BOOLEAN_FIELDS) {
@@ -171,6 +175,8 @@ export default async function handler(req, res) {
           p.status_entrada_realizada,
           p.observacoes,
           COALESCE(p.cnpjs_destinatarios, '{}') AS cnpjs_destinatarios,
+          p.serie_nfe,
+          p.serie_nfse,
           p.created_at,
           p.updated_at
         FROM public.integrador_parametros p
@@ -192,6 +198,8 @@ export default async function handler(req, res) {
         row: {
           ...result.rows[0],
           cnpjs_destinatarios: result.rows[0].cnpjs_destinatarios || [],
+          serie_nfe: result.rows[0].serie_nfe || "",
+          serie_nfse: result.rows[0].serie_nfse || "",
           is_default: false,
         },
       });
@@ -266,13 +274,15 @@ export default async function handler(req, res) {
           status_entrada_realizada,
           observacoes,
           cnpjs_destinatarios,
+          serie_nfe,
+          serie_nfse,
           created_at,
           updated_at
         )
         VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
           $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-          $21,NOW(),NOW()
+          $21,$22,$23,NOW(),NOW()
         )
         ON CONFLICT (empresa_id)
         DO UPDATE SET
@@ -296,6 +306,8 @@ export default async function handler(req, res) {
           status_entrada_realizada = EXCLUDED.status_entrada_realizada,
           observacoes = EXCLUDED.observacoes,
           cnpjs_destinatarios = EXCLUDED.cnpjs_destinatarios,
+          serie_nfe = EXCLUDED.serie_nfe,
+          serie_nfse = EXCLUDED.serie_nfse,
           updated_at = NOW()
         RETURNING
           id,
@@ -320,6 +332,8 @@ export default async function handler(req, res) {
           status_entrada_realizada,
           observacoes,
           COALESCE(cnpjs_destinatarios, '{}') AS cnpjs_destinatarios,
+          serie_nfe,
+          serie_nfse,
           created_at,
           updated_at
         `,
@@ -345,6 +359,8 @@ export default async function handler(req, res) {
           data.status_entrada_realizada,
           data.observacoes,
           data.cnpjs_destinatarios,
+          data.serie_nfe,
+          data.serie_nfse,
         ]
       );
 
@@ -353,6 +369,8 @@ export default async function handler(req, res) {
         row: {
           ...result.rows[0],
           cnpjs_destinatarios: result.rows[0].cnpjs_destinatarios || [],
+          serie_nfe: result.rows[0].serie_nfe || "",
+          serie_nfse: result.rows[0].serie_nfse || "",
           empresa_nome: empresaResult.rows[0].nome,
           cnpj: empresaResult.rows[0].cnpj,
           email: empresaResult.rows[0].email,
