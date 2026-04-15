@@ -76,6 +76,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const mapped = mapStatus(mpStatus);
     const externalRef: string | null = mp.external_reference || null;
 
+    // ----- [ NOVO BLOCO SAAS ] -----
+    // Se for uma transação de assinatura (ex: EMP_1_PLANO_Prata)
+    if (externalRef && externalRef.startsWith("EMP_")) {
+      const parts = externalRef.split("_");
+      const empresaIdStr = parts[1];
+      const planoNome = parts.length > 3 ? parts[3] : "Bronze";
+
+      if (mapped === "PAGO") {
+        try {
+          await dbQuery(
+            `UPDATE empresa SET
+               plano = $1,
+               assinatura_status = 'ATIVO',
+               assinatura_validade = NOW() + INTERVAL '1 month'
+             WHERE id = $2`,
+            [planoNome, empresaIdStr]
+          );
+          // Opcional: renova expiracao dos usuarios pra não quebrar lógica antiga
+          await dbQuery(`UPDATE usuarios SET expiracao = NOW() + INTERVAL '1 month' WHERE empresa_id = $1`, [empresaIdStr]);
+        } catch (err) {
+          console.error("Erro ao atualizar assinatura saas:", err);
+        }
+      } else if (mapped === "RECUSADO" || mapped === "ESTORNADO") {
+        try {
+          await dbQuery(`UPDATE empresa SET assinatura_status = 'VENCIDO' WHERE id = $1`, [empresaIdStr]);
+        } catch (err) {}
+      }
+
+      return res.status(200).json({ ok: true, source: "saas_subscription", status: mapped });
+    }
+    // ----- [/ NOVO BLOCO SAAS ] -----
+
     // 2) Idempotência: atualiza por external_reference (prioridade) ou por mp_payment_id
     let orderRow:
       | (Record<string, any> & { id: number; empresa_id: number; referencia: string | null; status: string })

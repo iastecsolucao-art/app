@@ -18,23 +18,27 @@ export default async function handler(req, res) {
     if (usuario.rows.length === 0) return res.status(404).json({ error: "Usuário não encontrado" });
 
     const { empresa_id, role } = usuario.rows[0];
+    const isSuperAdmin = usuario.rows[0].admin === true;
 
     let result;
 
-    if (role === "admin") {
-      // 🔥 Admin → pega todos usuários
+    if (isSuperAdmin) {
+      // Super Admin → vê todos os usuários do sistema
       result = await client.query(
         `SELECT u.id, u.nome, u.email, u.role, u.empresa_id, 
-                a.dashboard, a.inventario, a.produtos, a.compras, a.comercial, a.servicos
+                a.dashboard, a.inventario, a.produtos, a.compras, a.comercial, a.servicos, a.buckman
          FROM usuarios u
          LEFT JOIN acessos_usuario a ON a.usuario_id = u.id
          ORDER BY u.nome`
       );
     } else {
-      // Usuário comum → só da mesma empresa
+      // Admin de empresa OU usuário comum → apenas da mesma empresa
+      if (role !== "admin") {
+        return res.status(403).json({ error: "Sem permissão" });
+      }
       result = await client.query(
         `SELECT u.id, u.nome, u.email, u.role,
-                a.dashboard, a.inventario, a.produtos, a.compras, a.comercial, a.servicos
+                a.dashboard, a.inventario, a.produtos, a.compras, a.comercial, a.servicos, a.buckman
          FROM usuarios u
          LEFT JOIN acessos_usuario a ON a.usuario_id = u.id
          WHERE u.empresa_id = $1

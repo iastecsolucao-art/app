@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { Pool } from "pg";
+import bcrypt from "bcryptjs";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -34,10 +35,13 @@ export const authOptions = {
           const u = result.rows[0];
 //          console.log("Dados do usuário encontrado na authorize:", u);
 
-          if (
-            (u.role === "trial" && credentials.senha === "trial") ||
-            (u.senha && credentials.senha === u.senha)
-          ) {
+          // Suporta senhas com hash bcrypt (novos cadastros) E
+          // senhas em texto puro (usuários legados) para compatibilidade
+          const senhaCorreta = u.senha?.startsWith('$2') 
+            ? await bcrypt.compare(credentials.senha, u.senha)
+            : (u.role === "trial" && credentials.senha === "trial") || credentials.senha === u.senha;
+
+          if (senhaCorreta) {
             const user = {
               id: u.id,
               name: u.nome,
@@ -45,6 +49,7 @@ export const authOptions = {
               role: u.role,
               expiracao: u.expiracao,
               empresa_id: u.empresa_id,
+              admin: u.admin,
             };
             console.log("Usuário autorizado:", user);
             return user;
@@ -92,6 +97,7 @@ export const authOptions = {
               [user.id, user.name, user.email]
             );
             user.empresa_id = res.rows[0].empresa_id;
+            user.admin = res.rows[0].admin;
           }
         } finally {
           client.release();
@@ -109,16 +115,18 @@ export const authOptions = {
         token.role = user.role;
         token.expiracao = user.expiracao;
         token.empresa_id = user.empresa_id;
+        token.admin = user.admin;
       } else if (!token.empresa_id && token.email) {
         // Em requisições subsequentes, busca empresa_id pelo email
         const client = await pool.connect();
         try {
           const res = await client.query(
-            "SELECT empresa_id FROM usuarios WHERE email = $1",
+            "SELECT empresa_id, admin FROM usuarios WHERE email = $1",
             [token.email]
           );
           if (res.rows.length > 0) {
             token.empresa_id = res.rows[0].empresa_id;
+            token.admin = res.rows[0].admin;
   //          console.log("jwt callback - empresa_id buscado pelo email:", token.empresa_id);
           }
         } catch (err) {
@@ -136,18 +144,31 @@ export const authOptions = {
       session.user.role = token.role || "user";
       session.user.expiracao = token.expiracao;
       session.user.empresa_id = token.empresa_id;
+      session.user.admin = token.admin || false;
 
       const client = await pool.connect();
       try {
         const res = await client.query(
-          "SELECT nome FROM empresa WHERE id = $1",
+          "SELECT nome, plano, assinatura_status, assinatura_validade FROM empresa WHERE id = $1",
           [token.empresa_id]
         );
-        session.user.empresa_nome = res.rows.length > 0 ? res.rows[0].nome : "Trial";
+        if (res.rows.length > 0) {
+          const emp = res.rows[0];
+          session.user.empresa_nome = emp.nome;
+          session.user.plano = emp.plano || 'Bronze';
+          session.user.assinatura_status = emp.assinatura_status || 'TRIAL';
+          session.user.assinatura_validade = emp.assinatura_validade;
+        } else {
+          session.user.empresa_nome = "Trial";
+          session.user.plano = "Bronze";
+          session.user.assinatura_status = "TRIAL";
+        }
       //  console.log("session callback - empresa encontrada:", session.user.empresa_nome);
       } catch (err) {
         console.error("Erro ao buscar nome da empresa:", err);
         session.user.empresa_nome = "Trial";
+        session.user.plano = "Bronze";
+        session.user.assinatura_status = "TRIAL";
       } finally {
         client.release();
       }

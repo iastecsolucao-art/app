@@ -12,13 +12,13 @@ export default async function handler(req, res) {
   const client = await pool.connect();
   try {
     const usuario = await client.query(
-      "SELECT id FROM usuarios WHERE email=$1",
+      "SELECT id, role FROM usuarios WHERE email=$1",
       [session.user.email]
     );
     if (usuario.rows.length === 0) {
       return res.status(404).json({ error: "Usuário não encontrado" });
     }
-    const usuario_id = usuario.rows[0].id;
+    const { id: usuario_id, role } = usuario.rows[0];
 
     // tenta buscar acessos
     const acessos = await client.query(
@@ -40,7 +40,32 @@ export default async function handler(req, res) {
       data = acessos.rows[0];
     }
 
-    res.json(data);
+    // Recuperar também o plano atual da empresa e dados do banco saas_planos
+    const emp = await client.query("SELECT plano FROM empresa WHERE id=$1", [session.user.empresa_id]);
+    const planoNome = emp.rows.length > 0 ? emp.rows[0].plano || "Bronze" : "Bronze";
+    
+    let permissoesDoPlano = [];
+    const configPlano = await client.query("SELECT menus_permitidos FROM saas_planos WHERE nome=$1", [planoNome]);
+    if (configPlano.rows.length > 0) {
+      permissoesDoPlano = configPlano.rows[0].menus_permitidos;
+    } else {
+       // Fallback se não achar
+       permissoesDoPlano = ["dashboard", "produtos"];
+    }
+
+    // Filtra: O usuário só tem acesso final se a tabela dele for true E o PLANO dele permitir o menu.
+    const dataFiltrada = {
+      admin: role === 'admin' || role === 'superadmin',
+      dashboard: data.dashboard && permissoesDoPlano.includes("dashboard"),
+      inventario: data.inventario && permissoesDoPlano.includes("inventario"),
+      produtos: data.produtos && permissoesDoPlano.includes("produtos"),
+      compras: data.compras && permissoesDoPlano.includes("compras"),
+      comercial: data.comercial && permissoesDoPlano.includes("comercial"),
+      servicos: data.servicos && permissoesDoPlano.includes("servicos"),
+      buckman: data.buckman && permissoesDoPlano.includes("buckman")
+    };
+
+    res.json(dataFiltrada);
   } catch (e) {
     console.error("Erro ao buscar acessos:", e);
     res.status(500).json({ error: "Erro interno" });
