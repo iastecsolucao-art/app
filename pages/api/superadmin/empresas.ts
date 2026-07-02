@@ -6,7 +6,7 @@ import { Pool } from "pg";
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session: any = await getServerSession(req, res, authOptions);
+  const session: any = await getServerSession(req, res, authOptions as any);
   if (!session || !session.user?.email) {
     return res.status(403).json({ error: "Sessão inválida." });
   }
