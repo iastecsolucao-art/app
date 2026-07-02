@@ -72,13 +72,7 @@ export default function Navbar() {
   // Módulos que o usuário quer ver (baseado nos home-shortcuts)
   // Enquanto carrega (null), mostra tudo; após carregar, filtra pelos escolhidos
   const modulosNavbar = ["dashboard","inventario","produtos","compras","comercial","servicos","buckman","relatorios","clientes","nfe","comissao","integracoes"];
-  
-  // homeShortcuts === null → ainda carregando → mostra tudo (evita piscar)
-  // homeShortcuts === [] → carregou mas vazio → mostra tudo como fallback
-  // homeShortcuts = [...] → filtra pelos ativos
-  const modulosAtivos = (!homeShortcuts || homeShortcuts.length === 0)
-    ? modulosNavbar
-    : homeShortcuts.filter(id => modulosNavbar.includes(id));
+  const modulosAtivos = modulosNavbar;
 
 
   const isActive = (path) => router.pathname === path || router.asPath === path;
