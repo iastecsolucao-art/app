@@ -190,7 +190,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
   // @ts-ignore
-  const session = await getServerSession(req, res, authOptions as any);
+  const session: any = await getServerSession(req, res, authOptions as any);
   if (!session?.user?.email) return res.status(401).json({ error: "Não autenticado" });
 
   const apiKey = process.env.GEMINI_API_KEY;
