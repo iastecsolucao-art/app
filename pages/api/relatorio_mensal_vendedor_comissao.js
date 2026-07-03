@@ -41,143 +41,27 @@ export default async function handler(req, res) {
 
     const CORRECTION_CTE = `
       view_vendas_liquida_corrigida AS (
+        -- Dados antigos (antes de Junho de 2026) mantem a view original
         SELECT 
-          id, lastchangedate, maxchangefilterdate, paymentconditioncode, paymentconditionname, 
-          discountpercentage, quantity, productvalue, additionalvalue, shippingvalue, 
-          insurancevalue, ipivalue, baseicmsvalue, icmsvalue, icmssubstvalue, totalvalue, 
-          terminalcode, sellercpf, branchcode, branchcnpj, invoicesequence, invoicedate, 
-          personcode, personname, invoicecode, serialcode, invoicestatus, issuedate, 
-          transactionbranchcode, transactiondate, transactioncode, inclusioncomponentcode, 
-          peripheralpdvcode, versionpdv, mobileversion, iddocumentpdv, operationtype, 
-          operationname, dealercode, seller_name, person_code, person_name
+          branchcode, 
+          dealercode, 
+          totalvalue, 
+          invoicedate, 
+          issuedate
         FROM view_vendas_liquida
-        WHERE NOT (branchcode = 7 AND invoicesequence IN (48203, 57270, 58169,
-          53855,54535,55137,55148,55206,55318,55319,55320,55853,55856,56756,57032,57039,57657,58041,58202))
+        WHERE invoicedate < '2026-06-01'
         
         UNION ALL
         
+        -- Dados novos (a partir de Junho de 2026) usa a nova tabela já rateada
         SELECT 
-          id, lastchangedate, maxchangefilterdate, paymentconditioncode, paymentconditionname, 
-          discountpercentage, 1::integer as quantity, '91.16'::numeric as productvalue, 
-          additionalvalue, shippingvalue, insurancevalue, ipivalue, '91.16'::numeric as baseicmsvalue, 
-          icmsvalue, icmssubstvalue, '91.16'::numeric as totalvalue, 
-          terminalcode, sellercpf, branchcode, branchcnpj, invoicesequence, invoicedate, 
-          personcode, personname, invoicecode, serialcode, invoicestatus, issuedate, 
-          transactionbranchcode, transactiondate, transactioncode, inclusioncomponentcode, 
-          peripheralpdvcode, versionpdv, mobileversion, iddocumentpdv, operationtype, 
-          operationname, dealercode, seller_name, person_code, person_name
-        FROM view_vendas_liquida
-        WHERE branchcode = 7 AND invoicesequence = 48203 AND seller_name = 'AITHANA LESSIN LEITE BATISTA'
-        
-        UNION ALL
-        
-        SELECT 
-          id, lastchangedate, maxchangefilterdate, paymentconditioncode, paymentconditionname, 
-          discountpercentage, 2::integer as quantity, '2410.55'::numeric as productvalue, 
-          additionalvalue, shippingvalue, insurancevalue, ipivalue, '2410.55'::numeric as baseicmsvalue, 
-          icmsvalue, icmssubstvalue, '2410.55'::numeric as totalvalue, 
-          terminalcode, sellercpf, branchcode, branchcnpj, invoicesequence, invoicedate, 
-          personcode, personname, invoicecode, serialcode, invoicestatus, issuedate, 
-          transactionbranchcode, transactiondate, transactioncode, inclusioncomponentcode, 
-          peripheralpdvcode, versionpdv, mobileversion, iddocumentpdv, operationtype, 
-          operationname, '24657'::character varying as dealercode, 
-          'GLAUBER NICOLAS DOS SANTOS'::character varying as seller_name, person_code, person_name
-        FROM view_vendas_liquida
-        WHERE branchcode = 7 AND invoicesequence = 48203 AND seller_name = 'AITHANA LESSIN LEITE BATISTA'
-
-        UNION ALL
-
-        SELECT 
-          id, lastchangedate, maxchangefilterdate, paymentconditioncode, paymentconditionname, 
-          discountpercentage, 1::integer as quantity, '213.39'::numeric as productvalue, 
-          additionalvalue, shippingvalue, insurancevalue, ipivalue, '213.39'::numeric as baseicmsvalue, 
-          icmsvalue, icmssubstvalue, '213.39'::numeric as totalvalue, 
-          terminalcode, sellercpf, branchcode, branchcnpj, invoicesequence, invoicedate, 
-          personcode, personname, invoicecode, serialcode, invoicestatus, issuedate, 
-          transactionbranchcode, transactiondate, transactioncode, inclusioncomponentcode, 
-          peripheralpdvcode, versionpdv, mobileversion, iddocumentpdv, operationtype, 
-          operationname, dealercode, seller_name, person_code, person_name
-        FROM view_vendas_liquida
-        WHERE branchcode = 7 AND invoicesequence = 57270 AND seller_name = 'MONIQUE VANESSA DE ALBUQUERQUE'
-
-        UNION ALL
-
-        SELECT 
-          id, lastchangedate, maxchangefilterdate, paymentconditioncode, paymentconditionname, 
-          discountpercentage, 1::integer as quantity, '1428.81'::numeric as productvalue, 
-          additionalvalue, shippingvalue, insurancevalue, ipivalue, '1428.81'::numeric as baseicmsvalue, 
-          icmsvalue, icmssubstvalue, '1428.81'::numeric as totalvalue, 
-          terminalcode, sellercpf, branchcode, branchcnpj, invoicesequence, invoicedate, 
-          personcode, personname, invoicecode, serialcode, invoicestatus, issuedate, 
-          transactionbranchcode, transactiondate, transactioncode, inclusioncomponentcode, 
-          peripheralpdvcode, versionpdv, mobileversion, iddocumentpdv, operationtype, 
-          operationname, '50'::character varying as dealercode, 'GERAL'::character varying as seller_name, 
-          person_code, person_name
-        FROM view_vendas_liquida
-        WHERE branchcode = 7 AND invoicesequence = 57270 AND seller_name = 'MONIQUE VANESSA DE ALBUQUERQUE'
-
-        UNION ALL
-
-        SELECT 
-          id, lastchangedate, maxchangefilterdate, paymentconditioncode, paymentconditionname, 
-          discountpercentage, 1::integer as quantity, '179.99'::numeric as productvalue, 
-          additionalvalue, shippingvalue, insurancevalue, ipivalue, '179.99'::numeric as baseicmsvalue, 
-          icmsvalue, icmssubstvalue, '179.99'::numeric as totalvalue, 
-          terminalcode, sellercpf, branchcode, branchcnpj, invoicesequence, invoicedate, 
-          personcode, personname, invoicecode, serialcode, invoicestatus, issuedate, 
-          transactionbranchcode, transactiondate, transactioncode, inclusioncomponentcode, 
-          peripheralpdvcode, versionpdv, mobileversion, iddocumentpdv, operationtype, 
-          operationname, dealercode, seller_name, person_code, person_name
-        FROM view_vendas_liquida
-        WHERE branchcode = 7 AND invoicesequence = 58169 AND seller_name = 'CAIO RICCIARDONE'
-
-        UNION ALL
-
-        SELECT 
-          id, lastchangedate, maxchangefilterdate, paymentconditioncode, paymentconditionname, 
-          discountpercentage, 1::integer as quantity, '299.99'::numeric as productvalue, 
-          additionalvalue, shippingvalue, insurancevalue, ipivalue, '299.99'::numeric as baseicmsvalue, 
-          icmsvalue, icmssubstvalue, '299.99'::numeric as totalvalue, 
-          terminalcode, sellercpf, branchcode, branchcnpj, invoicesequence, invoicedate, 
-          personcode, personname, invoicecode, serialcode, invoicestatus, issuedate, 
-          transactionbranchcode, transactiondate, transactioncode, inclusioncomponentcode, 
-          peripheralpdvcode, versionpdv, mobileversion, iddocumentpdv, operationtype, 
-          operationname, '50'::character varying as dealercode, 'GERAL'::character varying as seller_name, 
-          person_code, person_name
-        FROM view_vendas_liquida
-        WHERE branchcode = 7 AND invoicesequence = 58169 AND seller_name = 'CAIO RICCIARDONE'
-
-        UNION ALL
-
-        SELECT id, lastchangedate, maxchangefilterdate, paymentconditioncode, paymentconditionname,
-          discountpercentage, quantity, productvalue, additionalvalue, shippingvalue,
-          insurancevalue, ipivalue, baseicmsvalue, icmsvalue, icmssubstvalue,
-          CASE invoicesequence
-            WHEN 53855 THEN '179.99'::numeric
-            WHEN 54535 THEN '359.98'::numeric
-            WHEN 55137 THEN '479.98'::numeric
-            WHEN 55148 THEN '699.99'::numeric
-            WHEN 55206 THEN '405.00'::numeric
-            WHEN 55318 THEN '229.98'::numeric
-            WHEN 55319 THEN '285.00'::numeric
-            WHEN 55320 THEN '1320.00'::numeric
-            WHEN 55853 THEN '304.00'::numeric
-            WHEN 55856 THEN '451.43'::numeric
-            WHEN 56756 THEN '129.99'::numeric
-            WHEN 57032 THEN '229.99'::numeric
-            WHEN 57039 THEN '528.00'::numeric
-            WHEN 57657 THEN '299.99'::numeric
-            WHEN 58041 THEN '249.99'::numeric
-            WHEN 58202 THEN '149.99'::numeric
-          END AS totalvalue,
-          terminalcode, sellercpf, branchcode, branchcnpj, invoicesequence, invoicedate,
-          personcode, personname, invoicecode, serialcode, invoicestatus, issuedate,
-          transactionbranchcode, transactiondate, transactioncode, inclusioncomponentcode,
-          peripheralpdvcode, versionpdv, mobileversion, iddocumentpdv, operationtype,
-          operationname, dealercode, seller_name, person_code, person_name
-        FROM view_vendas_liquida
-        WHERE branchcode = 7 AND invoicesequence IN (53855,54535,55137,55148,55206,55318,55319,55320,55853,55856,56756,57032,57039,57657,58041,58202)
-          AND seller_name = 'GERAL'
+          branch_code AS branchcode, 
+          dealer_code AS dealercode, 
+          CASE WHEN operation_type = 'Input' THEN -total_value ELSE total_value END AS totalvalue, 
+          issue_date AS invoicedate, 
+          issue_date AS issuedate
+        FROM vendas_comissao
+        WHERE invoice_status = 'Issued'
       ),
     `;
 
