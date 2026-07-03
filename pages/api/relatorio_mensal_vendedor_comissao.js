@@ -53,15 +53,21 @@ export default async function handler(req, res) {
         
         UNION ALL
         
-        -- Dados novos (a partir de Junho de 2026) usa a nova tabela já rateada
+        -- Dados novos (a partir de Junho de 2026) usa a nova tabela já rateada e aplica os filtros originais de operações
         SELECT 
-          branch_code AS branchcode, 
-          dealer_code AS dealercode, 
-          CASE WHEN operation_type = 'Input' THEN -total_value ELSE total_value END AS totalvalue, 
-          issue_date AS invoicedate, 
-          issue_date AS issuedate
-        FROM vendas_comissao
-        WHERE invoice_status = 'Issued'
+          vv.branch_code AS branchcode, 
+          vv.dealer_code AS dealercode, 
+          CASE WHEN vv.operation_type = 'Input' THEN -vv.total_value ELSE vv.total_value END AS totalvalue, 
+          vv.issue_date AS invoicedate, 
+          vv.issue_date AS issuedate
+        FROM vendas_comissao vv
+        JOIN fiscal_invoices fi ON fi.invoice_uid = vv.invoice_uid
+        WHERE vv.invoice_status = 'Issued'
+          AND (
+            (vv.operation_type = 'Output' AND fi.operation_name NOT ILIKE '%TRANSFERENCIA%')
+            OR
+            (vv.operation_type = 'Input' AND fi.operation_name ILIKE '%DEVOLUCAO%')
+          )
       ),
     `;
 
