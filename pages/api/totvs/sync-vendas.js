@@ -84,6 +84,8 @@ export default async function handler(req, res) {
         const invoiceSequence = invoice.invoiceSequence;
         const branchCode = invoice.branchCode;
         const issueDate = invoice.issueDate;
+        const operationType = invoice.operationType;
+        const invoiceStatus = invoice.invoiceStatus;
         
         // Agrupar produtos por vendedor
         const sellerTotals = {};
@@ -112,12 +114,14 @@ export default async function handler(req, res) {
           
           await client.query(`
             INSERT INTO vendas_comissao 
-              (invoice_uid, invoice_sequence, branch_code, issue_date, dealer_code, total_value, quantity)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+              (invoice_uid, invoice_sequence, branch_code, issue_date, dealer_code, total_value, quantity, operation_type, invoice_status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ON CONFLICT (invoice_uid, dealer_code) DO UPDATE 
             SET 
               total_value = EXCLUDED.total_value,
               quantity = EXCLUDED.quantity,
+              operation_type = EXCLUDED.operation_type,
+              invoice_status = EXCLUDED.invoice_status,
               updated_at = CURRENT_TIMESTAMP
           `, [
             invoiceUid,
@@ -126,7 +130,9 @@ export default async function handler(req, res) {
             issueDate,
             seller.dealer_code,
             seller.total_value,
-            seller.quantity
+            seller.quantity,
+            operationType,
+            invoiceStatus
           ]);
         }
         
