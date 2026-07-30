@@ -110,7 +110,31 @@ export default async function handler(req, res) {
         
         // Inserir os totais agrupados na tabela vendas_comissao
         for (const dealer of Object.keys(sellerTotals)) {
+          let finalDealer = dealer;
           const seller = sellerTotals[dealer];
+          
+          if (operationType === 'Input' && (dealer === '50' || dealer === 50) && invoice.personName) {
+            try {
+               const origRes = await client.query(`
+                 SELECT vv.dealer_code
+                 FROM vendas_comissao vv
+                 JOIN fiscal_invoices fi ON fi.invoice_uid = vv.invoice_uid
+                 WHERE fi.person_name = $1
+                   AND vv.operation_type = 'Output'
+                   AND vv.total_value = $2
+                   AND vv.issue_date <= $3
+                 ORDER BY vv.issue_date DESC
+                 LIMIT 1
+               `, [invoice.personName, seller.total_value, issueDate]);
+               
+               if (origRes.rowCount > 0 && origRes.rows[0].dealer_code !== '50' && origRes.rows[0].dealer_code !== 50) {
+                 finalDealer = origRes.rows[0].dealer_code;
+                 console.log(`Corrigido devolucao de 50 para ${finalDealer} (Cliente: ${invoice.personName})`);
+               }
+            } catch (err) {
+               console.error("Erro ao buscar vendedor original", err);
+            }
+          }
           
           await client.query(`
             INSERT INTO vendas_comissao 
@@ -128,7 +152,7 @@ export default async function handler(req, res) {
             invoiceSequence,
             branchCode,
             issueDate,
-            seller.dealer_code,
+            finalDealer,
             seller.total_value,
             seller.quantity,
             operationType,
