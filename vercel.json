@@ -1,8 +1,1 @@
-{
-  "crons": [
-    {
-      "path": "/api/totvs/sync-vendas",
-      "schedule": "0 7 * * *"
-    }
-  ]
-}
+{}
