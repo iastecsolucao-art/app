@@ -1,28 +1,56 @@
 const { Client } = require('pg');
 require('dotenv').config();
 
-const DB = process.env.DATABASE_URL;
-if (!DB) {
-  console.error("Variável DATABASE_URL não definida.");
-  process.exit(1);
-}
+const DB = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_ShNT20JigrOY@ep-nameless-wave-adf8hxr7.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
 
 const client = new Client({ connectionString: DB, ssl: { rejectUnauthorized: false } });
+
+async function getFreshToken() {
+  const TOTVS_AUTH_URL = 'https://www30.bhan.com.br:9443/api/totvsmoda/authorization/v2/token';
+  const credentials = {
+    grant_type: 'password',
+    username: 'pdv_apiv2',
+    password: '799906',
+    client_id: 'buckmanapiv2',
+    client_secret: '9662995871'
+  };
+
+  const body = new URLSearchParams(credentials).toString();
+  const res = await fetch(TOTVS_AUTH_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Falha ao obter token: ${res.status} - ${txt}`);
+  }
+
+  const data = await res.json();
+  await client.query(
+    "INSERT INTO acesso_api (token, data) VALUES ($1, CURRENT_TIMESTAMP);",
+    [data.access_token]
+  );
+  return data.access_token;
+}
 
 async function run() {
   await client.connect();
   console.log("Iniciando sincronização diária de vendas TOTVS...");
   
   try {
+    let token;
     const tokenRes = await client.query("SELECT token FROM acesso_api WHERE token IS NOT NULL ORDER BY id DESC LIMIT 1");
-    if (tokenRes.rowCount === 0) {
-      throw new Error("Token não encontrado na tabela acesso_api");
+    if (tokenRes.rowCount > 0) {
+      token = tokenRes.rows[0].token;
+    } else {
+      token = await getFreshToken();
     }
-    const token = tokenRes.rows[0].token;
 
     const now = new Date();
-    // Busca os últimos 2 dias para garantir que pegará todas as vendas, inclusive atrasadas
-    const twoDaysAgo = new Date(now.getTime() - (2 * 24 * 60 * 60 * 1000));
+    // Busca os últimos 3 dias para garantir que pegará todas as vendas
+    const daysAgo = new Date(now.getTime() - (3 * 24 * 60 * 60 * 1000));
     
     let page = 1;
     let hasNext = true;
@@ -35,7 +63,7 @@ async function run() {
       
       const body = {
         filter: {
-          startIssueDate: twoDaysAgo.toISOString(),
+          startIssueDate: daysAgo.toISOString(),
           endIssueDate: now.toISOString(),
           branchCodeList
         },
@@ -46,7 +74,7 @@ async function run() {
         expand: "items"
       };
 
-      const response = await fetch("https://www30.bhan.com.br:9443/api/totvsmoda/fiscal/v2/invoices/search", {
+      let response = await fetch("https://www30.bhan.com.br:9443/api/totvsmoda/fiscal/v2/invoices/search", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -55,6 +83,20 @@ async function run() {
         },
         body: JSON.stringify(body)
       });
+
+      if (response.status === 401) {
+        console.log("Token expirado. Renovando token TOTVS...");
+        token = await getFreshToken();
+        response = await fetch("https://www30.bhan.com.br:9443/api/totvsmoda/fiscal/v2/invoices/search", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify(body)
+        });
+      }
 
       if (!response.ok) {
         const txt = await response.text();
@@ -117,10 +159,9 @@ async function run() {
                
                if (origRes.rowCount > 0 && origRes.rows[0].dealer_code !== '50' && origRes.rows[0].dealer_code !== 50) {
                  finalDealer = origRes.rows[0].dealer_code;
-                 console.log(`Corrigido devolucao de 50 para ${finalDealer} (Cliente: ${invoice.personName})`);
                }
             } catch (err) {
-               console.error("Erro ao buscar vendedor original", err);
+               // ignore
             }
           }
           
@@ -159,7 +200,7 @@ async function run() {
   } catch (err) {
     console.error("Erro no sync TOTVS:", err);
   } finally {
-    client.end();
+    await client.end();
   }
 }
 
