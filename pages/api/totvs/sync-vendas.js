@@ -73,8 +73,39 @@ export default async function handler(req, res) {
         break; // não tem mais dados
       }
 
+function isRetailInvoice(invoice) {
+  if (invoice.invoiceStatus && invoice.invoiceStatus !== 'Issued' && invoice.invoiceStatus !== 'Authorized') {
+    return false;
+  }
+  
+  const opName = (invoice.operatioName || invoice.operationName || '').toUpperCase();
+  const opType = invoice.operationType;
+  
+  if (opType === 'Output') {
+    if (opName.includes('TRANSFERENCIA') || 
+        opName.includes('REMESSA') || 
+        opName.includes('DEVOLUCAO DE COMPRA') || 
+        opName.includes('OUTRAS SAIDAS') ||
+        opName.includes('BONIFICACAO') ||
+        opName.includes('CONSERTO')) {
+      return false;
+    }
+    return opName.includes('VENDA');
+  }
+  
+  if (opType === 'Input') {
+    return opName.includes('DEVOLUCAO DE VENDA');
+  }
+  
+  return false;
+}
+
       // Processar os cupons da página
       for (const invoice of items) {
+        if (!isRetailInvoice(invoice)) {
+          continue; // Pula notas que não são de venda ou devolução de varejo
+        }
+
         const invoiceUid = [
           invoice.branchCode ?? '0',
           invoice.serialCode ?? '0',
@@ -120,12 +151,13 @@ export default async function handler(req, res) {
                  FROM vendas_comissao vv
                  JOIN fiscal_invoices fi ON fi.invoice_uid = vv.invoice_uid
                  WHERE fi.person_name = $1
+                   AND vv.branch_code = $2
                    AND vv.operation_type = 'Output'
-                   AND vv.total_value = $2
-                   AND vv.issue_date <= $3
+                   AND vv.total_value = $3
+                   AND vv.issue_date <= $4
                  ORDER BY vv.issue_date DESC
                  LIMIT 1
-               `, [invoice.personName, seller.total_value, issueDate]);
+               `, [invoice.personName, branchCode, seller.total_value, issueDate]);
                
                if (origRes.rowCount > 0 && origRes.rows[0].dealer_code !== '50' && origRes.rows[0].dealer_code !== 50) {
                  finalDealer = origRes.rows[0].dealer_code;
