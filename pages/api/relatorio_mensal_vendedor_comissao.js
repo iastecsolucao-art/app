@@ -106,6 +106,7 @@ export default async function handler(req, res) {
         LEFT JOIN vendedores vd  ON vd.seller_code = vv.dealercode::int
         WHERE ($3::text[] IS NULL OR dl.loja = ANY($3::text[]))
           AND ($4::text[] IS NULL OR vd.seller_name = ANY($4::text[]))
+          AND (vv.totalvalue > 0 OR vv.dealercode::text = '50')
       ),
       grade AS (
         SELECT
