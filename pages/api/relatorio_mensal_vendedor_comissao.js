@@ -53,7 +53,7 @@ export default async function handler(req, res) {
         
         UNION ALL
         
-        -- Dados novos (a partir de Junho de 2026) usa a nova tabela já rateada e aplica os filtros originais de operações
+        -- Dados novos (a partir de Junho de 2026) usa a nova tabela rateada diretamente
         SELECT 
           vv.branch_code AS branchcode, 
           vv.dealer_code AS dealercode, 
@@ -61,13 +61,7 @@ export default async function handler(req, res) {
           vv.issue_date AS invoicedate, 
           vv.issue_date AS issuedate
         FROM vendas_comissao vv
-        LEFT JOIN fiscal_invoices fi ON fi.invoice_uid = vv.invoice_uid
         WHERE vv.invoice_status = 'Issued'
-          AND (
-            fi.invoice_uid IS NULL
-            OR (vv.operation_type = 'Output' AND (fi.operation_name NOT ILIKE '%TRANSFERENCIA%' OR fi.operation_name IS NULL))
-            OR (vv.operation_type = 'Input' AND (fi.operation_name NOT ILIKE '%TRANSFERENCIA%' OR fi.operation_name IS NULL))
-          )
       ),
     `;
 
