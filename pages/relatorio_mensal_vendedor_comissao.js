@@ -30,6 +30,7 @@ export default function RelatorioVendasVendedorMensalComissao() {
   const [diasSelecionados, setDiasSelecionados] = useState([]);
   const [lojasSelecionadas, setLojasSelecionadas] = useState([]);
   const [vendedoresSelecionados, setVendedoresSelecionados] = useState([]);
+  const [apenasVendasPositivas, setApenasVendasPositivas] = useState(true);
 
   // opções para selects
   const [lojasDisponiveis, setLojasDisponiveis] = useState([]);
@@ -324,7 +325,13 @@ export default function RelatorioVendasVendedorMensalComissao() {
 
   // ===== Tabela =====
   function TabelaSemana() {
-    const grupos = agruparPorLoja(data);
+    const dadosFiltrados = data.filter((row) => {
+      if (apenasVendasPositivas && Number(row.total_real || 0) <= 0) {
+        return false;
+      }
+      return true;
+    });
+    const grupos = agruparPorLoja(dadosFiltrados);
 
     return (
       <table
@@ -720,6 +727,33 @@ export default function RelatorioVendasVendedorMensalComissao() {
             closeMenuOnSelect={false}
             styles={{ menu: (p) => ({ ...p, zIndex: 9999 }) }}
           />
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", minHeight: 60 }}>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: 13,
+              userSelect: "none",
+              backgroundColor: "#f8f9fa",
+              border: "1px solid #ccc",
+              padding: "8px 12px",
+              borderRadius: 4,
+              color: "#333",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={apenasVendasPositivas}
+              onChange={(e) => setApenasVendasPositivas(e.target.checked)}
+              style={{ cursor: "pointer", width: 16, height: 16 }}
+            />
+            Vendas &gt; 0
+          </label>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
