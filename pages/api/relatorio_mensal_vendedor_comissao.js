@@ -61,12 +61,12 @@ export default async function handler(req, res) {
           vv.issue_date AS invoicedate, 
           vv.issue_date AS issuedate
         FROM vendas_comissao vv
-        JOIN fiscal_invoices fi ON fi.invoice_uid = vv.invoice_uid
+        LEFT JOIN fiscal_invoices fi ON fi.invoice_uid = vv.invoice_uid
         WHERE vv.invoice_status = 'Issued'
           AND (
-            (vv.operation_type = 'Output' AND fi.operation_name NOT ILIKE '%TRANSFERENCIA%')
-            OR
-            (vv.operation_type = 'Input' AND fi.operation_name ILIKE '%DEVOLUCAO%')
+            fi.invoice_uid IS NULL
+            OR (vv.operation_type = 'Output' AND (fi.operation_name NOT ILIKE '%TRANSFERENCIA%' OR fi.operation_name IS NULL))
+            OR (vv.operation_type = 'Input' AND (fi.operation_name NOT ILIKE '%TRANSFERENCIA%' OR fi.operation_name IS NULL))
           )
       ),
     `;
