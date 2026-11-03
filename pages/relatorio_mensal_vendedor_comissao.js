@@ -267,6 +267,32 @@ export default function RelatorioVendasVendedorMensalComissao() {
     setLoading(false);
   };
 
+  const [reprocessando, setReprocessando] = useState(false);
+
+  // reprocessar TOTVS
+  const handleReprocessar = async () => {
+    if (!confirm("Deseja reprocessar as vendas diretamente da API TOTVS para o período da cota?")) return;
+    setReprocessando(true);
+    try {
+      const res = await fetch("/api/reprocessar_totvs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startDate: "2026-09-28",
+          endDate: "2026-11-01"
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Erro ao reprocessar");
+      alert(json.message || "Reprocessamento concluído com sucesso!");
+      await fetchData();
+    } catch (err) {
+      alert("Falha no reprocessamento: " + err.message);
+    } finally {
+      setReprocessando(false);
+    }
+  };
+
   // exportar excel
   const exportarExcel = () => {
     if (!tableRef.current) return;
@@ -772,6 +798,24 @@ export default function RelatorioVendasVendedorMensalComissao() {
             }}
           >
             Carregar
+          </button>
+
+          <button
+            onClick={handleReprocessar}
+            disabled={reprocessando}
+            style={{
+              padding: "8px 20px",
+              backgroundColor: reprocessando ? "#9e9e9e" : "#f57c00",
+              color: "white",
+              border: "none",
+              borderRadius: 4,
+              cursor: reprocessando ? "not-allowed" : "pointer",
+              fontWeight: 600,
+              fontSize: 14,
+              marginBottom: 8,
+            }}
+          >
+            {reprocessando ? "Reprocessando..." : "Reprocessar TOTVS"}
           </button>
 
           <button
