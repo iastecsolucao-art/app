@@ -7,9 +7,8 @@ const pool = new Pool({
 function isRetailInvoice(invoice) {
   const opType = invoice.operationType;
   const opName = (invoice.operatioName || invoice.operationName || '').toUpperCase();
-  if (invoice.documentType === 55 && opType === 'Output') return false;
   if (opType === 'Output') {
-    if (opName.includes('TRANSFERENCIA') || opName.includes('REMESSA')) return false;
+    if (opName.includes('TRANSFERENCIA') || opName.includes('REMESSA') || opName.includes('BONIFICACAO') || opName.includes('CONSERTO')) return false;
     return opName.includes('VENDA');
   }
   if (opType === 'Input') {
