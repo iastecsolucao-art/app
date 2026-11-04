@@ -148,6 +148,8 @@ function isRetailInvoice(invoice) {
         const invoiceSequence = invoice.invoiceSequence;
         const branchCode = invoice.branchCode;
         const issueDate = invoice.issueDate;
+        const invoiceDate = invoice.invoiceDate || invoice.transactionDate || (invoice.issueDate ? invoice.issueDate.slice(0, 10) : null);
+        const transactionDate = invoice.transactionDate || invoiceDate;
         const operationType = invoice.operationType;
         const invoiceStatus = invoice.invoiceStatus;
         
@@ -199,20 +201,24 @@ function isRetailInvoice(invoice) {
           
           await client.query(`
             INSERT INTO vendas_comissao 
-              (invoice_uid, invoice_sequence, branch_code, issue_date, dealer_code, total_value, quantity, operation_type, invoice_status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+              (invoice_uid, invoice_sequence, branch_code, issue_date, invoice_date, transaction_date, dealer_code, total_value, quantity, operation_type, invoice_status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             ON CONFLICT (invoice_uid, dealer_code) DO UPDATE 
             SET 
               total_value = EXCLUDED.total_value,
               quantity = EXCLUDED.quantity,
               operation_type = EXCLUDED.operation_type,
               invoice_status = EXCLUDED.invoice_status,
+              invoice_date = EXCLUDED.invoice_date,
+              transaction_date = EXCLUDED.transaction_date,
               updated_at = CURRENT_TIMESTAMP
           `, [
             invoiceUid,
             invoiceSequence,
             branchCode,
             issueDate,
+            invoiceDate,
+            transactionDate,
             finalDealer,
             seller.total_value,
             seller.quantity,
