@@ -195,6 +195,19 @@ export default async function handler(req, res) {
         );
     `, [branches, sDate, `${eDate} 23:59:59`]);
 
+    // Auto-cadastrar vendedores novos que não existam na tabela vendedores
+    const uniqueDealers = [...new Set(sellerTotals.map(r => r.dealerCode).filter(Boolean))];
+    for (const dCode of uniqueDealers) {
+      const codeNum = parseInt(dCode, 10);
+      if (!isNaN(codeNum) && codeNum > 0) {
+        await client.query(`
+          INSERT INTO vendedores (seller_code, seller_name, person_code, person_name)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT (seller_code) DO NOTHING
+        `, [codeNum, `VENDEDOR ${codeNum}`, codeNum, `VENDEDOR ${codeNum}`]);
+      }
+    }
+
     for (const row of sellerTotals) {
       await client.query(`
         INSERT INTO vendas_comissao (

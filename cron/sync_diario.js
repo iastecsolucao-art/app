@@ -174,6 +174,18 @@ function isRetailInvoice(invoice) {
         
         for (const dealer of Object.keys(sellerTotals)) {
           let finalDealer = dealer;
+          const codeNum = parseInt(dealer, 10);
+          if (!isNaN(codeNum) && codeNum > 0) {
+            try {
+              await client.query(`
+                INSERT INTO vendedores (seller_code, seller_name, person_code, person_name)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (seller_code) DO NOTHING
+              `, [codeNum, `VENDEDOR ${codeNum}`, codeNum, `VENDEDOR ${codeNum}`]);
+            } catch (err) {
+              // ignore
+            }
+          }
           const seller = sellerTotals[dealer];
           
           if (operationType === 'Input' && (dealer === '50' || dealer === 50) && invoice.personName) {
