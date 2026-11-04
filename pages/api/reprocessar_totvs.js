@@ -132,6 +132,8 @@ export default async function handler(req, res) {
         const invoiceSequence = invoice.invoiceSequence;
         const invoiceUid = `${branchCode}-${serialCode}-${invoiceSequence}`;
         const issueDate = invoice.issueDate;
+        const invoiceDate = invoice.invoiceDate || invoice.transactionDate || (invoice.issueDate ? invoice.issueDate.slice(0, 10) : null);
+        const transactionDate = invoice.transactionDate || invoiceDate;
         const operationType = invoice.operationType;
         const invoiceStatus = invoice.invoiceStatus;
 
@@ -170,6 +172,8 @@ export default async function handler(req, res) {
             invoiceSequence,
             branchCode,
             issueDate,
+            invoiceDate,
+            transactionDate,
             dealerCode: dCode,
             totalValue: byDealer[dCode].totalValue,
             quantity: byDealer[dCode].quantity,
@@ -185,26 +189,28 @@ export default async function handler(req, res) {
     await client.query(`
       DELETE FROM vendas_comissao 
       WHERE branch_code = ANY($1::int[]) 
-        AND issue_date >= $2::date 
-        AND issue_date <= $3::timestamp;
+        AND (
+          (COALESCE(invoice_date, issue_date::date) >= $2::date AND COALESCE(invoice_date, issue_date::date) <= $3::date)
+          OR (issue_date >= $2::date AND issue_date <= $3::timestamp)
+        );
     `, [branches, sDate, `${eDate} 23:59:59`]);
 
     for (const row of sellerTotals) {
       await client.query(`
         INSERT INTO vendas_comissao (
-          invoice_uid, invoice_sequence, branch_code, issue_date, 
-          dealer_code, total_value, quantity, operation_type, invoice_status, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          invoice_uid, invoice_sequence, branch_code, issue_date, invoice_date, transaction_date, dealer_code, total_value, quantity, operation_type, invoice_status, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT (invoice_uid, dealer_code) DO UPDATE SET
           total_value = EXCLUDED.total_value,
           quantity = EXCLUDED.quantity,
           operation_type = EXCLUDED.operation_type,
           invoice_status = EXCLUDED.invoice_status,
+          invoice_date = EXCLUDED.invoice_date,
+          transaction_date = EXCLUDED.transaction_date,
           updated_at = CURRENT_TIMESTAMP;
       `, [
         row.invoiceUid, row.invoiceSequence, row.branchCode, row.issueDate,
-        row.dealerCode, row.totalValue, row.quantity, row.operationType, row.invoiceStatus
-      ]);
+        row.invoiceDate, row.transactionDate, row.dealerCode, row.totalValue, row.quantity, row.operationType, row.invoiceStatus]);
     }
     await client.query('COMMIT');
 

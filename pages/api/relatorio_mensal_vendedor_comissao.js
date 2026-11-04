@@ -58,8 +58,8 @@ export default async function handler(req, res) {
           vv.branch_code AS branchcode, 
           vv.dealer_code AS dealercode, 
           CASE WHEN vv.operation_type = 'Input' THEN -vv.total_value ELSE vv.total_value END AS totalvalue, 
-          vv.issue_date AS invoicedate, 
-          vv.issue_date AS issuedate
+          COALESCE(vv.invoice_date, vv.issue_date::date) AS invoicedate,
+          COALESCE(vv.invoice_date, vv.issue_date::date) AS issuedate
         FROM vendas_comissao vv
         WHERE vv.invoice_status = 'Issued'
       ),
